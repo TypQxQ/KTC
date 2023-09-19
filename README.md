@@ -21,6 +21,20 @@ Universal Toolchanger driver for Klipper
     <img src="https://img.shields.io/github/license/TypQxQ/KTCC?style=flat-square">
   </a>
 </p>
+<p align="center">
+  <a aria-label="Downloads" href="https://github.com/TypQxQ/Klipper_ToolChanger/releases">
+    <img src="https://img.shields.io/github/release/TypQxQ/Klipper_ToolChanger?display_name=tag&style=flat-square">
+  </a>
+  <a aria-label="Stars" href="https://github.com/TypQxQ/Klipper_ToolChanger/stargazers">
+    <img src="https://img.shields.io/github/stars/TypQxQ/Klipper_ToolChanger?style=flat-square">
+  </a>
+  <a aria-label="Forks" href="https://github.com/TypQxQ/Klipper_ToolChanger/network/members">
+    <img src="https://img.shields.io/github/forks/TypQxQ/Klipper_ToolChanger?style=flat-square">
+  </a>
+  <a aria-label="License" href="https://github.com/TypQxQ/Klipper_ToolChanger/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/TypQxQ/Klipper_ToolChanger?style=flat-square">
+  </a>
+</p>
 
 
 This is what gives [Klipper](https://github.com/Klipper3d/klipper) ToolChanging functionality.
