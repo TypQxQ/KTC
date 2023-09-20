@@ -42,17 +42,24 @@ Firstly you can get a quick reminder of commands using the `KTCC_HELP` command f
   | `KTCC_Tn` | Activates heater, pick up and readyy the tool. If tool is mapped to another one then that tool will be selected instead. | `RESTORE_AXIS=[XYZ]` Restore specified axis position to the latest saved. |
   | `KTCC_TOOL_DROPOFF_ALL` | Unloads and parks the current tool without picking up another tool, leaving the toolhead free and unlocked. Actual active extruder eill still be last used one as Klipper needs an active extruder. | None |
   | `SET_TOOL_TEMPERATURE` | Set tool temperature. If `TOOL` parameter is omited then current tool is set. | `TOOL=[0..n]` Optional if other than current loaded tool<br>`ACTV_TMP=...` Set Active temperature, optional<br> `STDB_TMP =...` Standby temperature, optional<br> `CHNG_STATE=[0\|1\|2]` Change Heater State, optional:<br>(0 = Off) \| (1 = Standby) \| (2 = Active)<br> `SHTDWN_TIMEOUT=...` Time in seconds to wait with the heater in standby before changing it to off, optional. <br>  `STDB_TIMEOUT=...` Time in seconds to linger at Active temp. after setting the heater to standby when the standby temperature is lower than current tool temperature, optional.<br> `SHTDWN_TIMEOUT` is used for example so a tool used only on first few layers shuts down after 30 minutes of inactivity and won't stay at 175*C standby for the rest of a 72h print.<br> `STDB_TIMEOUT=` Time to linger at Active temp. after setting the heater to standby. Could be used for a tool with long heatup times and is only put in standby short periods of thme throughout a print and  should stay at active temperature longer time. |
-  | `SET_AND_SAVE_FAN_SPEED` | Set the partcooling fan speed current or specified tool. Fan speed is carried over between toolchanges. | `S=[0-255 \| 0-1]` Fan speed with either a maximum of 255 or 1.<br> `P=[0-n]` Tool number if not current tool to set fan to. |
+  | `KTCC_SET_AND_SAVE_PARTFAN_SPEED` | Set the partcooling fan speed current or specified tool. Fan speed is carried over between toolchanges. | `S=[0-255 \| 0-1]` Fan speed with either a maximum of 255 or 1.<br> `P=[0-n]` Tool number if not current tool to set fan to. |
   | `TEMPERATURE_WAIT_WITH_TOLERANCE` | Waits for all temperatures, or a specified tool or heater's temperature. This command can be used without any additional parameters and then waits for bed and current extruder. Only one of either TOOL or HEATER may be used. | `TOOL=[0-n]` Tool number to wait for, optional.<br> `HEATER=[0-n]` Heater number. 0="heater_bed", 1="extruder", 2="extruder1", 3="extruder2", etc. Only works if named as default, this way, optional.<br> `TOLERANCE=[0-n]` Tolerance in degC. Defaults to 1*C. Wait will wait until heater is in range of set temperature +/- tolerance. |
   <br>
 
-  ### Offset specification, Tool to Gate map and Endless spool commands
+  ### Offset commands
   | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp |
   | ------- | ----------- | ---------- |
   | `KTCC_SET_GLOBAL_OFFSET` | Set a global offset that can be applied to all tools. Can use absolute offset or adjust relative to current offset. | `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
-  | `MMU_SET_GATE_MAP` | Optionally configure the filament type, color and availabilty. Used in colored UI's and available via printer variables in your print_start macro | `RESET=[0\|1]` If specified the 'gate_materials, 'gate_colors' and 'gate_status' will be reset to that defined in mmu_parameters.cfg <br>`DISPLAY=[0\|1]` To simply display the current gate map <br>The following must be specified together to create a complete entry in the gate map: <br>`GATE=[0..n]` Gate numer <br>`MATERIAL=..` The material type. Short, no spaces. e.g. "PLA+" <br>`COLOR=..` The color of the filament. Can be a string representing one of the [w3c color names](https://www.w3.org/TR/css-color-4/#named-colors) e.g. "violet" or a color string in the hexadeciaml format RRGGBB e.g. "ff0000" for red. NO space or # symbols. Empty string for no color <br>`AVAILABLE=[0\|1\|2]` Optionally marks gate as empty (0) or available from spool (1) or available from buffer (2) <br>`QUIET=[0\|1]` Optional. Supresses dump of current gate map to log file |
-  | `MMU_REMAP_TTG` | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | `RESET=[0\|1]` If specified the Tool -> Gate mapping will be reset to that defined in mmu_parameters.cfg <br>`TOOL=[0..n]` Tool to set in TTG map <br>`GATE=[0..n]` Maps specified tool to this gate (multiple tools can point to same gate) <br>`AVAILABLE=[0\|1]`  Marks gate as available or empty <br>`QUIET=[0\|1]` Optional. Supresses dump of current TTG map to log file <br>`MAP={csv}` List of gates, one for each tool to specify the entire TTG map for bulk updates |
-  | `MMU_ENDLESS_SPOOL` | Modify the defined EndlessSpool groups at runtime | `RESET=[0\|1]` If specified the EndlessSpool groups will be reset to that defined in mmu_parameters.cfg <br>`GROUPS={csv of groups}` The same format as the default groups defined in mmu_parameters.cfg. Must be the same length as the number of MMU gates | `QUIET=[0\|1]` Optional. Supresses dump of current TTG and endless spool map to log file <br>`ENABLE=[0\|1]` Optional. Force the enabling or disabling of endless spool at runtime (not persisted) |
+  | `KTCC_SET_TOOL_OFFSET` | Set the offset of an individual tool. Can use absolute offset or adjust relative to current offset. | `TOOL=[0-n]` Tool number, optional. If not provided, the current tool is used.<br> ----------<br> `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
+  | `KTCC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL` | Sets the Klipper G-Code offset to the one for the current tool. | `MOVE=[0\|1]` Wheteher to move the toolhead to the new offset. ( 0 = Do not move, default ) ( 1 = Move )<br>  |
+  <br>
+
+  ### Position saving and restoring commands
+  | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp |
+  | ------- | ----------- | ---------- |
+  | `KTCC_SAVE_POSITION` | Save the specified G-Code position for later restore. | `X=...` Set the restore position and set this axis to be restored.<br> `Y=...` As above.<br> `Z=...` As above. |
+  | `KTCC_SAVE_CURRENT_POSITION` | Set the offset of an individual tool. Can use absolute offset or adjust relative to current offset. | `TOOL=[0-n]` Tool number, optional. If not provided, the current tool is used.<br> ----------<br> `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
+  | `KTCC_RESTORE_POSITION` | Set the offset of an individual tool. Can use absolute offset or adjust relative to current offset. | `TOOL=[0-n]` Tool number, optional. If not provided, the current tool is used.<br> ----------<br> `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
   <br>
 
   ### Status, Logging and Persisted state
@@ -62,6 +69,17 @@ Firstly you can get a quick reminder of commands using the `KTCC_HELP` command f
   | `MMU_STATS` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
   | `MMU_STATUS` | Report on MMU state, capabilities and Tool-to-Gate map | `DETAIL=[0\|1]` Whether to show a more detailed view including EndlessSpool groups and full Tool-To-Gate mapping <br>`SHOWCONFIG=[0\|1]` (default 0) Whether or not to describe the machine configuration in status message |
   <br>
+
+
+KTCC_DISPLAY_TOOL_MAP
+KTCC_REMAP_TOOL
+
+KTCC_SAVE_CURRENT_TOOL
+KTCC_SET_PURGE_ON_TOOLCHANGE
+KTCC_ENDSTOP_QUERY
+KTCC_SET_ALL_TOOL_HEATERS_OFF
+KTCC_RESUME_ALL_TOOL_HEATERS
+
   
   ### Servo and motor control
   | Command | Description | Parameters |
