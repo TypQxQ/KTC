@@ -36,15 +36,14 @@
   | `KTCC_REMAP_TOOL` | Remap a tool to another one. | `RESET=[0\|1]` If 1 the stored tooö remap will be reset.<br> `TOOL=[0-n]` The toolnumber to remap.<br> `SET=[0-n]` The toolnumber to remap to. |
   <br>
 
-  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Advanced commands, rarely used
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
-  | `KTCC_SAVE_CURRENT_TOOL` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTCC_SET_PURGE_ON_TOOLCHANGE` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTCC_ENDSTOP_QUERY` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTCC_SET_ALL_TOOL_HEATERS_OFF` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTCC_LOG_TRACE` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTCC_RESUME_ALL_TOOL_HEATERS` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_SAVE_CURRENT_TOOL` |  Set the current loaded tool manually to the specified. When loading a tool manually | `T=[-2-n]` Tool to set as current. ( -2 = Unknown tool ), ( -1 = Toollock unlocked without tool ) |
+  | `KTCC_SET_PURGE_ON_TOOLCHANGE` |  Sets a global variable that can disable all purging (can be used in macros) when loading/unloading tools. For example for automated tool alignement such as TAMV/ZTATP. | `VALUE=[0\|1]` If enabled or disabled. |
+  | `KTCC_ENDSTOP_QUERY` | Wait for a ENDSTOP untill it is in the specified state indefinitly or for maximum atempts if specified. Checking state once a second. | `ENDSTOP=...` Name of the endstop to wait for.<br> `TRIGGERED=[0\|1]` If should be waiting for it to be triggered (1) or open (0).<br> `ATEMPTS=...` Number of atempts to make, indefinitly if not specified. |
+  | `KTCC_SET_ALL_TOOL_HEATERS_OFF` | Turns off all heaters configured for tools and saves changes made to be resumed later by KTCC_RESUME_ALL_TOOL_HEATERS. This does not affect heated beds or other heaters not defined as aan extruder in tools. | |
+  | `KTCC_RESUME_ALL_TOOL_HEATERS` |  Resumes all heaters previously turned off by KTCC_SET_ALL_TOOL_HEATERS_OFF. | `MSG=...` The message to be sent |
   <br>
 
   ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
