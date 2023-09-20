@@ -47,9 +47,15 @@
   ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
-  | `MMU_RESET` | Reset the MMU persisted state back to defaults | `CONFIRM=[0\|1]` Must be sepcifed for affirmative action of this dangerous command |
-  | `MMU_STATS` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
-  | `MMU_STATUS` | Report on MMU state, capabilities and Tool-to-Gate map | `DETAIL=[0\|1]` Whether to show a more detailed view including EndlessSpool groups and full Tool-To-Gate mapping <br>`SHOWCONFIG=[0\|1]` (default 0) Whether or not to describe the machine configuration in status message |
+  | `KTCC_DUMP_STATS` | Dump the KTCC statistics to console. |  |
+  | `KTCC_RESET_STATS` | Reset all the KTCC statistics. | `SUERE=[yes\|no]` If "yes" the stored statistics will be reset. |
+  | `KTCC_INIT_PRINT_STATS` | Run at start of a print to initialize and reset the KTCC print statistics | |
+  | `KTCC_DUMP_PRINT_STATS` | Run at end of a print to dump statistics since last print reset to console. | |
+  | `KTCC_SET_LOG_LEVEL` | Set the log level for the KTCC | `LEVEL=[0-3]` How much to log to console: ( 0 = Only the Always messages ) ( 1 = Info messages and above ) ( 2 = Debug messages and above ) ( 3 = Trace messages and above )<br> |
+  | `KTCC_LOG_TRACE` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
+  | `KTCC_LOG_DEBUG` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
+  | `KTCC_LOG_INFO` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
+  | `KTCC_LOG_ALWAYS` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
   <br>
 
 
