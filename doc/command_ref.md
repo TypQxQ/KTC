@@ -57,9 +57,9 @@ Firstly you can get a quick reminder of commands using the `KTCC_HELP` command f
   ### Position saving and restoring commands
   | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp |
   | ------- | ----------- | ---------- |
-  | `KTCC_SAVE_POSITION` | Save the specified G-Code position for later restore. | `X=...` Set the restore position and set this axis to be restored.<br> `Y=...` As above.<br> `Z=...` As above. |
-  | `KTCC_SAVE_CURRENT_POSITION` | Set the offset of an individual tool. Can use absolute offset or adjust relative to current offset. | `TOOL=[0-n]` Tool number, optional. If not provided, the current tool is used.<br> ----------<br> `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
-  | `KTCC_RESTORE_POSITION` | Set the offset of an individual tool. Can use absolute offset or adjust relative to current offset. | `TOOL=[0-n]` Tool number, optional. If not provided, the current tool is used.<br> ----------<br> `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
+  | `KTCC_SAVE_POSITION` | Save the specified G-Code position for later restore. Without parameters it will set to not restoring axis. | `X=...` Set the restore position and set this axis to be restored.<br> `Y=...` As above.<br> `Z=...` As above. |
+  | `KTCC_SAVE_CURRENT_POSITION` | Save the current G-Code position for later restore. Without parameters it will save previousley saved axis. | `RESTORE_POSITION_TYPE=[XYZ] or [0\|1\|2]` Axis to save or tyoe ( 0 = No restore ), ( 1 = Restore XY ), ( 2 = Restore XYZ ) |
+  | `KTCC_RESTORE_POSITION` | Restore a previously saved G-Code position. With no parameters it will Restore to previousley saved type. | `RESTORE_POSITION_TYPE=[XYZ] or [0\|1\|2]` Axis to save or tyoe ( 0 = No restore ), ( 1 = Restore XY ), ( 2 = Restore XYZ ) |
   <br>
 
   ### Status, Logging and Persisted state
