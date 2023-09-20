@@ -46,9 +46,10 @@ Inspiration comes mainly from how RRF enables toolchanging and from the HappyHar
 I welcome any and all input and contributions. Don't be afraid to make a pull request :D
 
 Thank you!
-https://github.com/TypQxQ/KTCC/blob/dev/README.md
+
+
 **[Major feature](#major-features)**<br>
-**[Installation](#---installation)**<br>
+**[Installation](#installation)**<br>
 **[Basic Commands](#---basic-commands-and-printer-variables)**<br>
 **[Setup & Calibration](#---setup-and-calibration)**<br>
 **[Important Concepts and Features](#---important-concepts-and-features)**<br>
