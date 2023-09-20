@@ -13,7 +13,7 @@
   | `TEMPERATURE_WAIT_WITH_TOLERANCE` | Waits for all temperatures, or a specified tool or heater's temperature. This command can be used without any additional parameters and then waits for bed and current extruder. Only one of either TOOL or HEATER may be used. | `TOOL=[0-n]` Tool number to wait for, optional.<br> `HEATER=[0-n]` Heater number. 0="heater_bed", 1="extruder", 2="extruder1", 3="extruder2", etc. Only works if named as default, this way, optional.<br> `TOLERANCE=[0-n]` Tolerance in degC. Defaults to 1*C. Wait will wait until heater is in range of set temperature +/- tolerance. |
   <br>
 
-  ### Offset commands
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Offset commands
   | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp |
   | ------- | ----------- | ---------- |
   | `KTCC_SET_GLOBAL_OFFSET` | Set a global offset that can be applied to all tools. Can use absolute offset or adjust relative to current offset. | `X=...` Set the new offset for the axis.<br> `Y=...` As above.<br> `Z=...` As above.<br> ----------<br>`X_ADJUST=...` Adjust the offset position incramentally.<br> `Y_ADJUST=...` As above.<br> `Z_ADJUST=...` As above.<br>  |
@@ -21,7 +21,7 @@
   | `KTCC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL` | Sets the Klipper G-Code offset to the one for the current tool. | `MOVE=[0\|1]` Wheteher to move the toolhead to the new offset. ( 0 = Do not move, default ) ( 1 = Move )<br>  |
   <br>
 
-  ### Position saving and restoring commands
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Position saving and restoring commands
   | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp |
   | ------- | ----------- | ---------- |
   | `KTCC_SAVE_POSITION` | Save the specified G-Code position for later restore. Without parameters it will set to not restoring axis. | `X=...` Set the restore position and set this axis to be restored.<br> `Y=...` As above.<br> `Z=...` As above. |
@@ -29,13 +29,14 @@
   | `KTCC_RESTORE_POSITION` | Restore a previously saved G-Code position. With no parameters it will Restore to previousley saved type. | `RESTORE_POSITION_TYPE=[XYZ] or [0\|1\|2]` Axis to save or tyoe ( 0 = No restore ), ( 1 = Restore XY ), ( 2 = Restore XYZ ) |
   <br>
 
-  ### Tool remapping commands
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Tool remapping commands
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
   | `KTCC_DISPLAY_TOOL_MAP` | Dump the current mapping of tools to other KTCC tools. |  |
   | `KTCC_REMAP_TOOL` | Remap a tool to another one. | `RESET=[0\|1]` If 1 the stored tooö remap will be reset.<br> `TOOL=[0-n]` The toolnumber to remap.<br> `SET=[0-n]` The toolnumber to remap to. |
+  <br>
 
-  ### Status, Logging and Persisted state
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
   | `MMU_RESET` | Reset the MMU persisted state back to defaults | `CONFIRM=[0\|1]` Must be sepcifed for affirmative action of this dangerous command |
@@ -43,7 +44,7 @@
   | `MMU_STATUS` | Report on MMU state, capabilities and Tool-to-Gate map | `DETAIL=[0\|1]` Whether to show a more detailed view including EndlessSpool groups and full Tool-To-Gate mapping <br>`SHOWCONFIG=[0\|1]` (default 0) Whether or not to describe the machine configuration in status message |
   <br>
 
-  ### Status, Logging and Persisted state
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
   | `MMU_RESET` | Reset the MMU persisted state back to defaults | `CONFIRM=[0\|1]` Must be sepcifed for affirmative action of this dangerous command |
