@@ -39,9 +39,12 @@
   ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
-  | `MMU_RESET` | Reset the MMU persisted state back to defaults | `CONFIRM=[0\|1]` Must be sepcifed for affirmative action of this dangerous command |
-  | `MMU_STATS` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
-  | `MMU_STATUS` | Report on MMU state, capabilities and Tool-to-Gate map | `DETAIL=[0\|1]` Whether to show a more detailed view including EndlessSpool groups and full Tool-To-Gate mapping <br>`SHOWCONFIG=[0\|1]` (default 0) Whether or not to describe the machine configuration in status message |
+  | `KTCC_SAVE_CURRENT_TOOL` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_SET_PURGE_ON_TOOLCHANGE` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_ENDSTOP_QUERY` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_SET_ALL_TOOL_HEATERS_OFF` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_LOG_TRACE` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_RESUME_ALL_TOOL_HEATERS` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
   <br>
 
   ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Status, Logging and Persisted state
@@ -51,77 +54,12 @@
   | `KTCC_RESET_STATS` | Reset all the KTCC statistics. | `SUERE=[yes\|no]` If "yes" the stored statistics will be reset. |
   | `KTCC_INIT_PRINT_STATS` | Run at start of a print to initialize and reset the KTCC print statistics | |
   | `KTCC_DUMP_PRINT_STATS` | Run at end of a print to dump statistics since last print reset to console. | |
-  | `KTCC_SET_LOG_LEVEL` | Set the log level for the KTCC | `LEVEL=[0-3]` How much to log to console: ( 0 = Only the Always messages ) ( 1 = Info messages and above ) ( 2 = Debug messages and above ) ( 3 = Trace messages and above )<br> |
-  | `KTCC_LOG_TRACE` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
-  | `KTCC_LOG_DEBUG` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
-  | `KTCC_LOG_INFO` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
-  | `KTCC_LOG_ALWAYS` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
+  | `KTCC_SET_LOG_LEVEL` | Set the log level for the KTCC | `LEVEL=[0-3]` How much to log to console: ( 0 = Only the Always messages ) ( 1 = Info messages and above ) ( 2 = Debug messages and above ) ( 3 = Trace messages and above )<br>  `LOGFILE=[0-3]` How much to log to file. Levels as above. |
+  | `KTCC_LOG_TRACE` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_LOG_DEBUG` | Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_LOG_INFO` | Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTCC_LOG_ALWAYS` | Send a message to log at this logging level | `MSG=...` The message to be sent |
   <br>
-
-
-KTCC_SAVE_CURRENT_TOOL
-KTCC_SET_PURGE_ON_TOOLCHANGE
-KTCC_ENDSTOP_QUERY
-KTCC_SET_ALL_TOOL_HEATERS_OFF
-KTCC_RESUME_ALL_TOOL_HEATERS
-
-  
-  ### Servo and motor control
-  | Command | Description | Parameters |
-  | ------- | ----------- | ---------- |
-  | `MMU_SERVO` | Set the servo to specified postion or a sepcific angle for testing.  | `POS=[up\|down\|move]` Move servo to predetermined position <br>`ANGLE=..` Move servo to specified angle |
-  | `MMU_MOTORS_OFF` | Turn off both MMU motors | None |
-  | `MMU_SYNC_GEAR_MOTOR` | Explicitly override the synchronization of extruder and gear motors. Note that synchronization is set automatically so this will only be sticky until the next tool change | `SYNC=[0\|1]` Turn gear/extruder synchronization on/off (default 1) <br>`SERVO=[0\|1]` If 1 (the default) servo will engage if SYNC=1 or disengage if SYNC=0 otherwise servo position will not change <br>`IN_PRINT=[0\|1]` If 1, gear stepper current will be set according to `sync_gear_current`. If 0, gear stepper current is set to 100%. The default is automatically determined based on print state but can be overridden with this argument. Only meaningful if `SYNC=1` |
-  
-  <br>
-
-  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Calibration
-
-```yml
-    MMU_CALIBRATE_BOWDEN - Calibration of reference bowden length for gate #0
-    MMU_CALIBRATE_ENCODER - Calibration routine for the MMU encoder
-    MMU_CALIBRATE_GATES - Optional calibration of individual MMU gate
-    MMU_CALIBRATE_GEAR - Calibration routine for gear stepper rotational distance
-    MMU_CALIBRATE_SELECTOR - Calibration of the selector positions or postion of specified gate
-```
-  
-  | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
-  | ------- | ----------- | ---------- |
-  | `MMU_CALIBRATE_GEAR` | Calibration rourine for the the gear stepper rotational distance | `LENGTH=..` length to test over (default 100mm) <br>`MEASURED=..` User measured distance <br>`SAVE=[0\|1]` (default 1) Whether to save the result |
-  | `MMU_CALIBRATE_ENCODER` | Calibration routine for MMU encoder | `LENGTH=..` Distance (mm) to measure over. Longer is better, defaults to 400mm <br>`REPEATS=..` Number of times to average over <br>`SPEED=..` Speed of gear motor move. Defaults to long move speed <br>`ACCEL=..` Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg <br>`MINSPEED=..` & `MAXSPEED=..` If specified the speed is increased over each iteration between these speeds (only for experimentation) <br>`SAVE=[0\|1]` (default 1)  Whether to save the result |
-  | `MMU_CALIBRATE_SELECTOR` | Calibration of the selector gate positions. By default will automatically calibrate every gate.  ERCF v1.1 users must specify the bypass block position if fitted.  If GATE to BYPASS option is sepcifed this will update the calibrate for a single gate | `GATE=[0..n]` The individual gate position to calibrate <br>`BYPASS=[0\|1]` Calibrate the bypass position <br>`BYPASS_BLOCK=..` Optional (v1.1 only). Which bearing block contains the bypass where the first one is numbered 1 <br>`SAVE=[0\|1]` (default 1) Whether to save the result |
-  | `MMU_CALIBRATE_BOWDEN` | Measure the calibration length of the bowden tube used for fast load movement. This will be performed on gate #0 | `BOWDEN_LENGTH=..` The approximate length of the bowden tube but NOT longer than the real measurement. 50mm less that real is a good starting point <br>`HOMING_MAX=..` (default 100) The distance after the sepcified BOWDEN_LENGTH to search of the extruder entrance <br>`REPEATS=..` (default 3) Number of times to average measurement over <br>`SAVE=[0\|1]` (default 1)  Whether to save the result |
-  | `MMU_CALIBRATE_GATES` | Optional calibration for loading of a sepcifed gate or all gates. This is calculated as a ratio of gate #0 and thus this is usually the last calibration step | `GATE=[0..n]` The individual gate position to calibrate <br>`ALL[0\|1]` Calibrate all gates 1..n sequentially (filament must be available in each gate) <br>`LENGTH=..` Distance (mm) to measure over. Longer is better, defaults to 400mm <br>`REPEATS=..` Number of times to average over <br>`SAVE=[0\|1]` (default 1)  Whether to save the result |
-
-<br>
-
-  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Testing
-
-```yml
-    MMU_SOAKTEST_LOAD_SEQUENCE - Soak test tool load/unload sequence
-    MMU_SOAKTEST_SELECTOR - Soak test of selector movement
-    MMU_TEST_BUZZ_MOTOR - Simple buzz the selected motor (default gear) for setup testing
-    MMU_TEST_CONFIG - Runtime adjustment of MMU configuration for testing or in-print tweaking purposes
-    MMU_TEST_ENCODER_RUNOUT - Convenience macro to spoof a filament runout condition
-    MMU_TEST_GRIP - Test the MMU grip for a Tool
-    MMU_TEST_HOMING_MOVE - Test filament homing move to help debug setup / options
-    MMU_TEST_LOAD - For quick testing filament loading from gate to the extruder
-    MMU_TEST_MOVE - Test filament move to help debug setup / options
-    MMU_TEST_TRACKING - Test the tracking of gear feed and encoder sensing
-```
-    
-  | Command | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Description&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Parameters |
-  | ------- | ----------- | ---------- |
-  | `MMU_SOAKTEST_SELECTOR` | Reliability testing to put the selector movement under stress to test for failures. Randomly selects gates and occasionally re-homes | `LOOP=..[100]` Number of times to repeat the test <br>`SERVO=[0\|1]` Whether to include the servo down movement in the test |
-  | `MMU_SOAKTEST_LOAD_SEQUENCE` | Soak testing of load sequence. Great for testing reliability and repeatability| `LOOP=..[10]` Number of times to loop while testing <br>`RANDOM=[0\|1]` Whether to randomize tool selection <br>`FULL=[0\|1]` Whether to perform full load to nozzle or short load just past encoder |
-  | `MMU_TEST_BUZZ_MOTOR` | Buzz the sepcified MMU motor. If the gear motor is buzzed it will also report if filament is detected | `MOTOR=[gear\|selector\|servo]` |
-  | `MMU_TEST_GRIP` | Test the MMU grip of the currently selected tool by gripping filament but relaxing the gear motor so you can check for good contact | None |
-  | `MMU_TEST_LOAD` | Test loading filament from park position in the gate. (MMU_EJECT will unload) | `LENGTH=..[100]` Test load the specified length of filament into selected tool <br>`FULL=[0\|1]` If set to one a full bowden move will occur and filament will home to extruder |
-  | `MMU_TEST_TRACKING | Simple visual test to see how encoder tracks with gear motor | `DIRECTION=[-1\|1]` Direction to perform the test (default load direction) <br>`STEP=[0.5 .. 20]` Size of individual steps (default 1mm) <br>`SENSITIVITY=..` (defaults to expected encoder resolution) Sets the scaling for the +/- mismatch visualization |
-  | `MMU_TEST_MOVE` | Simple test move the MMU gear stepper | `MOVE=..[100]` Length of gear move in mm <br>`SPEED=..` (defaults to speed defined to type of motor/homing combination) Stepper move speed <br>`ACCEL=..` (defaults to min accel defined on steppers employed in move) Motor acceleration <br>`MOTOR=[gear\|extruder\|gear+extruder\|extruder+gear]` (default: gear) The motor or motor combination to employ. gear+extruder commands the gear stepper and links extruder to movement, extruder+gear commands the extruder stepper and links gear to movement |
-  | `MMU_TEST_HOMING_MOVE` | Testing homing move of filament using multiple stepper combinations specifying endstop and driection of homing move | `MOVE=..[100]` Length of gear move in mm <br>`SPEED=..` (defaults to speed defined to type of motor/homing combination) Stepper move speed <br>`ACCEL=..` Motor accelaration (defaults to min accel defined on steppers employed in homing move) <br>`MOTOR=[gear\|extruder\|gear+extruder\|extruder+gear]` (default: gear) The motor or motor combination to employ. gear+extruder commands the gear stepper and links extruder to movement, extruder+gear commands the extruder stepper and links gear to movement. This is important for homing because the endstop must be on the commanded stepper <br>`ENDSTOP=..` Symbolic name of endstop to home to as defined in mmu_hardware.cfg. Must be defined on the primary stepper <br>`STOP_ON_ENDSTOP=[1\|-1]` (default 1) The direction of homing move. 1 is in the normal direction with endstop firing, -1 is in the reverse direction waiting for endstop to release. Note that virtual (touch) endstops can only be homed in a forward direction |
-  | `MMU_TEST_CONFIG` | Dump / Change essential load/unload config options at runtime | Many. Best to run MMU_TEST_CONFIG without options to report all parameters than can be specified |
-  | `MMU_TEST_ENCODER_RUNOUT` | Filament runout handler that will also implement EndlessSpool if enabled | `FORCE_RUNOUT=1` is useful for testing to validate your _MMU_ENDLESS_SPOOL\*\* macros |
 
 <br>
 
