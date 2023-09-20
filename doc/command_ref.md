@@ -1,46 +1,13 @@
 # KTCC - Command Reference
 
-Firstly you can get a quick reminder of commands using the `KTCC_HELP` command from the console:
-
-  > KTCC_HELP
-
-```yml
-    Happy Hare MMU commands: (use MMU_HELP MACROS=1 TESTING=1 for full command set)
-    MMU - Enable/Disable functionality and reset state
-    MMU_CHANGE_TOOL - Perform a tool swap
-    MMU_CHECK_GATES - Automatically inspects gate(s), parks filament and marks availability
-    MMU_STATS - Dump or reset the MMU statistics
-    MMU_EJECT - Eject filament and park it in the MMU or optionally unloads just the extruder (EXTRUDER_ONLY=1)
-    MMU_ENCODER - Display encoder position or temporarily enable/disable detection logic in encoder
-    MMU_ENDLESS_SPOOL - Redefine the EndlessSpool groups
-    MMU_FORM_TIP - Convenience macro to call the standalone tip forming functionality
-    MMU_HELP - Display the complete set of MMU commands and function
-    MMU_HOME - Home the MMU selector
-    MMU_LOAD - Loads filament on current tool/gate or optionally loads just the extruder for bypass or recovery usage (EXTUDER_ONLY=1)
-    MMU_MOTORS_OFF - Turn off both MMU motors
-    MMU_PAUSE - Pause the current print and lock the MMU operations
-    MMU_PRELOAD - Preloads filament at specified or current gate
-    MMU_RECOVER - Recover the filament location and set MMU state after manual intervention/movement
-    MMU_REMAP_TTG - Remap a tool to a specific gate and set gate availability
-    MMU_RESET - Forget persisted state and re-initialize defaults
-    MMU_SELECT - Select the specified logical tool (following TTG map) or physical gate
-    MMU_SELECT_BYPASS - Select the filament bypass
-    MMU_SERVO - Move MMU servo to position specified position or angle
-    MMU_SET_GATE_MAP - Define the type and color of filaments on each gate
-    MMU_STATUS - Complete dump of current MMU state and important configuration
-    MMU_SYNC_GEAR_MOTOR - Sync the MMU gear motor to the extruder motor
-    MMU_TOOL_OVERRIDES : Displays, sets or clears tool speed and extrusion factors (M220 & M221)
-```
-
-
-  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Basic MMU functionality
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Basic Toolchanger functionality
 
   | Command | Description | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Parameters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
   | ------- | ----------- | ---------- |
   | `KTCC_TOOL_LOCK` | Lock the tool to the toolhead. |  |
   | `KTCC_TOOL_UNLOCK` | Unlock the toolhead from tool. |  |
   | `KTCC_Tn` | Activates heater, pick up and readyy the tool. If tool is mapped to another one then that tool will be selected instead. | `RESTORE_AXIS=[XYZ]` Restore specified axis position to the latest saved. |
-  | `KTCC_TOOL_DROPOFF_ALL` | Unloads and parks the current tool without picking up another tool, leaving the toolhead free and unlocked. Actual active extruder eill still be last used one as Klipper needs an active extruder. | None |
+  | `KTCC_TOOL_DROPOFF_ALL` | Unloads and parks the current tool without picking up another tool, leaving the toolhead free and unlocked. Actual active extruder eill still be last used one as Klipper needs an active extruder. |  |
   | `SET_TOOL_TEMPERATURE` | Set tool temperature. If `TOOL` parameter is omited then current tool is set. | `TOOL=[0..n]` Optional if other than current loaded tool<br>`ACTV_TMP=...` Set Active temperature, optional<br> `STDB_TMP =...` Standby temperature, optional<br> `CHNG_STATE=[0\|1\|2]` Change Heater State, optional:<br>(0 = Off) \| (1 = Standby) \| (2 = Active)<br> `SHTDWN_TIMEOUT=...` Time in seconds to wait with the heater in standby before changing it to off, optional. <br>  `STDB_TIMEOUT=...` Time in seconds to linger at Active temp. after setting the heater to standby when the standby temperature is lower than current tool temperature, optional.<br> `SHTDWN_TIMEOUT` is used for example so a tool used only on first few layers shuts down after 30 minutes of inactivity and won't stay at 175*C standby for the rest of a 72h print.<br> `STDB_TIMEOUT=` Time to linger at Active temp. after setting the heater to standby. Could be used for a tool with long heatup times and is only put in standby short periods of thme throughout a print and  should stay at active temperature longer time. |
   | `KTCC_SET_AND_SAVE_PARTFAN_SPEED` | Set the partcooling fan speed current or specified tool. Fan speed is carried over between toolchanges. | `S=[0-255 \| 0-1]` Fan speed with either a maximum of 255 or 1.<br> `P=[0-n]` Tool number if not current tool to set fan to. |
   | `TEMPERATURE_WAIT_WITH_TOLERANCE` | Waits for all temperatures, or a specified tool or heater's temperature. This command can be used without any additional parameters and then waits for bed and current extruder. Only one of either TOOL or HEATER may be used. | `TOOL=[0-n]` Tool number to wait for, optional.<br> `HEATER=[0-n]` Heater number. 0="heater_bed", 1="extruder", 2="extruder1", 3="extruder2", etc. Only works if named as default, this way, optional.<br> `TOLERANCE=[0-n]` Tolerance in degC. Defaults to 1*C. Wait will wait until heater is in range of set temperature +/- tolerance. |
@@ -62,6 +29,12 @@ Firstly you can get a quick reminder of commands using the `KTCC_HELP` command f
   | `KTCC_RESTORE_POSITION` | Restore a previously saved G-Code position. With no parameters it will Restore to previousley saved type. | `RESTORE_POSITION_TYPE=[XYZ] or [0\|1\|2]` Axis to save or tyoe ( 0 = No restore ), ( 1 = Restore XY ), ( 2 = Restore XYZ ) |
   <br>
 
+  ### Tool remapping commands
+  | Command | Description | Parameters |
+  | ------- | ----------- | ---------- |
+  | `KTCC_DISPLAY_TOOL_MAP` | Dump the current mapping of tools to other KTCC tools. |  |
+  | `KTCC_REMAP_TOOL` | Remap a tool to another one. | `RESET=[0\|1]` If 1 the stored tooö remap will be reset.<br> `TOOL=[0-n]` The toolnumber to remap.<br> `SET=[0-n]` The toolnumber to remap to. |
+
   ### Status, Logging and Persisted state
   | Command | Description | Parameters |
   | ------- | ----------- | ---------- |
@@ -70,9 +43,14 @@ Firstly you can get a quick reminder of commands using the `KTCC_HELP` command f
   | `MMU_STATUS` | Report on MMU state, capabilities and Tool-to-Gate map | `DETAIL=[0\|1]` Whether to show a more detailed view including EndlessSpool groups and full Tool-To-Gate mapping <br>`SHOWCONFIG=[0\|1]` (default 0) Whether or not to describe the machine configuration in status message |
   <br>
 
+  ### Status, Logging and Persisted state
+  | Command | Description | Parameters |
+  | ------- | ----------- | ---------- |
+  | `MMU_RESET` | Reset the MMU persisted state back to defaults | `CONFIRM=[0\|1]` Must be sepcifed for affirmative action of this dangerous command |
+  | `MMU_STATS` | Dump (and optionally reset) the MMU statistics. Note that gate statistics are sent to debug level - usually the logfile) | `RESET=[0\|1]` If 1 the stored statistics will be reset |
+  | `MMU_STATUS` | Report on MMU state, capabilities and Tool-to-Gate map | `DETAIL=[0\|1]` Whether to show a more detailed view including EndlessSpool groups and full Tool-To-Gate mapping <br>`SHOWCONFIG=[0\|1]` (default 0) Whether or not to describe the machine configuration in status message |
+  <br>
 
-KTCC_DISPLAY_TOOL_MAP
-KTCC_REMAP_TOOL
 
 KTCC_SAVE_CURRENT_TOOL
 KTCC_SET_PURGE_ON_TOOLCHANGE
