@@ -47,7 +47,7 @@ I welcome any and all input and contributions. Don't be afraid to make a pull re
 
 Thank you!
 
-**[Major feature](#---major-features)**<br>
+**[Major feature](#--major-features)**<br>
 **[Installation](#---installation)**<br>
 **[Basic Commands](#---basic-commands-and-printer-variables)**<br>
 **[Setup & Calibration](#---setup-and-calibration)**<br>
@@ -79,7 +79,7 @@ Thank you!
 
 <br>
  
-##Major features:
+## Major features:
 <ul>
   <li>Support any type of toolchanger and any type of tool</li>
   <li>Tools don't need to be extruders/hotends, can be anything.</li>
