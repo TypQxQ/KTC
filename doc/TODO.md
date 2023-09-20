@@ -1,4 +1,4 @@
-## Planed To do:
+  ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Planed To do:
 - Mainsail integration
 - KlipperScreen integration
 - Add selectable automatic calculation of active times based on previous times. Ex:
