@@ -24,7 +24,7 @@ Universal Toolchanger driver for Klipper
 
 This is what gives [Klipper](https://github.com/Klipper3d/klipper) ToolChanging functionality.
 It began as a collection of macros when I transitioned a toolchanger from Duet RepRap Firmware to Klipper.
-After that it evolved to Python scripts and for version 2 I have renamed most everything to KTCC as a prefix.
+After that it evolved to Python scripts and for version 2 I have renamed most everything to KTCC for consistency.
 This is to enable Mainsail and KlipperScreen integration.
 Inspiration comes mainly from how RRF enables toolchanging and from the HappyHare project.
 
