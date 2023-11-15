@@ -20,7 +20,7 @@ import logging, logging.handlers, threading, queue, time
 import math, os.path, copy
 
 # Forward all messages through a queue (polled by background thread)
-class KtccQueueHandler(logging.Handler):
+class Ktcc_QueueHandler(logging.Handler):
     def __init__(self, queue):
         logging.Handler.__init__(self)
         self.queue = queue
@@ -36,7 +36,7 @@ class KtccQueueHandler(logging.Handler):
             self.handleError(record)
 
 # Poll log queue on background thread and log each message to logfile
-class KtccQueueListener(logging.handlers.TimedRotatingFileHandler):
+class Ktcc_QueueListener(logging.handlers.TimedRotatingFileHandler):
     def __init__(self, filename):
         logging.handlers.TimedRotatingFileHandler.__init__(
             self, filename, when='midnight', backupCount=5)
@@ -150,9 +150,9 @@ class Ktcc_Log:
             else:
                 ktcc_log = dirname + '/ktcc.log'
             self.debug("ktcc_log=%s" % ktcc_log)
-            self.queue_listener = KtccQueueListener(ktcc_log)
+            self.queue_listener = Ktcc_QueueListener(ktcc_log)
             self.queue_listener.setFormatter(KtccMultiLineFormatter('%(asctime)s %(message)s', datefmt='%I:%M:%S'))
-            queue_handler = KtccQueueHandler(self.queue_listener.bg_queue)
+            queue_handler = Ktcc_QueueHandler(self.queue_listener.bg_queue)
             self.ktcc_logger = logging.getLogger('ktcc')
             self.ktcc_logger.setLevel(logging.INFO)
             self.ktcc_logger.addHandler(queue_handler)
@@ -435,7 +435,7 @@ class Ktcc_Log:
                 msg += "Completed %d out of %d unmounts in %s. Average of %s per toolunmount.\n" % (self.tool_statistics[tool_id]['toolunmounts_completed'], self.tool_statistics[tool_id]['toolunmounts_started'], self._seconds_to_human_string(self.tool_statistics[tool_id]['total_time_spent_unmounting']), self._seconds_to_human_string(self._division(self.tool_statistics[tool_id]['total_time_spent_unmounting'], self.tool_statistics[tool_id]['toolunmounts_completed'])))
                 msg += "%s spent selected." % self._seconds_to_human_string(self.tool_statistics[tool_id]['time_selected'])
                 tool = self.printer.lookup_object('ktcc_tool ' + str(tool_id))
-                if tool.is_virtual != True or tool.name==tool.physical_parent_id:
+                if tool.is_virtual != True or tool.name==tool.parentTool_id:
                     if tool.extruder is not None:
                         msg += " %s with active heater and %s with standby heater." % (self._seconds_to_human_string(self.tool_statistics[tool_id]['time_heater_active']), self._seconds_to_human_string(self.tool_statistics[tool_id]['time_heater_standby']))
                 msg += "\n------------\n"
