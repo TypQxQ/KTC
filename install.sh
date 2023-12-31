@@ -8,13 +8,13 @@
 set -e
 
 # Get the root path of the repo, aka, where this script is executing
-KTAMV_REPO_DIR=$(realpath $(dirname "$0"))
+REPO_DIR=$(realpath $(dirname "$0"))
 
 # This is where Klipper is installed
 KLIPPER_HOME="${HOME}/klipper"
 
 # This is where the extension are downloaded to, a subdirectory of the repo.
-EXTENSION_PATH="${KTAMV_REPO_DIR}/extension"
+EXTENSION_PATH="${REPO_DIR}/extension"
 
 # This is where Moonraker is installed
 MOONRAKER_HOME="${HOME}/moonraker"
@@ -133,6 +133,15 @@ verify_ready()
     fi
 }
 
+function nextfilename {
+    local name="$1"
+    if [ -d "${name}" ]; then
+        printf "%s-%s" ${name%%.*} $(date '+%Y%m%d_%H%M%S')
+    else
+        printf "%s-%s.%s-old" ${name%%.*} $(date '+%Y%m%d_%H%M%S') ${name#*.}
+    fi
+}
+
 # 
 # Logic to link the extension to Klipper
 # 
@@ -157,19 +166,19 @@ install_update_manager() {
         next_dest="$(nextfilename "$dest")"
         log_info "Copying original moonraker.conf file to ${next_dest}"
         cp ${dest} ${next_dest}
-        already_included=$(grep -c '\[update_manager ktc\]' ${dest} || true)
+        already_included=$(grep -c '\[update_manager KTC\]' ${dest} || true)
         if [ "${already_included}" -eq 0 ]; then
             echo "" >> "${dest}"    # Add a blank line
             echo "" >> "${dest}"    # Add a blank line
-            echo -e "[update_manager ktc]]" >> "${dest}"    # Add the section header
+            echo -e "[update_manager KTC]]" >> "${dest}"    # Add the section header
             echo -e "type: git_repo" >> "${dest}"
-            echo -e "path: ~/ktc" >> "${dest}"
-            echo -e "origin: https://github.com/TypQxQ/ktc.git" >> "${dest}"
+            echo -e "path: ${REPO_DIR}" >> "${dest}"
+            echo -e "origin: https://github.com/TypQxQ/KTC.git" >> "${dest}"
             echo -e "primary_branch: main" >> "${dest}"
             echo -e "install_script: install.sh" >> "${dest}"
             echo -e "managed_services: klipper" >> "${dest}"
         else
-            log_error "[update_manager ktc] already exists in moonraker.conf - skipping installing it there"
+            log_error "[update_manager KTC] already exists in moonraker.conf - skipping installing it there"
         fi
 
     else
@@ -193,112 +202,40 @@ install_klipper_config() {
 
         # Add the configuration to printer.cfg
         # This example assumes that that both the server and the webcam stream are running on the same machine as Klipper
-        already_included=$(grep -c '\[ktamv\]' ${dest} || true)
+        already_included=$(grep -c '\[ktc\]' ${dest} || true)
         if [ "${already_included}" -eq 0 ]; then
             echo "" >> "${dest}"    # Add a blank line
             echo "" >> "${dest}"    # Add a blank line
-            echo -e "[ktamv]" >> "${dest}"    # Add the section header
-            echo -e "nozzle_cam_url: http://localhost/webcam/snapshot?max_delay=0" >> "${dest}"   # Add the address of the webcam stream that will be accessed by the server
-            echo -e "server_url: http://localhost:${PORT}" >> "${dest}"    # Add the address of the kTAMV server that will be accessed Klipper
-            echo -e "move_speed: 1800" >> "${dest}"   # Add the speed at which the toolhead moves when aligning
-            echo -e "send_frame_to_cloud: ${SEND_IMAGES}" >> "${dest}"   # If true, the images of the nozzle will be sent to the developer
-            echo -e "detection_tolerance: 0" >> "${dest}"   # number of pixels to have as tolerance when detecting the nozzle.
+            echo -e "[ktc]" >> "${dest}"    # Add the section header
 
-            log_info "Added kTAMV configuration to printer.cfg"
+            log_info "Added KTC configuration to printer.cfg"
             log_important "Please check the configuration in printer.cfg and adjust it as needed"
         else
-            log_error "[ktamv] already exists in printer.cfg - skipping adding it there"
+            log_error "[ktc] already exists in printer.cfg - skipping adding it there"
         fi
     else
-        log_error "File printer.cfg file not found! Cannot add kTAMV configuration. Do it manually."
+        log_error "File printer.cfg file not found! Cannot add KTC configuration. Do it manually."
     fi
 
     # Add the inclusion of macros.cfg to printer.cfg if it doesn't exist
-    already_included=$(grep -c '\[include ktamv_macros.cfg\]' ${dest} || true)
+    already_included=$(grep -c '\[include ktc_macros.cfg\]' ${dest} || true)
     if [ "${already_included}" -eq 0 ]; then
         echo "" >> "${dest}"    # Add a blank line
-        echo -e "[include ktamv-macros.cfg]" >> "${dest}"    # Add the section header
+        echo -e "[include ktc-macros.cfg]" >> "${dest}"    # Add the section header
     else
-        log_error "[include ktamv-macros.cfg] already exists in printer.cfg - skipping adding it there"
+        log_error "[include ktc-macros.cfg] already exists in printer.cfg - skipping adding it there"
     fi
     
-    if [ ! -f "${KLIPPER_CONFIG_HOME}/ktamv-macros.cfg" ]; then
-        log_info "Copying ktamv-macros.cfg to ${KLIPPER_CONFIG_HOME}"
-        cp ${KTAMV_REPO_DIR}/ktamv-macros.cfg ${KLIPPER_CONFIG_HOME}
+    if [ ! -f "${KLIPPER_CONFIG_HOME}/ktc-macros.cfg" ]; then
+        log_info "Copying ktc-macros.cfg to ${KLIPPER_CONFIG_HOME}"
+        cp ${REPO_DIR}/ktc-macros.cfg ${KLIPPER_CONFIG_HOME}
     else
-        log_error "[include ktamv-macros.cfg] already exists in printer.cfg - skipping adding it there"
+        log_error "[include ktc-macros.cfg] already exists in printer.cfg - skipping adding it there"
     fi
     # Restart Klipper
     restart_klipper
 
 }
-
-# 
-# Logic to install kTAMV as a systemd service
-# 
-install_sysd(){
-    log_header "Installing system start script so the server can start from Moonrker..."
-
-    # Comand to launch the server to be used in the service file
-    LAUNCH_CMD="${KTAMV_ENV}/bin/python ${KTAMV_REPO_DIR}/server/ktamv_server.py --port ${PORT}"
-
-    # Create systemd service file
-    SERVICE_FILE="${SYSTEMDDIR}/kTAMV_server.service"
-
-    # If the service file already exists, don't overwrite
-    [ -f $SERVICE_FILE ] && return
-    sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
-#Systemd service file for kTAMV_server
-[Unit]
-Description=Server component for kTAMV. A tool alignment tool for Klipper using machine vision.
-After=network-online.target moonraker.service
-
-[Install]
-WantedBy=multi-user.target
-
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=$KTAMV_REPO_DIR/server
-ExecStart=$LAUNCH_CMD
-Restart=always
-RestartSec=10
-EOF
-    # Use systemctl to enable the klipper systemd service script
-        sudo systemctl enable kTAMV_server.service
-        sudo systemctl daemon-reload
-
-        # Start the server
-        start_server
-
-        # Add kTAMV to the service list of Moonraker
-        add_to_asvc
-
-        # Restart Moonraker
-        restart_moonraker
-}
-
-add_to_asvc()
-{
-    log_header "Trying to add kTAMV_server to service list"
-    if [ -f $MOONRAKER_ASVC ]; then
-        log_info "moonraker.asvc was found"
-        if ! grep -q kTAMV_server $MOONRAKER_ASVC; then
-            log_info "moonraker.asvc does not contain 'kTAMV_server'! Adding it..."
-            echo "" >> $MOONRAKER_ASVC    # Add a blank line
-            echo -e "kTAMV_server" >> $MOONRAKER_ASVC
-        fi
-    else
-        log_error "moonraker.asvc not found! Add 'kTAMV_server' to the service list manually"
-    fi
-}
-
-start_server()
-{
-    log_header "Launching kTAMV Server..."
-    sudo systemctl restart kTAMV_server
-}
-
 
 # 
 # Logic to ask a question and get a yes or no answer while displaying a prompt under installation
@@ -355,18 +292,16 @@ log_blank
 log_blank
 log_blank
 log_blank
-log_header "                     kTAMV"
-log_header "   Klipper Tool Alignment (using) Machine Vision"
+log_header "                     KTC"
+log_header "   Klipper Tool Changer code (v2)"
 log_blank
 log_blank
-log_important "kTAMV is used to align your printer's toolheads using machine vision."
+log_important "KTC is used to facilitate toolchanging under Klipper."
 log_blank
-log_info "Usage: $0 [-p <server_port>] [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-j <klipper_enviroment_dir>]"
-log_info "[-m <moonraker_home_dir>] [-s <system_dir>]"
+log_info "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-m <moonraker_home_dir>]"
 log_blank
 log_blank
-log_important "This script will install the kTAMV client to Klipper and the kTAMV server as a service on port ${PORT}."
-log_important "It will update Rasberry Pi OS and install all required packages."
+log_important "This script will install the KTC extensions ad macros."
 log_important "It will add the base configuration in printer.cfg and moonraker.conf."
 log_blank
 yn=$(prompt_yn "Do you want to continue?")
@@ -375,71 +310,12 @@ case $yn in
     y)
         ;;
     n)
-        log_info "You can run this script again later to install kTAMV."
+        log_info "You can run this script again later to install KTC."
         log_blank
     exit 0
         ;;
 esac
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_blank
-log_header "                     kTAMV"
-log_header "   Klipper Tool Alignment (using) Machine Vision"
-log_blank
-log_blank
-log_important "Do you want to contribute to the development of kTAMV?"
-log_info "I would love if you would like to share the images of the nozzle and obtained results taken when finding the nozzle."
-log_info "I plan to use it to improve the algorithm and maybe train an AI as the next step."
-log_info "You can change this setting later in printer.cfg."
-log_blank
 
-yn=$(prompt_yn "Do you want to continue?")
-echo
-case $yn in
-    y)
-        log_info "Thank you, this will help a lot!"
-        log_blank
-        SEND_IMAGES="true"
-        ;;
-    n)
-        log_info "Will not send any info."
-        log_blank
-        SEND_IMAGES="false"
-        ;;
-esac
-
-
-
-while getopts "k:c:m:ids" arg; do
-    case $arg in
-        k) KLIPPER_HOME=${OPTARG};;
-        m) MOONRAKER_HOME=${OPTARG};;
-        c) KLIPPER_CONFIG_HOME=${OPTARG};;
-        j) KLIPPER_ENV=${OPTARG};;
-        s) SYSTEMDDIR=${OPTARG};;
-        p) PORT=${OPTARG};;
-    esac
-done
-
-function nextfilename {
-    local name="$1"
-    if [ -d "${name}" ]; then
-        printf "%s-%s" ${name%%.*} $(date '+%Y%m%d_%H%M%S')
-    else
-        printf "%s-%s.%s-old" ${name%%.*} $(date '+%Y%m%d_%H%M%S') ${name#*.}
-    fi
-}
 
 
 # Make sure we aren't running as root
@@ -457,12 +333,9 @@ link_extension
 # Install the update manager to Moonraker
 install_update_manager
 
-# Install kTAMV as a systemd service and then add it to the service list moonraker.asvc
-install_sysd
-
 # Install the configuration to Klipper
-install_klipper_config
+# install_klipper_config
 
 log_blank
 log_blank
-log_important "kTAMV is now installed. Settings can be found in the printer.cfg file."
+log_important "KTC is now installed. Settings can be found in the printer.cfg file."
