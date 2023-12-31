@@ -1,7 +1,7 @@
-# KTCC - Klipper Tool Changer Code
+# KTC - Klipper Tool Changer code (v.2)
 # Tool module, for each tool.
 #
-# Copyright (C) 2023  Andrei Ignat <andrei@ignat.se>
+# Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
@@ -19,7 +19,7 @@
 
 # Each tool is getting an instance of this.
 import logging
-from .ktcc import parse_restore_type
+from .ktc import parse_restore_type
 
 class ktcc_tool:
     TOOL_UNKNOWN = -2

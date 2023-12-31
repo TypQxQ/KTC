@@ -1,20 +1,13 @@
-# KTCC - Klipper Tool Changer Code
+# KTC - Klipper Tool Changer code (v.2)
 # Log and statistics module
 #
-# Copyright (C) 2023  Andrei Ignat <andrei@ignat.se>
+# Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
 #
 # Based on and inspired by ERCF-Software-V3      Copyright (C) 2021  moggieuk#6538 (discord)
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-# To try to keep terms apart:
-# Mount: Tool is selected and loaded for use, be it a physical or a virtual on physical.
-# Unmopunt: Tool is unselected and unloaded, be it a physical or a virtual on physical.
-# Pickup: Tool is physically picked up and attached to the toolchanger head.
-# Droppoff: Tool is physically parked and dropped of the toolchanger head.
-# ToolLock: Toollock is engaged.
-# ToolUnLock: Toollock is disengaged.
 
 import logging, logging.handlers, threading, queue, time
 import math, os.path, copy

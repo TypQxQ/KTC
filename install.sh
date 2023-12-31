@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# KTC - Klipper Tool Changer code (v.2)
+# Installation script
+#
+# Copyright (C) 2023  Andrei Ignat <andrei@ignat.se>
+#
+# This file may be distributed under the terms of the GNU GPLv3 license.
+#
+
 #
 # The responsibility of this script is to setup the Python extensions
 # and configure the update processes.

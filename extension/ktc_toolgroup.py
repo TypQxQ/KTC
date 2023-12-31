@@ -1,7 +1,7 @@
-# KTCC - Klipper Tool Changer Code
+# KTC - Klipper Tool Changer code (v.2)
 # Toolgroup module, used to group Tools and derived from Tool.
 #
-# Copyright (C) 2023  Andrei Ignat <andrei@ignat.se>
+# Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #

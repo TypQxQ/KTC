@@ -1,2 +1,2 @@
-# KTCC
-Klipper Tool Changer Code v.2
+# KTC
+Klipper Tool Changer code v.2
