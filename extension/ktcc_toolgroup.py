@@ -32,7 +32,7 @@ class ktcc_toolgroup:
 
         self.is_virtual = config.getboolean(    # If True then must have a physical_parent declared and shares extruder, hotend and fan with the physical_parent
             'is_virtual', False)
-        self.physical_parent_id = config.getint(   # Tool used as a Physical parent for all toos of this group. Only used if the tool i virtual.
+        self.parent_tool = config.getint(   # Tool used as a Physical parent for all toos of this group. Only used if the tool i virtual.
             'physical_parent', None)
         self.lazy_home_when_parking = config.get('lazy_home_when_parking', 0)    # (default: 0) - When set to 1, will home unhomed XY axes if needed and will not move any axis if already homed and parked. 2 Will also home Z if not homed.
        # -1 = none, 1= Only load filament, 2= Wipe in front of carriage, 3= Pebble wiper, 4= First Silicone, then pebble. Defaults to 0.
@@ -55,7 +55,7 @@ class ktcc_toolgroup:
     def get_status(self, eventtime= None):
         status = {
             "is_virtual": self.is_virtual,
-            "physical_parent_id": self.physical_parent_id,
+            "parent_tool": self.parent_tool,
             "lazy_home_when_parking": self.lazy_home_when_parking,
             "meltzonelength": self.meltzonelength,
             "idle_to_standby_time": self.idle_to_standby_time,

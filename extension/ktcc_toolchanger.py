@@ -1,7 +1,7 @@
-# KTC - Klipper Tool Changer code (v.2)
+# KTCC - Klipper Tool Changer Code
 # Toollock and general Tool support
 #
-# Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
+# Copyright (C) 2023  Andrei Ignat <andrei@ignat.se>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
@@ -14,12 +14,174 @@
 # ToolLock: Toollock is engaged.
 # ToolUnLock: Toollock is disengaged.
 
+from .ktcc import *
+
 TOOL_UNKNOWN = -2
 TOOL_UNLOCKED = -1
 BOOT_DELAY = 1.5            # Delay before running bootup tasks
 VARS_KTCC_TOOL_MAP = "ktcc_state_tool_remap"
 
-class ktc:
+class ktcc_toolchanger:
+
+    def __init__(self, config):
+        self.printer = config.get_printer()
+        self.reactor = self.printer.get_reactor()
+        self.gcode = self.printer.lookup_object('gcode')
+        gcode_macro = self.printer.load_object(config, 'gcode_macro')
+
+        self.global_offset = config.get('global_offset', "0,0,0")
+        if isinstance(self.global_offset, str):
+            offset_list = self.global_offset.split(',')
+            if len(offset_list) == 3 and all(x.replace('.', '').isdigit() for x in offset_list):
+                self.global_offset = [float(x) for x in offset_list]
+            else:
+                raise ValueError("global_offset is not a string containing 3 float numbers separated by ,")
+        else:
+            raise TypeError("global_offset is not a string")
+        
+        self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
+        self.tool_current = "-2"          # -2 Unknown tool locked, -1 No tool locked, 0 and up are tools.
+        self.init_printer_to_last_tool = config.getboolean(
+            'init_printer_to_last_tool', True)
+        self.purge_on_toolchange = config.getboolean(
+            'purge_on_toolchange', True)
+        self.saved_position = None
+        self.restore_axis_on_toolchange = '' # string of axis to restore: XYZ
+        self.log = self.printer.load_object(config, 'ktcc_log')
+
+        self.tool_map = {}
+        self.last_endstop_query = {}
+        self.changes_made_by_set_all_tool_heaters_off={}
+
+        # G-Code macros
+        self.tool_lock_gcode_template = gcode_macro.load_template(config, 'tool_lock_gcode', '')
+        self.tool_unlock_gcode_template = gcode_macro.load_template(config, 'tool_unlock_gcode', '')
+
+        # Register commands
+        handlers = [
+            'KTCC_SAVE_CURRENT_TOOL', 'KTCC_TOOL_LOCK', 'KTCC_TOOL_UNLOCK',
+            'KTCC_TOOL_DROPOFF_ALL', 'KTCC_SET_AND_SAVE_PARTFAN_SPEED', 'KTCC_TEMPERATURE_WAIT_WITH_TOLERANCE', 
+            'KTCC_SET_TOOL_TEMPERATURE', 'KTCC_SET_GLOBAL_OFFSET', 'KTCC_SET_TOOL_OFFSET',
+            'KTCC_SET_PURGE_ON_TOOLCHANGE', 'KTCC_SAVE_POSITION', 'KTCC_SAVE_CURRENT_POSITION', 
+            'KTCC_RESTORE_POSITION', 'KTCC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL',
+            'KTCC_DISPLAY_TOOL_MAP', 'KTCC_REMAP_TOOL', 'KTCC_ENDSTOP_QUERY',
+            'KTCC_SET_ALL_TOOL_HEATERS_OFF', 'KTCC_RESUME_ALL_TOOL_HEATERS']
+        for cmd in handlers:
+            func = getattr(self, 'cmd_' + cmd)
+            desc = getattr(self, 'cmd_' + cmd + '_help', None)
+            self.gcode.register_command(cmd, func, False, desc)
+
+        self.printer.register_event_handler("klippy:ready", self.handle_ready)
+
+    def handle_ready(self):
+        # Load persistent Tool remaping.
+        self.tool_map = self.printer.lookup_object('save_variables').allVariables.get(VARS_KTCC_TOOL_MAP, {})
+        waketime = self.reactor.monotonic() + BOOT_DELAY
+        self.reactor.register_callback(self._bootup_tasks, waketime)
+
+    def _bootup_tasks(self, eventtime):
+        try:
+            if len(self.tool_map) > 0:
+                self.log.always(self._tool_map_to_human_string())
+            self.Initialize_Tool_Lock()
+        except Exception as e:
+            self.log.always('Warning: Error booting up KTCC: %s' % str(e))
+
+    def Initialize_Tool_Lock(self):
+        if not self.init_printer_to_last_tool:
+            return None
+
+        # self.log.always("Initialize_Tool_Lock running.")
+        save_variables = self.printer.lookup_object('save_variables')
+        try:
+            self.tool_current = save_variables.allVariables['tool_current']
+        except:
+            self.tool_current = "-1"
+            save_variables.cmd_SAVE_VARIABLE(self.gcode.create_gcode_command(
+                "SAVE_VARIABLE", "SAVE_VARIABLE", {"VARIABLE": "tool_current", 'VALUE': self.tool_current }))
+
+        if str(self.tool_current) == "-1":
+            self.ToolUnlock()
+            self.log.always("KTCC initialized with unlocked ToolLock")
+
+        else:
+            t = self.tool_current
+            self.ToolLock(True)
+            self.SaveCurrentTool(str(t))
+            self.log.always("KTCC initialized with T%s." % self.tool_current) 
+
+    cmd_KTCC_TOOL_LOCK_help = "Lock the ToolLock."
+    def cmd_KTCC_TOOL_LOCK(self, gcmd = None):
+        self.ToolLock()
+
+    def ToolLock(self, ignore_locked = False):
+        self.log.trace("KTCC_TOOL_LOCK running. ")
+        if not ignore_locked and int(self.tool_current) != -1:
+            self.log.always("KTCC_TOOL_LOCK is already locked with tool " + self.tool_current + ".")
+        else:
+            self.tool_lock_gcode_template.run_gcode_from_command()
+            self.SaveCurrentTool("-2")
+            self.log.trace("Tool Locked")
+            self.log.increase_statistics('total_toollocks')
+            
+
+    cmd_KTCC_TOOL_DROPOFF_ALL_help = "Deselect all tools"
+    def cmd_KTCC_TOOL_DROPOFF_ALL(self, gcmd = None):
+        self.log.trace("KTCC_TOOL_DROPOFF_ALL running. ")# + gcmd.get_raw_command_parameters())
+        if self.tool_current == "-2":
+            raise self.printer.command_error("cmd_KTCC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool.")
+        if self.tool_current != "-1":
+            self.printer.lookup_object('ktcc_tool ' + str(self.tool_current)).Dropoff( force_virtual_unload = True )
+        
+
+        try:
+            # Need to check all tools at least once but reload them after each time.
+            all_checked_once = False
+            while not all_checked_once:
+                all_tools = dict(self.printer.lookup_objects('ktcc_tool'))
+                all_checked_once =True # If no breaks in next For loop then we can exit the While loop.
+                for tool_name, tool in all_tools.items():
+                    # If there is a virtual tool loaded:
+                    if tool.get_status()["virtual_loaded"] > TOOL_UNLOCKED:
+                        # Pickup and then unload and drop the tool.
+                        self.log.trace("cmd_KTCC_TOOL_DROPOFF_ALL: Picking up and dropping forced: %s." % str(tool.get_status()["virtual_loaded"]))
+                        self.printer.lookup_object('ktcc_tool ' + str(tool.get_status()["virtual_loaded"])).select_tool_actual()
+                        self.printer.lookup_object('ktcc_tool ' + str(tool.get_status()["virtual_loaded"])).Dropoff( force_virtual_unload = True )
+                        all_checked_once =False # Do not exit while loop.
+                        break # Break for loop to start again.
+
+        except Exception as e:
+            raise Exception('cmd_KTCC_TOOL_DROPOFF_ALL: Error: %s' % str(e))
+
+    cmd_KTCC_TOOL_UNLOCK_help = "Unlock the ToolLock."
+    def cmd_KTCC_TOOL_UNLOCK(self, gcmd = None):
+        self.ToolUnlock()
+
+    def ToolUnlock(self):
+        self.log.trace("KTCC_TOOL_UNLOCK running. ")
+        self.tool_unlock_gcode_template.run_gcode_from_command()
+        self.SaveCurrentTool(-1)
+        self.log.trace("ToolLock Unlocked.")
+        self.log.increase_statistics('total_toolunlocks')
+
+
+    def PrinterIsHomedForToolchange(self, lazy_home_when_parking =0):
+        curtime = self.printer.get_reactor().monotonic()
+        toolhead = self.printer.lookup_object('toolhead')
+        homed = toolhead.get_status(curtime)['homed_axes'].lower()
+        if all(axis in homed for axis in ['x','y','z']):
+            return True
+        elif lazy_home_when_parking == 0 and not all(axis in homed for axis in ['x','y','z']):
+            return False
+        elif lazy_home_when_parking == 1 and 'z' not in homed:
+            return False
+
+        axes_to_home = ""
+        for axis in ['x', 'y', 'z']:
+            if axis not in homed: 
+                axes_to_home += axis
+        self.gcode.run_script_from_command("G28 " + axes_to_home.upper())
+        return True
 
     def SaveCurrentTool(self, t):
         self.tool_current = str(t)
@@ -188,6 +350,8 @@ class ktc:
             set_heater_cmd["heater_state"] = chng_state
             # tool.set_heater(heater_state= chng_state)
         if len(set_heater_cmd) > 0:
+            msg = "T%s Sending temp: %s" % (str(tool_id), str(set_heater_cmd))
+            self.log.trace(msg)
             tool.set_heater(**set_heater_cmd)
         else:
             # Print out the current set of temperature settings for the tool if no changes are provided.
@@ -524,24 +688,5 @@ class ktc:
 
         self.last_endstop_query[endstop_name] = is_triggered
 
-# parses legacy type into string of axis names.
-# Raises gcode error on fail
-def ktcc_parse_restore_type(gcmd, arg_name, default = None):
-    type = gcmd.get(arg_name, None)
-    if type is None:
-        return default
-    elif type == '0':
-        return ''
-    elif type == '1':
-        return 'XY'
-    elif type == '2':
-        return 'XYZ'
-    # Validate this is XYZ
-    for c in type:
-        if c not in XYZ_TO_INDEX:
-            raise gcmd.error("Invalid RESTORE_POSITION_TYPE")
-    return type
-
-XYZ_TO_INDEX = {'x': 0, 'X':0, 'y':1, 'Y': 1, 'z': 2, 'Z':2}
-INDEX_TO_XYZ = ['X','Y','Z']
-
+def load_config(config):
+    return ktcc_toolchanger(config)

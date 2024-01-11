@@ -8,6 +8,13 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
+# To try to keep terms apart:
+# Mount: Tool is selected and loaded for use, be it a physical or a virtual on physical.
+# Unmopunt: Tool is unselected and unloaded, be it a physical or a virtual on physical.
+# Pickup: Tool is physically picked up and attached to the toolchanger head.
+# Droppoff: Tool is physically parked and dropped of the toolchanger head.
+# ToolLock: Toollock is engaged.
+# ToolUnLock: Toollock is disengaged.
 
 import logging, logging.handlers, threading, queue, time
 import math, os.path, copy
@@ -428,7 +435,7 @@ class Ktcc_Log:
                 msg += "Completed %d out of %d unmounts in %s. Average of %s per toolunmount.\n" % (self.tool_statistics[tool_id]['toolunmounts_completed'], self.tool_statistics[tool_id]['toolunmounts_started'], self._seconds_to_human_string(self.tool_statistics[tool_id]['total_time_spent_unmounting']), self._seconds_to_human_string(self._division(self.tool_statistics[tool_id]['total_time_spent_unmounting'], self.tool_statistics[tool_id]['toolunmounts_completed'])))
                 msg += "%s spent selected." % self._seconds_to_human_string(self.tool_statistics[tool_id]['time_selected'])
                 tool = self.printer.lookup_object('ktcc_tool ' + str(tool_id))
-                if tool.is_virtual != True or tool.name==tool.physical_parent_id:
+                if tool.is_virtual != True or tool.name==tool.parentTool_id:
                     if tool.extruder is not None:
                         msg += " %s with active heater and %s with standby heater." % (self._seconds_to_human_string(self.tool_statistics[tool_id]['time_heater_active']), self._seconds_to_human_string(self.tool_statistics[tool_id]['time_heater_standby']))
                 msg += "\n------------\n"
