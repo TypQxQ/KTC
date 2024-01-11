@@ -15,7 +15,7 @@
 # ToolUnLock: Toollock is disengaged.
 
 
-class ktcc_toolgroup:
+class ktc_toolgroup:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.name = config.get_name().split(' ')[1]
@@ -27,7 +27,7 @@ class ktcc_toolgroup:
             self.name = int(name)
         except ValueError:
             raise config.error(
-                    "Name of section '%s' contains illegal characters. Use only integer ktcc_toolgroup number."
+                    "Name of section '%s' contains illegal characters. Use only integer ktc_toolgroup number."
                     % (config.get_name()))
 
         self.is_virtual = config.getboolean(    # If True then must have a physical_parent declared and shares extruder, hotend and fan with the physical_parent
@@ -67,7 +67,7 @@ class ktcc_toolgroup:
         return status
 
 def load_config_prefix(config):
-    return ktcc_toolgroup(config)
+    return ktc_toolgroup(config)
 
 
 

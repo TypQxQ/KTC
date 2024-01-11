@@ -13,8 +13,8 @@
 # ToolLock: Toollock is engaged.
 # ToolUnLock: Toollock is disengaged.
 
-# KTCC exception error class
-# class KTCCError(Exception):
+# KTC exception error class
+# class KTCError(Exception):
 #     pass
 
 # Each tool is getting an instance of this.
@@ -22,7 +22,7 @@ import logging
 from .ktc import parse_restore_type
 from . import ktc_toolchanger, ktc_log
 
-class ktcc_tool:
+class ktc_tool:
     HEATER_STATE_ACTIVE = 2
     HEATER_STATE_STANDBY = 1
     HEATER_STATE_OFF = 0
@@ -99,24 +99,24 @@ class ktcc_tool:
 
 
         ##### ToolGroup #####
-        self.toolgroup = 'ktcc_toolgroup ' + str(config.getint('tool_group'))
+        self.toolgroup = 'ktc_toolgroup ' + str(config.getint('tool_group'))
         if config.has_section(self.toolgroup):
             self.toolgroup = self.printer.lookup_object(self.toolgroup)
         else:
             raise config.error(
-                    "ktcc_toolgroup of T'%s' is not defined. It must be configured before the tool."
+                    "ktc_toolgroup of T'%s' is not defined. It must be configured before the tool."
                     % (config.get_name()))
         tg_status = self.toolgroup.get_status()
 
         ##### Physical Parent #####
-        self.parentTool_id = config.getint('parent_tool', ktcc_toolchanger.TOOL_UNLOCKED)
+        self.parentTool_id = config.getint('parent_tool', ktc_toolchanger.TOOL_UNLOCKED)
 
-        self.parentTool = ktcc_tool()     # Initialize physical parent as a dummy object.
+        self.parentTool = ktc_tool()     # Initialize physical parent as a dummy object.
         if self.parentTool_id >= 0 and not self.parentTool_id == self.name:
-            self.parentTool = self.printer.lookup_object("ktcc_tool " + str(self.parentTool_id))
+            self.parentTool = self.printer.lookup_object("ktc_tool " + str(self.parentTool_id))
 
         ##### Is Virtual #####     # Might be deprecated in future.
-        if self.parentTool_id != ktcc_toolchanger.TOOL_UNLOCKED:
+        if self.parentTool_id != ktc_toolchanger.TOOL_UNLOCKED:
             self.is_virtual = True
        
         ##### Extruder #####
@@ -177,14 +177,14 @@ class ktcc_tool:
                 self.idle_to_powerdown_time = self.toolgroup.idle_to_powerdown_time
 
             # If this tool has a diffrent parent than itself and it's extruder is diffrent
-            if self.parentTool_id > ktcc_toolchanger.TOOL_UNLOCKED and self.parentTool_id != self.name and self.extruder != self.parentTool.extruder:
+            if self.parentTool_id > ktc_toolchanger.TOOL_UNLOCKED and self.parentTool_id != self.name and self.extruder != self.parentTool.extruder:
                 # Use parent's timer for the child tool.
                 self.timer_idle_to_standby = self.parentTool.get_timer_to_standby()
                 self.timer_idle_to_powerdown = self.parentTool.get_timer_to_powerdown()
             else:
                 # Set up new timers.
-                self.timer_idle_to_standby = ktcc_ToolStandbyTempTimer(self.printer, self.name, ktcc_ToolStandbyTempTimer.TIMER_TO_STANDBY)
-                self.timer_idle_to_powerdown = ktcc_ToolStandbyTempTimer(self.printer, self.name, ktcc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN)
+                self.timer_idle_to_standby = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_STANDBY)
+                self.timer_idle_to_powerdown = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN)
 
         ##### G-Code ToolChange #####
         self.pickup_gcode_template = self._get_gcode_template_with_inheritence('pickup_gcode')
@@ -212,7 +212,7 @@ class ktcc_tool:
                 self.unload_virtual_at_dropoff = self.toolgroup.unload_virtual_at_dropoff
 
         ##### Register Tool select command #####
-        self.gcode.register_command("KTCC_T" + str(self.name), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
+        self.gcode.register_command("KTC_T" + str(self.name), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
@@ -250,17 +250,17 @@ class ktcc_tool:
         
     cmd_SelectTool_help = "Select Tool"
     def cmd_SelectTool(self, gcmd):
-        self.log.trace("KTCC T" + str(self.name) + " Selected.")
+        self.log.trace("KTC T" + str(self.name) + " Selected.")
         # Allow either one.
-        restore_mode = ktcc_parse_restore_type(gcmd, 'R', None)
-        restore_mode = ktcc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE', restore_mode)
+        restore_mode = ktc_parse_restore_type(gcmd, 'R', None)
+        restore_mode = ktc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE', restore_mode)
 
         # Check if the requested tool has been remaped to another one.
         tool_is_remaped = self.toollock.tool_is_remaped(int(self.name))
 
         if tool_is_remaped > -1:
-            self.log.always("ktcc_Tool %d is remaped to Tool %d" % (self.name, tool_is_remaped))
-            remaped_tool = self.printer.lookup_object('ktcc_tool ' + str(tool_is_remaped))
+            self.log.always("ktc_Tool %d is remaped to Tool %d" % (self.name, tool_is_remaped))
+            remaped_tool = self.printer.lookup_object('ktc_tool ' + str(tool_is_remaped))
             remaped_tool.select_tool_actual(restore_mode)
             return
         else:
@@ -276,8 +276,8 @@ class ktcc_tool:
         if current_tool_id == self.name:              # If trying to select the already selected tool:
             return                                      # Exit
 
-        if current_tool_id < ktcc_toolchanger.TOOL_UNLOCKED:
-            msg = "ktcc_tool.select_tool_actual: Unknown tool already mounted Can't park it before selecting new tool."
+        if current_tool_id < ktc_toolchanger.TOOL_UNLOCKED:
+            msg = "ktc_tool.select_tool_actual: Unknown tool already mounted Can't park it before selecting new tool."
             self.log.always(msg)
             raise self.printer.command_error(msg)
         
@@ -297,7 +297,7 @@ class ktcc_tool:
         if current_tool_id > ktc_toolchanger.TOOL_UNLOCKED:              # If there is a current tool already selected and it's a known tool.
             self.log.track_selected_tool_end(current_tool_id) # Log that the current tool is to be unmounted.
 
-            current_tool = self.printer.lookup_object('ktcc_tool ' + str(current_tool_id))
+            current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
            
             # If the next tool is not another virtual tool on the same physical tool.
             if int(self.parentTool_id ==  ktc_toolchanger.TOOL_UNLOCKED or 
@@ -321,7 +321,7 @@ class ktcc_tool:
             self.Pickup()
         else:
             if current_tool_id > ktc_toolchanger.TOOL_UNLOCKED:                 # If still has a selected tool: (This tool is a virtual tool with same physical tool as the last)
-                current_tool = self.printer.lookup_object('ktcc_tool ' + str(current_tool_id))
+                current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
                 self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Physical Tool is not Dropped - ")
                 if self.parentTool_id > ktc_toolchanger.TOOL_UNLOCKED and self.parentTool_id == current_tool.get_status()["parentTool_id"]:
                     self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Same physical tool - Pickup")
@@ -332,13 +332,13 @@ class ktcc_tool:
                     self.log.debug(msg)
                     raise Exception(msg)
             else: # New Physical tool with a virtual tool.
-                parentTool = self.printer.lookup_object('ktcc_tool ' + str(self.parentTool_id))
+                parentTool = self.printer.lookup_object('ktc_tool ' + str(self.parentTool_id))
                 parentTool_virtual_loaded = parentTool.get_status()["virtual_loaded"]
                 self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Picking upp physical tool")
                 self.Pickup()
 
                 # If the new physical tool already has another virtual tool loaded:
-                if parentTool_virtual_loaded > ktcc_toolchanger.TOOL_UNLOCKED:
+                if parentTool_virtual_loaded > ktc_toolchanger.TOOL_UNLOCKED:
                     if parentTool_virtual_loaded != self.name:
                         self.log.info("cmd_SelectTool: T" + str(parentTool_virtual_loaded) + "- Virtual - Running UnloadVirtual")
 
@@ -366,7 +366,7 @@ class ktcc_tool:
 
         # Check if homed
         if not self.toollock.PrinterIsHomedForToolchange():
-            raise self.printer.command_error("ktcc_tool.Pickup: Printer not homed and Lazy homing option for tool %s is: %s" % (str(self.name), str(self.lazy_home_when_parking)))
+            raise self.printer.command_error("ktc_tool.Pickup: Printer not homed and Lazy homing option for tool %s is: %s" % (str(self.name), str(self.lazy_home_when_parking)))
             return None
 
         # If has an extruder then activate that extruder.
@@ -379,7 +379,7 @@ class ktcc_tool:
         try:
             context = self.pickup_gcode_template.create_template_context()
             context['myself'] = self.get_status()
-            context['ktcc'] = self.toollock.get_status()
+            context['ktc'] = self.toollock.get_status()
             self.pickup_gcode_template.run_gcode_from_command(context)
         except Exception as e:
             raise Exception("Pickup gcode: Script running error: %s" % (str(e)))
@@ -418,7 +418,7 @@ class ktcc_tool:
 
         # Check if homed
         if not self.toollock.PrinterIsHomedForToolchange():
-            self.log.always("ktcc_tool.Dropoff: Printer not homed and Lazy homing option is: " + str(self.lazy_home_when_parking))
+            self.log.always("ktc_tool.Dropoff: Printer not homed and Lazy homing option is: " + str(self.lazy_home_when_parking))
             return None
 
         # Turn off fan if has a fan.
@@ -440,7 +440,7 @@ class ktcc_tool:
         try:
             context = self.dropoff_gcode_template.create_template_context()
             context['myself'] = self.get_status()
-            context['ktcc'] = self.toollock.get_status()
+            context['ktc'] = self.toollock.get_status()
             self.dropoff_gcode_template.run_gcode_from_command(context)
         except Exception as e:
             raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
@@ -457,7 +457,7 @@ class ktcc_tool:
         try:
             context = self.virtual_toolload_gcode_template.create_template_context()
             context['myself'] = self.get_status()
-            context['ktcc'] = self.toollock.get_status()
+            context['ktc'] = self.toollock.get_status()
             self.virtual_toolload_gcode_template.run_gcode_from_command(context)
         except Exception as e:
             raise Exception("virtual_toolload_gcode: Script running error: %s" % (str(e)))
@@ -483,7 +483,7 @@ class ktcc_tool:
         try:
             context = self.virtual_toolunload_gcode_template.create_template_context()
             context['myself'] = self.get_status()
-            context['ktcc'] = self.toollock.get_status()
+            context['ktc'] = self.toollock.get_status()
             self.virtual_toolunload_gcode_template.run_gcode_from_command(context)
         except Exception as e:
             raise Exception("virtual_toolunload_gcode: Script running error:\n%s" % str(e))
@@ -648,7 +648,7 @@ class ktcc_tool:
         return status
 
     # Based on DelayedGcode.
-class ktcc_ToolStandbyTempTimer:
+class ktc_ToolStandbyTempTimer:
     TIMER_TO_SHUTDOWN = 0
     TIMER_TO_STANDBY = 1
 
@@ -666,7 +666,7 @@ class ktcc_ToolStandbyTempTimer:
         self.inside_timer = self.repeat = False
         self.printer.register_event_handler("klippy:ready", self._handle_ready)
         self.toollock = self.printer.lookup_object('ktc_toolchanger')
-        self.log = self.printer.lookup_object('ktcc_log')
+        self.log = self.printer.lookup_object('ktc_log')
 
         self.counting_down = False
         self.nextwake = self.reactor.NEVER
@@ -683,7 +683,7 @@ class ktcc_ToolStandbyTempTimer:
             if self.last_virtual_tool_using_physical_timer is None:
                 raise Exception("last_virtual_tool_using_physical_timer is < None")
 
-            tool = self.printer.lookup_object("ktcc_tool " + str(self.last_virtual_tool_using_physical_timer))
+            tool = self.printer.lookup_object("ktc_tool " + str(self.last_virtual_tool_using_physical_timer))
             if tool.is_virtual == True:
                 tool_for_tracking_heater = tool.parentTool_id
             else:
@@ -708,7 +708,7 @@ class ktcc_ToolStandbyTempTimer:
                 self.log.track_standby_heater_end(self.tool_id)                                                # Set the standby as finishes in statistics.
 
                 tool.get_timer_to_standby().set_timer(0, self.last_virtual_tool_using_physical_timer)        # Stop Standby timer.
-                tool._set_state(ktcc_tool.HEATER_STATE_OFF)        # Set off state.
+                tool._set_state(ktc_tool.HEATER_STATE_OFF)        # Set off state.
                 heater.set_temp(0)        # Set temperature to 0.
 
             self.log.track_active_heater_end(self.tool_id)                                               # Set the active as finishes in statistics.
@@ -763,7 +763,7 @@ class ktcc_ToolStandbyTempTimer:
 
     # Todo: 
     # Inspired by https://github.com/jschuh/klipper-macros/blob/main/layers.cfg
-class ktcc_MeanLayerTime:
+class ktc_MeanLayerTime:
     def __init__(self, printer):
         # Run before toolchange to set time like in StandbyToolTimer.
         # Save time for last 5 (except for first) layers
@@ -776,4 +776,4 @@ class ktcc_MeanLayerTime:
 
 
 def load_config_prefix(config):
-    return ktcc_tool(config)
+    return ktc_tool(config)
