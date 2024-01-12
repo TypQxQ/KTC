@@ -87,6 +87,7 @@ log_blank()
 # 
 check_klipper() {
     # Check if Klipper is installed
+    log_blank
     log_header "Checking if Klipper is installed..."
     if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F "klipper.service")" ]; then
         log_important "${INFO}Klipper service found"
@@ -100,8 +101,8 @@ check_klipper() {
 # Logic to verify the home directories
 # 
 verify_home_dirs() {
-    log_header "Verifying home directories..."
     log_blank
+    log_header "Verifying home directories..."
     if [ ! -d "${KLIPPER_HOME}" ]; then
         log_error "Klipper home directory (${KLIPPER_HOME}) not found. Use '-k <dir>' option to override"
         exit -1
@@ -155,11 +156,12 @@ function nextfilename {
 # 
 link_extension()
 {
-    log_header "Linking extension files to Klipper..."
     log_blank
+    log_header "Linking extension files to Klipper..."
 
     for file in `cd ${EXTENSION_PATH}/ ; ls *.py`; do
         ln -sf "${EXTENSION_PATH}/${file}" "${KLIPPER_HOME}/klippy/extras/${file}"
+        log_info "Linking extension file: (${file})."
     done
 }
 
@@ -167,15 +169,18 @@ link_extension()
 # Logic to install the update manager to Moonraker
 # 
 install_update_manager() {
+    log_blank
     log_header "Adding update manager to moonraker.conf"
     dest=${KLIPPER_CONFIG_HOME}/moonraker.conf
     if test -f $dest; then
-        # Backup the original printer.cfg file
-        next_dest="$(nextfilename "$dest")"
-        log_info "Copying original moonraker.conf file to ${next_dest}"
-        cp ${dest} ${next_dest}
         already_included=$(grep -c '\[update_manager KTC\]' ${dest} || true)
         if [ "${already_included}" -eq 0 ]; then
+            # Backup the original  moonraker.conf file
+            next_dest="$(nextfilename "$dest")"
+            log_info "Copying original moonraker.conf file to ${next_dest}"
+            cp ${dest} ${next_dest}
+
+            # Add the configuration to moonraker.conf
             echo "" >> "${dest}"    # Add a blank line
             echo "" >> "${dest}"    # Add a blank line
             echo -e "[update_manager KTC]]" >> "${dest}"    # Add the section header
@@ -188,7 +193,6 @@ install_update_manager() {
         else
             log_error "[update_manager KTC] already exists in moonraker.conf - skipping installing it there"
         fi
-
     else
         log_error "moonraker.conf not found!"
     fi
