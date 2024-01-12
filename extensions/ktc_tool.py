@@ -19,7 +19,7 @@
 
 # Each tool is getting an instance of this.
 import logging
-from .ktc import parse_restore_type
+from .ktc import ktc_parse_restore_type
 from . import ktc_toolchanger, ktc_log
 
 class ktc_tool:
@@ -30,7 +30,6 @@ class ktc_tool:
     def __init__(self, config = None):
         self.name = None
         self.tool_number = ktc_toolchanger.TOOL_UNLOCKED   # Tool number to register this tool as. -1 to not register.
-        self.toolgroup = None               # defaults to 0. Check if tooltype is defined.
         self.is_virtual = False
         self.parentTool_id = ktc_toolchanger.TOOL_UNLOCKED      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
         self.parentTool = None              # Initialize physical parent as a dummy object.
@@ -49,8 +48,8 @@ class ktc_tool:
         self.virtual_toolload_gcode = None  # The plain gcode string is to load for virtual tool having this tool as parent. This is for loading the virtual tool.
         self.virtual_toolunload_gcode = None# The plain gcode string is to unload for virtual tool having this tool as parent. This is for unloading the virtual tool.
 
-#        self.timer_idle_to_standby = None
-#        self.timer_idle_to_powerdown = None
+        self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
+        self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
 
         self.requires_pickup_for_virtual_load = None   # May be needed for a filament swap to prevent ooze but not for a pen.
         self.requires_pickup_for_virtual_unload = None # May be needed for a filament swap to prevent ooze but not for a pen. Used when forcing unload.
@@ -96,17 +95,6 @@ class ktc_tool:
             raise config.error(
                     "Name of section '%s' contains illegal characters. Use only integer tool number."
                     % (config.get_name()))
-
-
-        ##### ToolGroup #####
-        self.toolgroup = 'ktc_toolgroup ' + str(config.getint('tool_group'))
-        if config.has_section(self.toolgroup):
-            self.toolgroup = self.printer.lookup_object(self.toolgroup)
-        else:
-            raise config.error(
-                    "ktc_toolgroup of T'%s' is not defined. It must be configured before the tool."
-                    % (config.get_name()))
-        tg_status = self.toolgroup.get_status()
 
         ##### Physical Parent #####
         self.parentTool_id = config.getint('parent_tool', ktc_toolchanger.TOOL_UNLOCKED)
@@ -173,8 +161,8 @@ class ktc_tool:
             self.idle_to_standby_time = self._config_getfloat("idle_to_standby_time")
 
             self.idle_to_powerdown_time = self._config_getfloat("idle_to_powerdown_time")
-            if self.idle_to_powerdown_time is None:
-                self.idle_to_powerdown_time = self.toolgroup.idle_to_powerdown_time
+            # if self.idle_to_powerdown_time is None:
+            #     self.idle_to_powerdown_time = self.toolgroup.idle_to_powerdown_time
 
             # If this tool has a diffrent parent than itself and it's extruder is diffrent
             if self.parentTool_id > ktc_toolchanger.TOOL_UNLOCKED and self.parentTool_id != self.name and self.extruder != self.parentTool.extruder:
@@ -198,18 +186,18 @@ class ktc_tool:
             ##### Parameters for VirtualToolChange #####
             self.requires_pickup_for_virtual_load = self.config.getboolean(
                 "requires_pickup_for_virtual_load", self.parentTool.requires_pickup_for_virtual_load)
-            if self.requires_pickup_for_virtual_load is None:
-                self.requires_pickup_for_virtual_load = self.toolgroup.requires_pickup_for_virtual_load
+            # if self.requires_pickup_for_virtual_load is None:
+            #     self.requires_pickup_for_virtual_load = self.toolgroup.requires_pickup_for_virtual_load
 
             self.requires_pickup_for_virtual_unload = self.config.getboolean(
                 "requires_pickup_for_virtual_unload", self.parentTool.requires_pickup_for_virtual_unload)
-            if self.requires_pickup_for_virtual_unload is None:
-                self.requires_pickup_for_virtual_unload = self.toolgroup.requires_pickup_for_virtual_unload
+            # if self.requires_pickup_for_virtual_unload is None:
+            #     self.requires_pickup_for_virtual_unload = self.toolgroup.requires_pickup_for_virtual_unload
 
             self.unload_virtual_at_dropoff = self.config.getboolean(
                 "unload_virtual_at_dropoff", self.parentTool.unload_virtual_at_dropoff)
-            if self.unload_virtual_at_dropoff is None:
-                self.unload_virtual_at_dropoff = self.toolgroup.unload_virtual_at_dropoff
+            # if self.unload_virtual_at_dropoff is None:
+            #     self.unload_virtual_at_dropoff = self.toolgroup.unload_virtual_at_dropoff
 
         ##### Register Tool select command #####
         self.gcode.register_command("KTC_T" + str(self.name), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
@@ -234,8 +222,8 @@ class ktc_tool:
 
     def _get_gcode_template_with_inheritence(self, config_param, optional = False):
         temp_gcode = self.parentTool.get_config(config_param)                   # First try to get gcode parameter from eventual physical Parent.
-        if temp_gcode is None:                                          # If didn't get any from physical parent,
-            temp_gcode =  self.toolgroup.get_config(config_param)       # try getting from toolgroup.
+        # if temp_gcode is None:                                          # If didn't get any from physical parent,
+        #     temp_gcode =  self.toolgroup.get_config(config_param)       # try getting from toolgroup.
 
         if optional and temp_gcode is None:
             temp_gcode = ""

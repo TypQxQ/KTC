@@ -8,16 +8,11 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-# To try to keep terms apart:
-# Mount: Tool is selected and loaded for use, be it a physical or a virtual on physical.
-# Unmopunt: Tool is unselected and unloaded, be it a physical or a virtual on physical.
-# Pickup: Tool is physically picked up and attached to the toolchanger head.
-# Droppoff: Tool is physically parked and dropped of the toolchanger head.
-# ToolLock: Toollock is engaged.
-# ToolUnLock: Toollock is disengaged.
-
-import logging, logging.handlers, threading, queue, time
+import os, logging, threading, queue, time, ast, configparser
 import math, os.path, copy
+
+KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
+KTC_SAVE_VARIABLES_DELAY = 10
 
 # Forward all messages through a queue (polled by background thread)
 class KtcQueueHandler(logging.Handler):
@@ -64,13 +59,12 @@ class KtcMultiLineFormatter(logging.Formatter):
 
 class Ktc_Log:
     EMPTY_TOOL_STATS = {'toolmounts_completed': 0, 'toolunmounts_completed': 0, 'toolmounts_started': 0, 'toolunmounts_started': 0, 'time_selected': 0, 'time_heater_active': 0, 'time_heater_standby': 0, 'tracked_start_time_selected':0, 'tracked_start_time_active':0, 'tracked_start_time_standby':0, 'total_time_spent_unmounting':0, 'total_time_spent_mounting':0}
-    KTC_TOOL_STATISTICS_PREFIX = "ktc_statistics_tool"
+    KTC_TOOL_STATISTICS_PREFIX = "tool_statistics"
 
     def __init__(self, config):
         self.config = config
         self.gcode = config.get_printer().lookup_object('gcode')
         self.printer = config.get_printer()
-        self.reactor = self.printer.get_reactor()
 
         self.printer.register_event_handler('klippy:connect', self.handle_connect)
         self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
@@ -86,11 +80,6 @@ class Ktc_Log:
         self.queue_listener = None
         self.ktc_logger = None
 
-        # Save to file
-        self.changes_to_save = False
-        self.save_delay = 10
-        self.save_active = True
-
         # Register commands
         handlers = [
             'KTC_LOG_TRACE', 'KTC_LOG_DEBUG', 'KTC_LOG_INFO', 'KTC_LOG_ALWAYS', 
@@ -101,55 +90,15 @@ class Ktc_Log:
             desc = getattr(self, 'cmd_' + cmd + '_help', None)
             self.gcode.register_command(cmd, func, False, desc)
 
-    def handle_ready(self):
-        self.always('KlipperToolChangerCode Ready')
-
-        # Wraping G28 and wait for temperature so we don't try sending gcode commands to save state while the gcode is blocked.
-        # Need to do it outermost so that any G28 macros are used too.
-        # When inside a G28 the parser won't run any SAVE_VARIABLE resulting in Klipper 
-        try:
-            self.toolhead = self.printer.lookup_object('toolhead')
-
-            self.prev_G28 = self.gcode.register_command("G28", None)
-            self.gcode.register_command("G28", self.cmd_KTC_G28, desc = self.cmd_KTC_G28_help)
-        except Exception as e:
-            logging.exception('KTC Warning: Error trying to wrap G28 macro: %s' % str(e))
-
-    cmd_KTC_G28_help = "Homing axes."
-    def cmd_KTC_G28(self, gcmd):
-        # self.trace("Starting G28")
-        self.save_active = False                    # Don't try to use SAVE_VARIABLE commands.
-        self.prev_G28(gcmd)
-        self.save_active = True                     # Resume to use SAVE_VARIABLE commands.
-        # self.trace("Ending G28")
-
-    def _save_changes_timer_event(self, eventtime):
-        try:
-            if self.save_active and self.changes_to_save:
-                self.changes_to_save = False
-                self.trace("Saving state in logs.")
-
-                self._persist_swap_statistics()
-                self._persist_tool_statistics()
-        except Exception as e:
-            self.debug("_save_changes_timer_event:Exception: %s" % (str(e)))
-            logging.exception("_save_changes_timer_event:Exception: %s" % (str(e)))
-        nextwake = eventtime + self.save_delay
-        return nextwake
-
     def handle_connect(self):
-        # Load saved variables
-        self.variables = self.printer.lookup_object('save_variables').allVariables
-
         # Setup background file based logging before logging any messages
         if self.logfile_level >= 0:
             logfile_path = self.printer.start_args['log_file']
             dirname = os.path.dirname(logfile_path)
             if dirname == None:
-                ktc_log = '/tmp/ktc.log'
+                ktc_log = os.path.expanduser('~/ktc.log')
             else:
                 ktc_log = dirname + '/ktc.log'
-            self.debug("ktc_log=%s" % ktc_log)
             self.queue_listener = KtcQueueListener(ktc_log)
             self.queue_listener.setFormatter(KtcMultiLineFormatter('%(asctime)s %(message)s', datefmt='%I:%M:%S'))
             queue_handler = KtcQueueHandler(self.queue_listener.bg_queue)
@@ -157,29 +106,26 @@ class Ktc_Log:
             self.ktc_logger.setLevel(logging.INFO)
             self.ktc_logger.addHandler(queue_handler)
 
+        # Load the persistent variables object
+        self.ktc_persistent = KtcSaveVariables(self, self.printer.get_reactor())
+
         # Load saved values
         self._load_persisted_state()
 
         # Init persihabele statistics
         self._reset_print_statistics()
 
-        # Set up timer to save values when needed
-        self.timer_save = self.reactor.register_timer(
-            self._save_changes_timer_event, self.reactor.monotonic() + (self.save_delay))
-
     def handle_disconnect(self):
-        self.always('KTC Shutdown')
-        self.reactor.update_timer(self.timer_save, self.reactor.NEVER)
-        if self.queue_listener != None:
-            self.queue_listener.stop()
+        self.ktc_persistent.disconnect()
+
+    def handle_ready(self):
+        self.always('KlipperToolChangerCode Ready')
 
     def _load_persisted_state(self):
-        swap_stats = self.variables.get("ktc_statistics_swaps", {})
+        swap_stats = self.ktc_persistent.variables.get("swap_statistics", {})
         try:
             if swap_stats is None or swap_stats == {}:
                 raise Exception("Couldn't find any saved statistics.")
-            # self.trace("Loading statistics for KTC: %s" % str(swap_stats))
-            # self.total_mounts = swap_stats['total_mounts'] or 0
             self.total_time_spent_mounting = swap_stats['total_time_spent_mounting'] or 0
             self.total_time_spent_unmounting = swap_stats['total_time_spent_unmounting'] or 0
             self.total_toollocks = swap_stats['total_toollocks'] or 0
@@ -187,7 +133,7 @@ class Ktc_Log:
             self.total_toolmounts = swap_stats['total_toolmounts'] or 0
             self.total_toolunmounts = swap_stats['total_toolunmounts'] or 0
         except Exception:
-            # Initializing statistics
+            # Initializing statistics if unable to load from file
             self._reset_statistics()
 
         self.tool_statistics = {}
@@ -195,7 +141,7 @@ class Ktc_Log:
             try:
                 toolname=str(tool[0])
                 toolname=toolname[toolname.rindex(' ')+1:]
-                self.tool_statistics[toolname] = self.variables.get("%s%s" % (self.KTC_TOOL_STATISTICS_PREFIX, toolname), self.EMPTY_TOOL_STATS.copy())
+                self.tool_statistics[toolname] = self.ktc_persistent.variables.get("%s%s" % (self.KTC_TOOL_STATISTICS_PREFIX, toolname), self.EMPTY_TOOL_STATS.copy())
                 self.tool_statistics[toolname]["tracked_start_time_selected"] = 0
                 self.tool_statistics[toolname]["tracked_start_time_active"] = 0
                 self.tool_statistics[toolname]["tracked_start_time_standby"] = 0
@@ -313,8 +259,7 @@ class Ktc_Log:
             self.increase_tool_statistics(tool_id, 'total_time_spent_mounting', time_spent)
             self.total_time_spent_mounting += time_spent
             self._set_tool_statistics(tool_id, 'tracked_mount_start_time', 0)
-            self.changes_to_save = True
-
+            self._persist_statistics()
     def track_unmount_start(self, tool_id):
         self.trace("track_unmount_start: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics(tool_id, 'tracked_unmount_start_time', time.time())
@@ -331,7 +276,7 @@ class Ktc_Log:
             self._set_tool_statistics(tool_id, 'tracked_unmount_start_time', 0)
             self.increase_tool_statistics(tool_id, 'toolunmounts_completed')
             self.increase_statistics('total_toolunmounts')
-            self.changes_to_save = True
+            self._persist_statistics()
 
 
     def increase_statistics(self, key, count=1):
@@ -345,7 +290,7 @@ class Ktc_Log:
                 self.total_toollocks += int(count)
             elif key == 'total_toolunlocks':
                 self.total_toolunlocks += int(count)
-            self.changes_to_save = True
+            self._persist_statistics()
         except Exception as e:
             self.debug("Exception whilst tracking tool stats: %s" % str(e))
             self.debug("increase_statistics: Error while increasing stats while key: %s and count: %s" % (str(key), str(count)))
@@ -359,7 +304,7 @@ class Ktc_Log:
     def track_selected_tool_end(self, tool_id):
         self.trace("track_selected_tool_end: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics_time_diff(tool_id, 'time_selected', 'tracked_start_time_selected')
-        self.changes_to_save = True
+        self._persist_statistics()
 
     def track_active_heater_start(self, tool_id):
         self.trace("track_active_heater_start: Running for Tool: %s." % (tool_id))
@@ -368,7 +313,7 @@ class Ktc_Log:
     def track_active_heater_end(self, tool_id):
         self.trace("track_active_heater_end: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics_time_diff(tool_id, 'time_heater_active', 'tracked_start_time_active')
-        self.changes_to_save = True
+        self._persist_statistics()
 
     def track_standby_heater_start(self, tool_id):
         self.trace("track_standby_heater_start: Running for Tool: %s." % (tool_id))
@@ -377,7 +322,7 @@ class Ktc_Log:
     def track_standby_heater_end(self, tool_id):
         self.trace("track_standby_heater_end: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics_time_diff(tool_id, 'time_heater_standby', 'tracked_start_time_standby')
-        self.changes_to_save = True
+        self._persist_statistics()
 
     def _seconds_to_human_string(self, seconds):
         result = ""
@@ -466,7 +411,7 @@ class Ktc_Log:
 
 
 
-    def _persist_swap_statistics(self):
+    def _persist_statistics(self):
         swap_stats = {
             # 'total_mounts': self.total_mounts,
             'total_time_spent_mounting': round(self.total_time_spent_mounting, 1),
@@ -476,17 +421,16 @@ class Ktc_Log:
             'total_toolmounts': self.total_toolmounts,
             'total_toolunmounts': self.total_toolunmounts
             }
-        self.toolhead.wait_moves()
-        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=\"%s\"" % ("ktc_statistics_swaps", swap_stats))
+        try:
+            self.trace("Persisting swap statistics: %s" % str(swap_stats))
+            self.ktc_persistent.save_variable("swap_statistics", str(swap_stats))
 
-    def _persist_tool_statistics(self):
-        for tool in self.tool_statistics:
-            try:
-                self.toolhead.wait_moves()
-                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%s VALUE=\"%s\"" % (self.KTC_TOOL_STATISTICS_PREFIX, tool, self.tool_statistics[tool]))
-            except Exception as err:
-                self.debug("Unexpected error in _persist_tool_statistics: %s" % err)
+            for tool in self.tool_statistics:
+                self.ktc_persistent.save_variable("%s%s" % (self.KTC_TOOL_STATISTICS_PREFIX, tool), str(self.tool_statistics[tool]))
+        except Exception as err:
+            self.debug("Unexpected error whiles saving variables in _persist_statistics: %s" % err)
 
+                
     def increase_tool_statistics(self, tool_id, key, count=1):
         try:
             self.trace("increase_tool_statistics: Running for Tool: %s. Provided to record tool stats while key: %s and count: %s" % (tool_id, str(key), str(count)))
@@ -518,14 +462,12 @@ class Ktc_Log:
         except Exception as e:
             self.debug("Exception whilst tracking tool stats: %s" % str(e))
             self.debug("_set_tool_statistics: Error while tool: %s provided to record tool stats while key: %s and value: %s" % (tool_id, str(key), str(value)))
-        # self.trace("_set_tool_statistics: Tool: %s provided to record tool stats while key: %s and value: %s" % (tool_id, str(key), str(value)))
 
     def _set_tool_statistics_time_diff(self, tool_id, final_time_key, start_time_key):
         try:
             if str(tool_id) in self.tool_statistics:
                 tool_stat= self.tool_statistics[str(tool_id)]
                 if tool_stat[start_time_key] is not None and tool_stat[start_time_key] != 0:
-                    # self.trace("_set_tool_statistics_time_diff: Tool: %s value before running: final_time_key: %s=%s, start_time_key: %s=%s." % (tool_id, final_time_key, str(tool_stat[final_time_key]), start_time_key, str(tool_stat[start_time_key])))
                     if tool_stat[final_time_key] is not None and tool_stat[final_time_key] != 0:
                         tool_stat[final_time_key] += time.time() - tool_stat[start_time_key]
                     else:
@@ -536,7 +478,6 @@ class Ktc_Log:
         except Exception as e:
             self.debug("Exception whilst tracking tool stats: %s" % str(e))
             self.debug("_set_tool_statistics_time_diff: Error while tool: %s provided to record tool stats while final_time_key: %s and start_time_key: %s" % (tool_id, str(final_time_key), str(start_time_key)))
-        # self.trace("_set_tool_statistics_time_diff: Tool: %s value after running: final_time_key: %s=%s, start_time_key: %s=%s." % (tool_id, final_time_key, str(tool_stat[final_time_key]), start_time_key, str(tool_stat[start_time_key])))
 
 ### LOGGING AND STATISTICS FUNCTIONS GCODE FUNCTIONS
 
@@ -546,7 +487,7 @@ class Ktc_Log:
         if param.lower() == "yes":
             self._reset_statistics()
             self._reset_print_statistics()
-            self.changes_to_save = True
+            self._persist_statistics()
             self._dump_statistics(True)
             self.always("Statistics RESET.")
         else:
@@ -667,6 +608,84 @@ class Ktc_Log:
     #     msg += "\n%s" % self._tool_to_gate_map_to_human_string()
     #     msg += "\n\n%s" % self._swap_statistics_to_human_string()
     #     self._log_always(msg)
+
+# This is copied from the save_variables.py to be able to save variables from the KTC inddependent of other plugins.
+# Using the default save_variables.py will cause conflicts when other plugins such as HappyHare tries to load it again.
+# Will use a different filename to avoid this.
+class KtcSaveVariables:
+    def __init__(self, ktc_logger : Ktc_Log, reactor):
+        self.filename = os.path.expanduser(KTC_SAVE_VARIABLES_FILENAME)
+        self.variables = {}
+        self.ktc_logger = ktc_logger
+        self.reactor = reactor
+        self.ready_to_save = False
+
+        # Set up timer to only save values when needed 
+        # and no more than once every 10 seconds to allow for
+        # multiple changes and avoid excessive writes
+        self.timer_save = self.reactor.register_timer(
+            self._save_changes_timer_event, self.reactor.monotonic() 
+            + (KTC_SAVE_VARIABLES_DELAY))
+
+        try:
+            if not os.path.exists(self.filename):
+                open(self.filename, "w").close()
+            self.load_variables()
+        except Exception as e:
+            raise e.with_traceback(e.__traceback__)
+
+    # Remove the timer when Klipper shuts down
+    def disconnect(self):
+        self.reactor.update_timer(self.timer_save, self.reactor.NEVER)
+        if self.queue_listener != None:
+            self.queue_listener.stop()
+
+    def load_variables(self):
+        allvars = {}
+        varfile = configparser.ConfigParser()
+        try:
+            varfile.read(self.filename)
+            if varfile.has_section('KTC Variables'):
+                for name, val in varfile.items('KTC Variables'):
+                    allvars[name] = ast.literal_eval(val)
+        except:
+            msg = "Unable to parse existing KTC variable file: %s" % (self.filename,)
+            raise msg
+        self.variables = allvars
+
+    def save_variable(self, varname, value):
+        self.ktc_logger.trace("Saving variable '%s' as '%s'" % (varname, value))
+        try:
+            value = ast.literal_eval(value)
+        except ValueError as e:
+            raise Exception("Unable to parse '%s' as a literal" % (value,))
+        self.variables[varname] = value
+        self.ready_to_save = True
+        
+
+    def _save_changes_timer_event(self, eventtime):
+        try:
+            if self.ready_to_save:
+                self.ready_to_save = False
+                self.ktc_logger.trace("Saving state in logs.")
+
+                # Write file
+                varfile = configparser.ConfigParser()
+                varfile.add_section('KTC Variables')
+                for name, val in sorted(self.variables.items()):
+                    varfile.set('KTC Variables', name, repr(val))
+                    self.ktc_logger.trace("Saving to file variable '%s' as '%s'" % (name, val))
+
+                f = open(self.filename, "w")
+                varfile.write(f)
+                f.close()
+        except Exception as e:
+            self.ktc_logger.debug("_save_changes_timer_event:Exception: %s" % (str(e)))
+            raise e.with_traceback(e.__traceback__)
+        nextwake = eventtime + KTC_SAVE_VARIABLES_DELAY
+        return nextwake
+
+        
 
 def load_config(config):
     return Ktc_Log(config)
