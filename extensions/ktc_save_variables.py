@@ -12,7 +12,7 @@ class KtcSaveVariables:
         
         self.filename = os.path.expanduser(ktc.KTC_SAVE_VARIABLES_FILENAME)
 
-        self.variables = {}
+        self.vars = {}
         self.ready_to_save = False
 
         # Set up timer to only save values when needed 
@@ -25,7 +25,7 @@ class KtcSaveVariables:
         try:
             if not os.path.exists(self.filename):
                 open(self.filename, "w").close()
-            self.load_variables()
+            self.load_vars()
         except Exception as e:
             raise e.with_traceback(e.__traceback__)
 
@@ -33,7 +33,7 @@ class KtcSaveVariables:
     def disconnect(self):
         self.reactor.update_timer(self.timer_save, self.reactor.NEVER)
 
-    def load_variables(self):
+    def load_vars(self):
         allvars = {}
         varfile = configparser.ConfigParser()
         try:
@@ -46,19 +46,19 @@ class KtcSaveVariables:
         except:
             msg = "Unable to parse existing KTC variable file: %s" % (self.filename,)
             raise msg
-        self.variables = allvars
+        self.vars = allvars
 
     def save_variable(self, varname, value, section='Variables', force_save=False):
-        self.log.trace("Saving variable '%s' as '%s' to the '%s' section" % (varname, value, section))
+        # self.log.trace("Saving variable '%s' as '%s' to the '%s' section" % (varname, value, section))
         try:
             value = ast.literal_eval(value)
         except ValueError as e:
             raise Exception("Unable to parse '%s' as a literal" % (value,))
 
-        if not section in self.variables:
-            self.variables[section] = {}
+        if not section in self.vars:
+            self.vars[section] = {}
 
-        self.variables[section][varname] = value
+        self.vars[section][varname] = value
         self.ready_to_save = True
         
         if force_save:
@@ -73,11 +73,11 @@ class KtcSaveVariables:
 
                 # Write file
                 varfile = configparser.ConfigParser()
-                for section, vars in sorted(self.variables.items()):
+                for section, vars in sorted(self.vars.items()):
                     varfile.add_section(section)
                     for name, val in sorted(vars.items()):
                         varfile.set(section, name, repr(val))
-                        self.log.trace("Saving to file variable '%s' as '%s' in section '%s'" % (name, val, section))
+                        # self.log.trace("Saving to file variable '%s' as '%s' in section '%s'" % (name, val, section))
 
                 f = open(self.filename, "w")
                 varfile.write(f)
@@ -90,7 +90,7 @@ class KtcSaveVariables:
     
     def get_status(self, eventtime= None):
         status = {
-            "variables": self.variables,
+            "vars": self.vars,
         }
         return status
 

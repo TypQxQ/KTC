@@ -60,7 +60,7 @@ class ktc_toolchanger:
         if not self.init_printer_to_last_tool:
             return None
         
-        self.ktc.active_tool = self.ktc_persistent.variables.get("tool_current", TOOL_UNLOCKED)
+        self.ktc.active_tool = self.ktc_persistent.vars.get("tool_current", TOOL_UNLOCKED)
 
         if self.ktc.active_tool == TOOL_UNLOCKED:
             self.unlock()

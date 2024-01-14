@@ -74,7 +74,7 @@ class ktc:
 
     def handle_ready(self):
         # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
-        self.tool_map = self.log.ktc_persistent.variables.get(VARS_KTC_TOOL_MAP, {})
+        self.tool_map = self.log.ktc_persistent.vars.get(VARS_KTC_TOOL_MAP, {})
         self.tool_map = {}
         
         try:
