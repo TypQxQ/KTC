@@ -5,38 +5,127 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
+import ast
+from . import ktc_log, ktc_toolchanger, ktc_save_variables
 
-# To try to keep terms apart:
-# Mount: Tool is selected and loaded for use, be it a physical or a virtual on physical.
-# Unmopunt: Tool is unselected and unloaded, be it a physical or a virtual on physical.
-# Pickup: Tool is physically picked up and attached to the toolchanger head.
-# Droppoff: Tool is physically parked and dropped of the toolchanger head.
-# ToolLock: Toollock is engaged.
-# ToolUnLock: Toollock is disengaged.
+KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
+KTC_SAVE_VARIABLES_DELAY = 10
 
-TOOL_UNKNOWN = -2
-TOOL_UNLOCKED = -1
-BOOT_DELAY = 1.5            # Delay before running bootup tasks
 VARS_KTC_TOOL_MAP = "ktc_state_tool_remap"
 
+XYZ_TO_INDEX = {'x': 0, 'X':0, 'y':1, 'Y': 1, 'z': 2, 'Z':2}
+INDEX_TO_XYZ = ['X','Y','Z']
+
 class ktc:
+    def __init__(self, config):
+        self.config = config
+        self.printer = config.get_printer()
+        self.reactor = self.printer.get_reactor()
+        self.gcode = self.printer.lookup_object('gcode')
+        gcode_macro = self.printer.load_object(config, 'gcode_macro')
+        self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')  # Load the log object.
 
-    def SaveCurrentTool(self, t):
-        self.tool_current = str(t)
-        save_variables = self.printer.lookup_object('save_variables')
-        save_variables.cmd_SAVE_VARIABLE(self.gcode.create_gcode_command(
-            "SAVE_VARIABLE", "SAVE_VARIABLE", {"VARIABLE": "tool_current", 'VALUE': t}))
+        self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
+        self.active_tool = ktc_toolchanger.TOOL_UNKNOWN
+        self.global_offset = [0,0,0]      # Global offset for all tools.
+        self.params = get_params_dict(config)
 
-    cmd_KTC_SAVE_CURRENT_TOOL_help = "Save the current tool to file to load at printer startup."
-    def cmd_KTC_SAVE_CURRENT_TOOL(self, gcmd):
+        self.tool_map = {}
+        self.last_endstop_query = {}
+        self.changes_made_by_set_all_tool_heaters_off={}
+        self.saved_position = None
+        self.restore_axis_on_toolchange = '' # string of axis to restore: XYZ
+
+
+        self.global_offset = config.get('global_offset', "0,0,0")
+        if isinstance(self.global_offset, str):
+            offset_list = self.global_offset.split(',')
+            if len(offset_list) == 3 and all(x.replace('.', '').isdigit() for x in offset_list):
+                self.global_offset = [float(x) for x in offset_list]
+            else:
+                raise ValueError("global_offset is not a string containing 3 float numbers separated by ,")
+        else:
+            raise TypeError("global_offset is not a string")
+
+        # Register commands
+        handlers = [
+            'KTC_OVERRIDE_CURRENT_TOOL',
+            'KTC_DROPOFF', 'KTC_SET_AND_SAVE_PARTFAN_SPEED', 'KTC_TEMPERATURE_WAIT_WITH_TOLERANCE', 
+            'KTC_SET_TOOL_TEMPERATURE', 'KTC_SET_GLOBAL_OFFSET', 'KTC_SET_TOOL_OFFSET',
+            'KTC_SAVE_POSITION', 'KTC_SAVE_CURRENT_POSITION', 'KTC_RESTORE_POSITION',   # Current possition can be saved without parameters to KTC_SAVE_POSITION.
+            'KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL',        # Maybe remove?
+            'KTC_DISPLAY_TOOL_MAP', 'KTC_REMAP_TOOL', 
+            'KTC_ENDSTOP_QUERY',                            # Move to own file.
+            'KTC_SET_ALL_TOOL_HEATERS_OFF', 'KTC_RESUME_ALL_TOOL_HEATERS']
+        # 'KTC_TOOL_LOCK', 'KTC_TOOL_UNLOCK',
+        for cmd in handlers:
+            func = getattr(self, 'cmd_' + cmd)
+            desc = getattr(self, 'cmd_' + cmd + '_help', None)
+            self.gcode.register_command(cmd, func, False, desc)
+
+        # Register events
+        self.printer.register_event_handler('klippy:connect', self.handle_connect)
+        self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        # self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
+
+    def handle_connect(self):
+        # Load the persistent variables object
+        self.ktc_persistent : ktc_save_variables.KtcSaveVariables = self.printer.load_object(self.config, 'ktc_save_variables')
+
+    def handle_ready(self):
+        # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
+        self.tool_map = self.log.ktc_persistent.variables.get(VARS_KTC_TOOL_MAP, {})
+        self.tool_map = {}
+        
+        try:
+            if len(self.tool_map) > 0:
+                self.log.always(self._tool_map_to_human_string())
+        except Exception as e:
+            self.log.always('Warning: Error booting up KTC: %s' % str(e))
+
+    def set_current_tool_state(self, t : int):
+        self.active_tool = t
+        self.log.trace("Saving current tool: " + str(t))
+        self.ktc_persistent.save_variable('current_tool', str(t), section="State", force_save=True)
+
+    cmd_KTC_DROPOFF_help = "Deselect all tools"
+    def cmd_KTC_DROPOFF(self, gcmd = None):
+        self.log.trace("KTC_TOOL_DROPOFF_ALL running. ")# + gcmd.get_raw_command_parameters())
+        if self.active_tool == "-2":
+            raise self.printer.command_error("cmd_KTC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool.")
+        if self.active_tool != "-1":
+            self.printer.lookup_object('ktc_tool ' + str(self.active_tool)).Dropoff( force_virtual_unload = True )
+        
+
+        try:
+            # Need to check all tools at least once but reload them after each time.
+            all_checked_once = False
+            while not all_checked_once:
+                all_tools = dict(self.printer.lookup_objects('ktc_tool'))
+                all_checked_once =True # If no breaks in next For loop then we can exit the While loop.
+                for tool_name, tool in all_tools.items():
+                    # If there is a virtual tool loaded:
+                    if tool.get_status()["virtual_loaded"] > ktc_toolchanger.TOOL_UNLOCKED:
+                        # Pickup and then unload and drop the tool.
+                        self.log.trace("cmd_KTC_TOOL_DROPOFF_ALL: Picking up and dropping forced: %s." % str(tool.get_status()["virtual_loaded"]))
+                        self.printer.lookup_object('ktc_tool ' + str(tool.get_status()["virtual_loaded"])).select_tool_actual()
+                        self.printer.lookup_object('ktc_tool ' + str(tool.get_status()["virtual_loaded"])).Dropoff( force_virtual_unload = True )
+                        all_checked_once =False # Do not exit while loop.
+                        break # Break for loop to start again.
+
+        except Exception as e:
+            raise Exception('cmd_KTC_TOOL_DROPOFF_ALL: Error: %s' % str(e))
+
+    cmd_KTC_OVERRIDE_CURRENT_TOOL_help = "Override the current tool as to be the specified tool."
+    def cmd_KTC_OVERRIDE_CURRENT_TOOL(self, gcmd):
         t = gcmd.get_int('T', None, minval=-2)
         if t is not None:
-            self.SaveCurrentTool(t)
+            self.set_current_tool_state(t)
 
     cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED_help = "Save the fan speed to be recovered at ToolChange."
     def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd):
         fanspeed = gcmd.get_float('S', 1, minval=0, maxval=255)
-        tool_id = gcmd.get_int('P', int(self.tool_current), minval=0)
+        tool_id = gcmd.get_int('P', int(self.active_tool), minval=0)
 
         # The minval above doesn't seem to work.
         if tool_id < 0:
@@ -92,9 +181,9 @@ class ktc:
             self.log.always("cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE: Can't use both P and H parameter at the same time.")
             return None
         elif tool_id is None and heater_id is None:
-            tool_id = self.tool_current
-            if int(self.tool_current) >= 0:
-                heater_name = self.printer.lookup_object('ktc_tool ' + self.tool_current).get_status()["extruder"]
+            tool_id = self.active_tool
+            if int(self.active_tool) >= 0:
+                heater_name = self.printer.lookup_object('ktc_tool ' + self.active_tool).get_status()["extruder"]
             #wait for bed
             self._Temperature_wait_with_tolerance(curtime, "heater_bed", tolerance)
 
@@ -135,14 +224,14 @@ class ktc:
         tool_id = gcmd.get_int('TOOL', None, minval=0)
 
         if tool_id is None:
-            tool_id = self.tool_current
-        if not int(tool_id) > TOOL_UNLOCKED:
+            tool_id = self.active_tool
+        if not int(tool_id) > ktc_toolchanger.TOOL_UNLOCKED:
             self.log.always("_get_tool_id_from_gcmd: Tool " + str(tool_id) + " is not valid.")
             return None
         else:
             # Check if the requested tool has been remaped to another one.
             tool_is_remaped = self.tool_is_remaped(int(tool_id))
-            if tool_is_remaped > TOOL_UNLOCKED:
+            if tool_is_remaped > ktc_toolchanger.TOOL_UNLOCKED:
                 tool_id = tool_is_remaped
         return tool_id
 
@@ -242,7 +331,6 @@ class ktc:
         except Exception as e:
             raise Exception('set_all_tool_heaters_off: Error: %s' % str(e))
 
-
     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
     def cmd_KTC_SET_TOOL_OFFSET(self, gcmd):
         tool_id = self._get_tool_id_from_gcmd(gcmd)
@@ -297,15 +385,6 @@ class ktc:
 
         self.log.trace("Global offset now set to: %f, %f, %f." % (float(self.global_offset[0]), float(self.global_offset[1]), float(self.global_offset[2])))
 
-    cmd_KTC_SET_PURGE_ON_TOOLCHANGE_help = "Set the global variable if the tool should be purged or primed with filament at toolchange."
-    def cmd_KTC_SET_PURGE_ON_TOOLCHANGE(self, gcmd = None):
-        param = gcmd.get('VALUE', 'FALSE')
-
-        if param.upper() == 'FALSE' or param == '0':
-            self.purge_on_toolchange = False
-        else:
-            self.purge_on_toolchange = True
-
     def SaveFanSpeed(self, fanspeed):
         self.saved_fan_speed = float(fanspeed)
        
@@ -329,7 +408,6 @@ class ktc:
         if param_Z is not None:
             restore_axis += 'Z'
         self.restore_axis_on_toolchange = restore_axis
-
 
     cmd_KTC_SAVE_CURRENT_POSITION_help = "Save the current G-Code position."
 #  Saves current position. 
@@ -383,18 +461,6 @@ class ktc:
         except:
             raise gcmd.error("Could not restore position.")
 
-    def get_status(self, eventtime= None):
-        status = {
-            "global_offset": self.global_offset,
-            "tool_current": self.tool_current,
-            "saved_fan_speed": self.saved_fan_speed,
-            "purge_on_toolchange": self.purge_on_toolchange,
-            "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
-            "saved_position": self.saved_position,
-            "last_endstop_query": self.last_endstop_query
-        }
-        return status
-
     cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL_help = "Set G-Code offset to the one of current tool."
 #  Sets the G-Code offset to the one of the current tool.
 #   With no parameters it will not move the toolhead.
@@ -402,11 +468,11 @@ class ktc:
 #    0: No move
 #    1: Move
     def cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL(self, gcmd):
-        current_tool_id = int(self.get_status()['tool_current']) 
+        current_tool_id = int(self.get_status()['active_tool']) 
 
         self.log.trace("Setting offsets to those of T" + str(current_tool_id) + ".")
 
-        if current_tool_id <= TOOL_UNLOCKED:
+        if current_tool_id <= ktc_toolchanger.TOOL_UNLOCKED:
             msg = "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL: Unknown tool mounted. Can't set offsets."
             self.log.always(msg)
             # raise self.printer.command_error(msg)
@@ -416,7 +482,6 @@ class ktc:
             current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
             self.log.trace("SET_GCODE_OFFSET X=%s Y=%s Z=%s MOVE=%s" % (str(current_tool.offset[0]), str(current_tool.offset[1]), str(current_tool.offset[2]), str(param_Move)))
             self.gcode.run_script_from_command("SET_GCODE_OFFSET X=%s Y=%s Z=%s MOVE=%s" % (str(current_tool.offset[0]), str(current_tool.offset[1]), str(current_tool.offset[2]), str(param_Move)))
-
 
 ###########################################
 # TOOL REMAPING                           #
@@ -524,6 +589,37 @@ class ktc:
 
         self.last_endstop_query[endstop_name] = is_triggered
 
+    def get_status(self, eventtime= None):
+        status = {
+            "global_offset": self.global_offset,
+            "active_tool": self.active_tool,
+            "saved_fan_speed": self.saved_fan_speed,
+            "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
+            "saved_position": self.saved_position,
+            "last_endstop_query": self.last_endstop_query,
+            ** self.params
+        }
+        return status
+
+    def _get_tool_from_gcmd(self, gcmd):
+        tool_name = gcmd.get('TOOL', None)
+        tool_nr = gcmd.get_int('T', None)
+        if tool_name:
+            tool = self.printer.lookup_object(tool_name)
+        elif tool_nr is not None:
+            tool = self.lookup_tool(tool_nr)
+            if not tool:
+                raise gcmd.error("SET_TOOL_TEMPERATURE: T%d not found" % (tool_nr))
+        else:
+            tool = self.active_tool
+            if not tool:
+                raise gcmd.error("SET_TOOL_TEMPERATURE: No tool specified and no active tool")
+        return tool
+
+###########################################
+# Static Class functions
+###########################################
+
 # parses legacy type into string of axis names.
 # Raises gcode error on fail
 def ktc_parse_restore_type(gcmd, arg_name, default = None):
@@ -542,6 +638,17 @@ def ktc_parse_restore_type(gcmd, arg_name, default = None):
             raise gcmd.error("Invalid RESTORE_POSITION_TYPE")
     return type
 
-XYZ_TO_INDEX = {'x': 0, 'X':0, 'y':1, 'Y': 1, 'z': 2, 'Z':2}
-INDEX_TO_XYZ = ['X','Y','Z']
+# Parses a string into a list of floats.
+def get_params_dict(config):
+    result = {}
+    for option in config.get_prefix_options('params_'):
+        try:
+            result[option] = ast.literal_eval(config.get(option))
+        except ValueError as e:
+            raise config.error(
+                "Option '%s' in section '%s' is not a valid literal" % (
+                    option, config.get_name()))
+    return result
 
+def load_config(config):
+    return ktc(config)
