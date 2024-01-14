@@ -31,9 +31,11 @@ Inspiration comes mainly from how RRF enables toolchanging and from the HappyHar
 I welcome any and all input and contributions. Don't be afraid to make a pull request :D
 
 Thank you!
+<p align="center">
 !!!!!!!!!!!!!!!!!!!!!!!!
 This is still under development and not functional.
 !!!!!!!!!!!!!!!!!!!!!!!!
+</p>
 
 ## Readme Table of Contents
 **[Major feature](#major-features)**<br>
