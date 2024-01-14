@@ -84,7 +84,7 @@ class ktc_toolchanger:
             self.tool_lock_gcode_template.run_gcode_from_command()
             self.ktc.set_current_tool_state(TOOL_UNKNOWN)
             self.log.trace("Tool Locked")
-            self.log.increase_statistics('total_toollocks')
+            self.log.increase_statistics('total_toollocks') #self.log.total_stats.toollocks
             
 
     # cmd_KTC_TOOL_DROPOFF_ALL_help = "Deselect all tools"
