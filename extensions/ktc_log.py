@@ -8,8 +8,9 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-import os, logging, threading, queue, time, ast, configparser
+import logging, threading, queue, time, ast
 import math, os.path, copy
+from . import ktc_save_variables
 
 KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
 KTC_SAVE_VARIABLES_DELAY = 10
@@ -63,6 +64,7 @@ class Ktc_Log:
 
     def __init__(self, config):
         self.config = config
+
         self.gcode = config.get_printer().lookup_object('gcode')
         self.printer = config.get_printer()
 
@@ -107,7 +109,7 @@ class Ktc_Log:
             self.ktc_logger.addHandler(queue_handler)
 
         # Load the persistent variables object
-        self.ktc_persistent = KtcSaveVariables(self, self.printer.get_reactor())
+        self.ktc_persistent : ktc_save_variables.KtcSaveVariables = self.printer.load_object(self.config, 'ktc_save_variables')
 
         # Load saved values
         self._load_persisted_state()
@@ -122,7 +124,7 @@ class Ktc_Log:
         self.always('KlipperToolChangerCode Ready')
 
     def _load_persisted_state(self):
-        swap_stats = self.ktc_persistent.variables.get("swap_statistics", {})
+        swap_stats = self.ktc_persistent.variables.get("Statistics.swap_statistics", {})
         try:
             if swap_stats is None or swap_stats == {}:
                 raise Exception("Couldn't find any saved statistics.")
@@ -141,7 +143,8 @@ class Ktc_Log:
             try:
                 toolname=str(tool[0])
                 toolname=toolname[toolname.rindex(' ')+1:]
-                self.tool_statistics[toolname] = self.ktc_persistent.variables.get("%s%s" % (self.KTC_TOOL_STATISTICS_PREFIX, toolname), self.EMPTY_TOOL_STATS.copy())
+                self.trace("Loading tool statistics for tool: %s" % toolname)
+                self.tool_statistics[toolname] = self.ktc_persistent.variables.get("Statistics.tool_%s" % toolname, self.EMPTY_TOOL_STATS.copy())
                 self.tool_statistics[toolname]["tracked_start_time_selected"] = 0
                 self.tool_statistics[toolname]["tracked_start_time_active"] = 0
                 self.tool_statistics[toolname]["tracked_start_time_standby"] = 0
@@ -150,6 +153,14 @@ class Ktc_Log:
 
             except Exception as err:
                 self.debug("Unexpected error in toolstast: %s" % err)
+                
+        try:
+            q="49"
+            self.trace("Testing tool statistics.")
+            self._set_tool_statistics(q, 'tracked_start_time_selected', 0)
+            self.trace("Tool statistics test successful: %s" % str(self.tool_statistics[q]['tracked_start_time_selected']))
+        except Exception as err:
+            self.debug("Expected error in toolstast: %s" % err)
 
     def _reset_print_statistics(self):
         # Init persihabele statistics
@@ -164,8 +175,8 @@ class Ktc_Log:
 ####################################
 # LOGGING FUNCTIONS                #
 ####################################
-    def get_status(self, eventtime):
-        return {'encoder_pos': "?"}
+    # def get_status(self, eventtime):
+    #     return {'encoder_pos': "?"}
 
     def always(self, message):
         if self.ktc_logger:
@@ -246,7 +257,7 @@ class Ktc_Log:
 
 
     def track_mount_start(self, tool_id):
-        self.trace("track_mount_start: Running for Tool: %s." % (tool_id))
+        # self.trace("track_mount_start: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics(tool_id, 'tracked_mount_start_time', time.time())
         
 
@@ -261,12 +272,12 @@ class Ktc_Log:
             self._set_tool_statistics(tool_id, 'tracked_mount_start_time', 0)
             self._persist_statistics()
     def track_unmount_start(self, tool_id):
-        self.trace("track_unmount_start: Running for Tool: %s." % (tool_id))
+        # self.trace("track_unmount_start: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics(tool_id, 'tracked_unmount_start_time', time.time())
         self.increase_tool_statistics(tool_id, 'toolunmounts_started')
 
     def track_unmount_end(self, tool_id):
-        self.trace("track_unmount_end: Running for Tool: %s." % (tool_id))
+        # self.trace("track_unmount_end: Running for Tool: %s." % (tool_id))
         start_time = self.tool_statistics[str(tool_id)]['tracked_unmount_start_time']
         if start_time is not None and start_time != 0:
             # self.trace("track_unmount_end: start_time is not None for Tool: %s." % (tool_id))
@@ -281,7 +292,7 @@ class Ktc_Log:
 
     def increase_statistics(self, key, count=1):
         try:
-            self.trace("increase_statistics: Running. Provided to record tool stats while key: %s and count: %s" % (str(key), str(count)))
+            # self.trace("increase_statistics: Running. Provided to record tool stats while key: %s and count: %s" % (str(key), str(count)))
             if key == 'total_toolmounts':
                 self.total_toolmounts += int(count)
             elif key == 'total_toolunmounts':
@@ -296,31 +307,31 @@ class Ktc_Log:
             self.debug("increase_statistics: Error while increasing stats while key: %s and count: %s" % (str(key), str(count)))
 
     def track_selected_tool_start(self, tool_id):
-        self.trace("track_selected_tool_start: Running for Tool: %s." % (tool_id))
+        # self.trace("track_selected_tool_start: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics(tool_id, 'tracked_start_time_selected', time.time())
         self.increase_statistics('total_toolmounts')
         self.increase_tool_statistics(tool_id, 'toolmounts_completed')
 
     def track_selected_tool_end(self, tool_id):
-        self.trace("track_selected_tool_end: Running for Tool: %s." % (tool_id))
+        # self.trace("track_selected_tool_end: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics_time_diff(tool_id, 'time_selected', 'tracked_start_time_selected')
         self._persist_statistics()
 
     def track_active_heater_start(self, tool_id):
-        self.trace("track_active_heater_start: Running for Tool: %s." % (tool_id))
+        # self.trace("track_active_heater_start: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics(tool_id, 'tracked_start_time_active', time.time())
 
     def track_active_heater_end(self, tool_id):
-        self.trace("track_active_heater_end: Running for Tool: %s." % (tool_id))
+        # self.trace("track_active_heater_end: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics_time_diff(tool_id, 'time_heater_active', 'tracked_start_time_active')
         self._persist_statistics()
 
     def track_standby_heater_start(self, tool_id):
-        self.trace("track_standby_heater_start: Running for Tool: %s." % (tool_id))
+        # self.trace("track_standby_heater_start: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics(tool_id, 'tracked_start_time_standby', time.time())
 
     def track_standby_heater_end(self, tool_id):
-        self.trace("track_standby_heater_end: Running for Tool: %s." % (tool_id))
+        # self.trace("track_standby_heater_end: Running for Tool: %s." % (tool_id))
         self._set_tool_statistics_time_diff(tool_id, 'time_heater_standby', 'tracked_start_time_standby')
         self._persist_statistics()
 
@@ -376,13 +387,13 @@ class Ktc_Log:
             for tid in res:
                 tool_id= str(tid)
                 msg += "Tool#%s:\n" % (tool_id)
-                msg += "Completed %d out of %d mounts in %s. Average of %s per toolmount.\n" % (self.tool_statistics[tool_id]['toolmounts_completed'], self.tool_statistics[tool_id]['toolmounts_started'], self._seconds_to_human_string(self.tool_statistics[tool_id]['total_time_spent_mounting']), self._seconds_to_human_string(self._division(self.tool_statistics[tool_id]['total_time_spent_mounting'], self.tool_statistics[tool_id]['toolmounts_completed'])))
-                msg += "Completed %d out of %d unmounts in %s. Average of %s per toolunmount.\n" % (self.tool_statistics[tool_id]['toolunmounts_completed'], self.tool_statistics[tool_id]['toolunmounts_started'], self._seconds_to_human_string(self.tool_statistics[tool_id]['total_time_spent_unmounting']), self._seconds_to_human_string(self._division(self.tool_statistics[tool_id]['total_time_spent_unmounting'], self.tool_statistics[tool_id]['toolunmounts_completed'])))
-                msg += "%s spent selected." % self._seconds_to_human_string(self.tool_statistics[tool_id]['time_selected'])
+                msg += "Completed %d out of %d mounts in %s. Average of %s per toolmount.\n" % (self.tool_statistics[str(tool_id)]['toolmounts_completed'], self.tool_statistics[str(tool_id)]['toolmounts_started'], self._seconds_to_human_string(self.tool_statistics[str(tool_id)]['total_time_spent_mounting']), self._seconds_to_human_string(self._division(self.tool_statistics[str(tool_id)]['total_time_spent_mounting'], self.tool_statistics[str(tool_id)]['toolmounts_completed'])))
+                msg += "Completed %d out of %d unmounts in %s. Average of %s per toolunmount.\n" % (self.tool_statistics[str(tool_id)]['toolunmounts_completed'], self.tool_statistics[str(tool_id)]['toolunmounts_started'], self._seconds_to_human_string(self.tool_statistics[str(tool_id)]['total_time_spent_unmounting']), self._seconds_to_human_string(self._division(self.tool_statistics[str(tool_id)]['total_time_spent_unmounting'], self.tool_statistics[str(tool_id)]['toolunmounts_completed'])))
+                msg += "%s spent selected." % self._seconds_to_human_string(self.tool_statistics[str(tool_id)]['time_selected'])
                 tool = self.printer.lookup_object('ktc_tool ' + str(tool_id))
                 if tool.is_virtual != True or tool.name==tool.parentTool_id:
                     if tool.extruder is not None:
-                        msg += " %s with active heater and %s with standby heater." % (self._seconds_to_human_string(self.tool_statistics[tool_id]['time_heater_active']), self._seconds_to_human_string(self.tool_statistics[tool_id]['time_heater_standby']))
+                        msg += " %s with active heater and %s with standby heater." % (self._seconds_to_human_string(self.tool_statistics[str(tool_id)]['time_heater_active']), self._seconds_to_human_string(self.tool_statistics[str(tool_id)]['time_heater_standby']))
                 msg += "\n------------\n"
                 
 
@@ -400,8 +411,8 @@ class Ktc_Log:
             res = {int(k):v for k,v in self.tool_statistics.items()}
             for tid in res:
                 tool_id= str(tid)
-                ts = self.tool_statistics[tool_id]
-                pts = self.print_tool_statistics[tool_id]
+                ts = self.tool_statistics[str(tool_id)]
+                pts = self.print_tool_statistics[str(tool_id)]
                 msg += "Tool#%s:\n" % (tool_id)
                 msg += "Completed %d out of %d mounts in %s. Average of %s per toolmount.\n" % ((ts['toolmounts_completed']-pts['toolmounts_completed']), (ts['toolmounts_started']-pts['toolmounts_started']), self._seconds_to_human_string(ts['total_time_spent_mounting']-pts['total_time_spent_mounting']), self._seconds_to_human_string(self._division((ts['total_time_spent_mounting']-pts['total_time_spent_mounting']), (ts['toolmounts_completed']-ts['toolmounts_completed']))))
                 msg += "Completed %d out of %d unmounts in %s. Average of %s per toolunmount.\n" % (ts['toolunmounts_completed']-pts['toolunmounts_completed'], ts['toolunmounts_started']-pts['toolunmounts_started'], self._seconds_to_human_string(ts['total_time_spent_unmounting']-pts['total_time_spent_unmounting']), self._seconds_to_human_string(self._division(ts['total_time_spent_unmounting']-pts['total_time_spent_unmounting'], ts['toolunmounts_completed']-pts['toolunmounts_completed'])))
@@ -422,18 +433,17 @@ class Ktc_Log:
             'total_toolunmounts': self.total_toolunmounts
             }
         try:
-            self.trace("Persisting swap statistics: %s" % str(swap_stats))
-            self.ktc_persistent.save_variable("swap_statistics", str(swap_stats))
+            self.ktc_persistent.save_variable("swap", str(swap_stats), section="Statistics")
 
             for tool in self.tool_statistics:
-                self.ktc_persistent.save_variable("%s%s" % (self.KTC_TOOL_STATISTICS_PREFIX, tool), str(self.tool_statistics[tool]))
+                self.ktc_persistent.save_variable("tool_%s" % tool, str(self.tool_statistics[tool]), section="Statistics")
         except Exception as err:
             self.debug("Unexpected error whiles saving variables in _persist_statistics: %s" % err)
 
                 
     def increase_tool_statistics(self, tool_id, key, count=1):
         try:
-            self.trace("increase_tool_statistics: Running for Tool: %s. Provided to record tool stats while key: %s and count: %s" % (tool_id, str(key), str(count)))
+            # self.trace("increase_tool_statistics: Running for Tool: %s. Provided to record tool stats while key: %s and count: %s" % (tool_id, str(key), str(count)))
             # if self.tool_statistics.get(str(tool_id)) is not None:
             if str(tool_id) in self.tool_statistics:
                 if self.tool_statistics[str(tool_id)][key] is None:
@@ -453,7 +463,7 @@ class Ktc_Log:
         # self.trace("increase_tool_statistics: Tool: %s provided to record tool stats while key: %s and count: %s" % (tool_id, str(key), str(count)))
 
     def _set_tool_statistics(self, tool_id, key, value):
-        self.trace("_set_tool_statistics:Running for Tool: %s provided to record tool stats while key: %s and value: %s" % (tool_id, str(key), str(value)))
+        # self.trace("_set_tool_statistics:Running for Tool: %s provided to record tool stats while key: %s and value: %s" % (tool_id, str(key), str(value)))
         try:
             if str(tool_id) in self.tool_statistics:
                 self.tool_statistics[str(tool_id)][key] = value
@@ -609,81 +619,6 @@ class Ktc_Log:
     #     msg += "\n\n%s" % self._swap_statistics_to_human_string()
     #     self._log_always(msg)
 
-# This is copied from the save_variables.py to be able to save variables from the KTC inddependent of other plugins.
-# Using the default save_variables.py will cause conflicts when other plugins such as HappyHare tries to load it again.
-# Will use a different filename to avoid this.
-class KtcSaveVariables:
-    def __init__(self, ktc_logger : Ktc_Log, reactor):
-        self.filename = os.path.expanduser(KTC_SAVE_VARIABLES_FILENAME)
-        self.variables = {}
-        self.ktc_logger = ktc_logger
-        self.reactor = reactor
-        self.ready_to_save = False
-
-        # Set up timer to only save values when needed 
-        # and no more than once every 10 seconds to allow for
-        # multiple changes and avoid excessive writes
-        self.timer_save = self.reactor.register_timer(
-            self._save_changes_timer_event, self.reactor.monotonic() 
-            + (KTC_SAVE_VARIABLES_DELAY))
-
-        try:
-            if not os.path.exists(self.filename):
-                open(self.filename, "w").close()
-            self.load_variables()
-        except Exception as e:
-            raise e.with_traceback(e.__traceback__)
-
-    # Remove the timer when Klipper shuts down
-    def disconnect(self):
-        self.reactor.update_timer(self.timer_save, self.reactor.NEVER)
-        if self.queue_listener != None:
-            self.queue_listener.stop()
-
-    def load_variables(self):
-        allvars = {}
-        varfile = configparser.ConfigParser()
-        try:
-            varfile.read(self.filename)
-            if varfile.has_section('KTC Variables'):
-                for name, val in varfile.items('KTC Variables'):
-                    allvars[name] = ast.literal_eval(val)
-        except:
-            msg = "Unable to parse existing KTC variable file: %s" % (self.filename,)
-            raise msg
-        self.variables = allvars
-
-    def save_variable(self, varname, value):
-        self.ktc_logger.trace("Saving variable '%s' as '%s'" % (varname, value))
-        try:
-            value = ast.literal_eval(value)
-        except ValueError as e:
-            raise Exception("Unable to parse '%s' as a literal" % (value,))
-        self.variables[varname] = value
-        self.ready_to_save = True
-        
-
-    def _save_changes_timer_event(self, eventtime):
-        try:
-            if self.ready_to_save:
-                self.ready_to_save = False
-                self.ktc_logger.trace("Saving state in logs.")
-
-                # Write file
-                varfile = configparser.ConfigParser()
-                varfile.add_section('KTC Variables')
-                for name, val in sorted(self.variables.items()):
-                    varfile.set('KTC Variables', name, repr(val))
-                    self.ktc_logger.trace("Saving to file variable '%s' as '%s'" % (name, val))
-
-                f = open(self.filename, "w")
-                varfile.write(f)
-                f.close()
-        except Exception as e:
-            self.ktc_logger.debug("_save_changes_timer_event:Exception: %s" % (str(e)))
-            raise e.with_traceback(e.__traceback__)
-        nextwake = eventtime + KTC_SAVE_VARIABLES_DELAY
-        return nextwake
 
         
 
