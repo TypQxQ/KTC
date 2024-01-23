@@ -14,8 +14,9 @@ class ktc_tool:
     HEATER_STATE_ACTIVE = 2
 
     def __init__(self, config = None):
-        self.name = None
-        self.tool_number = ktc_toolchanger.TOOL_UNLOCKED   # Tool number to register this tool as. -1 to not register.
+        self.name: str = None
+        self.number: int = None   # Tool number to register this tool as. None to not register.
+        self.toolchanger: ktc_toolchanger.ktc_toolchanger = None
         self.is_virtual = False
         self.parentTool_id = ktc_toolchanger.TOOL_UNLOCKED      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
         self.parentTool = None              # Initialize physical parent as a dummy object.
@@ -78,18 +79,21 @@ class ktc_tool:
 
         ##### Name #####
         try:
-            _, name = config.get_name().split(" ", 1)
-            self.name = int(name)
+            self.name = config.get_name().split(" ", 1)[1]
         except ValueError:
             raise config.error(
                     "Name of section '%s' contains illegal characters. Use only integer tool number."
                     % (config.get_name()))
 
+        ##### Tool Number #####
+        self.number = config.getint('tool_number', None)
+        
         ##### Physical Parent #####
         self.parentTool_id = config.getint('parent_tool', ktc_toolchanger.TOOL_UNLOCKED)
 
+        # TODO: Change this to use the ktc_toolchanger instead of parentTool.
         self.parentTool = ktc_tool()     # Initialize physical parent as a dummy object.
-        if self.parentTool_id >= 0 and not self.parentTool_id == self.name:
+        if self.parentTool_id >= 0 and not self.parentTool_id == int(self.name):
             self.parentTool = self.printer.lookup_object("ktc_tool " + str(self.parentTool_id))
 
         ##### Is Virtual #####     # Might be deprecated in future.
@@ -153,8 +157,9 @@ class ktc_tool:
             # if self.idle_to_powerdown_time is None:
             #     self.idle_to_powerdown_time = self.toolgroup.idle_to_powerdown_time
 
+            # TODO: Change this to use the ktc_toolchanger instead of parentTool.
             # If this tool has a diffrent parent than itself and it's extruder is diffrent
-            if self.parentTool_id > ktc_toolchanger.TOOL_UNLOCKED and self.parentTool_id != self.name and self.extruder != self.parentTool.extruder:
+            if self.parentTool_id > ktc_toolchanger.TOOL_UNLOCKED and self.parentTool_id != int(self.name) and self.extruder != self.parentTool.extruder:
                 # Use parent's timer for the child tool.
                 self.timer_idle_to_standby = self.parentTool.get_timer_to_standby()
                 self.timer_idle_to_powerdown = self.parentTool.get_timer_to_powerdown()
@@ -189,7 +194,8 @@ class ktc_tool:
             #     self.unload_virtual_at_dropoff = self.toolgroup.unload_virtual_at_dropoff
 
         ##### Register Tool select command #####
-        self.gcode.register_command("KTC_T" + str(self.name), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
+        if self.number is not None:
+            self.gcode.register_command("KTC_T" + str(self.number), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
@@ -227,16 +233,17 @@ class ktc_tool:
         
     cmd_SelectTool_help = "Select Tool"
     def cmd_SelectTool(self, gcmd):
-        self.log.trace("KTC T" + str(self.name) + " Selected.")
+        self.log.trace("KTC T" + str(self.number) + " Selected.")
         # Allow either one.
         restore_mode = ktc.ktc_parse_restore_type(gcmd, 'R', None)
         restore_mode = ktc.ktc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE', restore_mode)
 
+        # TODO: Change this to use the name mapping instead of number.
         # Check if the requested tool has been remaped to another one.
-        tool_is_remaped = self.ktc.tool_is_remaped(int(self.name))
+        tool_is_remaped = self.ktc.tool_is_remaped(self.number)
 
         if tool_is_remaped > -1:
-            self.log.always("ktc_Tool %d is remaped to Tool %d" % (self.name, tool_is_remaped))
+            self.log.always("ktc_Tool %d is remaped to Tool %d" % (self.number, tool_is_remaped))
             remaped_tool = self.printer.lookup_object('ktc_tool ' + str(tool_is_remaped))
             remaped_tool.select_tool_actual(restore_mode)
             return
@@ -250,15 +257,15 @@ class ktc_tool:
         self.log.trace("Current Tool is T" + str(current_tool_id) + ".")
         # self.log.trace("This tool is_virtual is " + str(self.is_virtual) + ".")
 
-        if current_tool_id == self.name:              # If trying to select the already selected tool:
+        if current_tool_id == self.number:              # If trying to select the already selected tool:
             return                                      # Exit
 
-        if current_tool_id < ktc_toolchanger.TOOL_UNLOCKED:
+        if current_tool_id == ktc_toolchanger.TOOL_UNKNOWN:
             msg = "ktc_tool.select_tool_actual: Unknown tool already mounted Can't park it before selecting new tool."
             self.log.always(msg)
             raise self.printer.command_error(msg)
         
-        self.log.increase_tool_statistics(self.name, 'toolmounts_started')
+        self.log.tool_stats[self.name].toolmounts_started += 1
 
 
         if self.extruder is not None:               # If the new tool to be selected has an extruder prepare warmup before actual tool change so all unload commands will be done while heating up.
@@ -294,29 +301,30 @@ class ktc_tool:
 
         # Check if this is a virtual tool.
         if not self.is_virtual:
-            self.log.trace("cmd_SelectTool: T%s - Not Virtual - Pickup" % str(self.name))
+            self.log.trace("cmd_SelectTool: T%s - Not Virtual - Pickup" % str(self.number))
             self.Pickup()
         else:
             if current_tool_id > ktc_toolchanger.TOOL_UNLOCKED:                 # If still has a selected tool: (This tool is a virtual tool with same physical tool as the last)
                 current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
-                self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Physical Tool is not Dropped - ")
+                self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Physical Tool is not Dropped - ")
                 if self.parentTool_id > ktc_toolchanger.TOOL_UNLOCKED and self.parentTool_id == current_tool.get_status()["parentTool_id"]:
-                    self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Same physical tool - Pickup")
+                    self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Same physical tool - Pickup")
                     self.LoadVirtual()
                 else:
-                    msg = "cmd_SelectTool: T" + str(self.name) + "- Virtual - Not Same physical tool"
+                    msg = "cmd_SelectTool: T" + str(self.number) + "- Virtual - Not Same physical tool"
                     msg += "Shouldn't reach this because it is dropped in previous."
                     self.log.debug(msg)
                     raise Exception(msg)
             else: # New Physical tool with a virtual tool.
                 parentTool = self.printer.lookup_object('ktc_tool ' + str(self.parentTool_id))
                 parentTool_virtual_loaded = parentTool.get_status()["virtual_loaded"]
-                self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Picking upp physical tool")
+                self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Picking upp physical tool")
                 self.Pickup()
 
                 # If the new physical tool already has another virtual tool loaded:
                 if parentTool_virtual_loaded > ktc_toolchanger.TOOL_UNLOCKED:
-                    if parentTool_virtual_loaded != self.name:
+                    # TODO: Change this to use the name mapping instead of number.
+                    if parentTool_virtual_loaded != self.number:
                         self.log.info("cmd_SelectTool: T" + str(parentTool_virtual_loaded) + "- Virtual - Running UnloadVirtual")
 
                         uv : ktc_tool = self.printer.lookup_object('ktc_tool ' + str(parentTool_virtual_loaded))
@@ -331,7 +339,7 @@ class ktc_tool:
                         self.set_heater(heater_state = self.HEATER_STATE_ACTIVE)
 
 
-                self.log.trace("cmd_SelectTool: T" + str(self.name) + "- Virtual - Picked up physical tool and now Loading virtual tool.")
+                self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Picked up physical tool and now Loading virtual tool.")
                 self.LoadVirtual()
 
         self.ktc.set_current_tool_state(self.name)
@@ -343,7 +351,7 @@ class ktc_tool:
 
         # Check if homed
         if not self.toollock.printer_is_homed_for_toolchange():
-            raise self.printer.command_error("ktc_tool.Pickup: Printer not homed and Lazy homing option for tool %s is: %s" % (str(self.name), str(self.lazy_home_when_parking)))
+            raise self.printer.command_error("ktc_tool.Pickup: Printer not homed and Lazy homing option for tool %s is: %s" % (self.name, str(self.lazy_home_when_parking)))
             return None
 
         # If has an extruder then activate that extruder.
@@ -382,14 +390,14 @@ class ktc_tool:
         # Save current picked up tool and print on screen.
         self.ktc.set_current_tool_state(self.name)
         if self.is_virtual:
-            self.log.always("Physical Tool for T%d picked up." % (self.name))
+            self.log.always("Physical Tool for T%d picked up." % (self.number))
         else:
-            self.log.always("T%d picked up." % (self.name))
+            self.log.always("T%d picked up." % (self.number))
 
         self.log.track_mount_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def Dropoff(self, force_virtual_unload = False):
-        self.log.always("Dropoff: T%s - Running." % str(self.name))
+        self.log.always("Dropoff: T%s - Running." % str(self.number))
 
         self.log.track_selected_tool_end(self.name) # Log that the current tool is to be unmounted.
 
@@ -404,12 +412,12 @@ class ktc_tool:
                 "SET_FAN_SPEED FAN=" + self.fan + " SPEED=0" )
 
         # Check if this is a virtual tool.
-        self.log.trace("Dropoff: T" + str(self.name) + "- is_virtual: " + str(self.is_virtual))
+        self.log.trace("Dropoff: T" + str(self.number) + "- is_virtual: " + str(self.is_virtual))
         if self.is_virtual:
             # Only dropoff if it is required.
             if self.unload_virtual_at_dropoff or force_virtual_unload:
-                self.log.debug("T%s: unload_virtual_at_dropoff: %s, force_virtual_unload: %s" % (str(self.name), str(self.unload_virtual_at_dropoff), str(force_virtual_unload)))
-                self.log.info("Dropoff: T" + str(self.name) + "- Virtual - Running UnloadVirtual")
+                self.log.debug("T%s: unload_virtual_at_dropoff: %s, force_virtual_unload: %s" % (str(self.number), str(self.unload_virtual_at_dropoff), str(force_virtual_unload)))
+                self.log.info("Dropoff: T" + str(self.number) + "- Virtual - Running UnloadVirtual")
                 self.UnloadVirtual()
 
         self.log.track_unmount_start(self.name)                 # Log the time it takes for tool change.
@@ -427,7 +435,7 @@ class ktc_tool:
 
 
     def LoadVirtual(self):
-        self.log.info("Loading virtual tool: T%d." % self.name)
+        self.log.info("Loading virtual tool: T%d." % self.number)
         self.log.track_mount_start(self.name)                 # Log the time it takes for tool mount.
 
         # Run the gcode for Virtual Load.
@@ -439,21 +447,22 @@ class ktc_tool:
         except Exception as e:
             raise Exception("virtual_toolload_gcode: Script running error: %s" % (str(e)))
 
+        # TODO: Change this to use the ktc_toolchanger instead of parentTool.
         parentTool = self.printer.lookup_object('ktc_tool ' + str(self.parentTool_id))
-        parentTool.set_virtual_loaded(int(self.name))
+        parentTool.set_virtual_loaded(self.number)
 
         # Save current picked up tool and print on screen.
         self.ktc.set_current_tool_state(self.name)
-        self.log.trace("Virtual T%d Loaded" % (int(self.name)))
+        self.log.trace("Virtual T%d Loaded" % (self.number))
         self.log.track_mount_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def set_virtual_loaded(self, value = -1):
         self.virtual_loaded = value
-        self.log.trace("Saved VirtualToolLoaded for T%s as: %s" % (str(self.name), str(value)))
+        self.log.trace("Saved VirtualToolLoaded for T%s as: %s" % (str(self.number), str(value)))
 
 
     def UnloadVirtual(self):
-        self.log.info("Unloading virtual tool: T%d." % self.name)
+        self.log.info("Unloading virtual tool: T%d." % self.number)
         self.log.track_unmount_start(self.name)                 # Log the time it takes for tool unload.
 
         # Run the gcode for Virtual Unload.
@@ -470,7 +479,7 @@ class ktc_tool:
 
         # Save current picked up tool and print on screen.
         self.ktc.set_current_tool_state(self.name)
-        self.log.trace("Virtual T%d Unloaded" % (int(self.name)))
+        self.log.trace("Virtual T%d Unloaded" % (int(self.number)))
 
         self.log.track_unmount_end(self.name)                 # Log the time it takes for tool unload. 
 
@@ -489,7 +498,7 @@ class ktc_tool:
             elif i == "z_adjust":
                 self.offset[2] = float(self.offset[2]) + float(kwargs[i])
 
-        self.log.always("T%d offset now set to: %f, %f, %f." % (int(self.name), float(self.offset[0]), float(self.offset[1]), float(self.offset[2])))
+        self.log.always("T%d offset now set to: %f, %f, %f." % (int(self.number), float(self.offset[0]), float(self.offset[1]), float(self.offset[2])))
 
     def _set_state(self, heater_state):
         self.heater_state = heater_state
@@ -497,7 +506,7 @@ class ktc_tool:
 
     def set_heater(self, **kwargs):
         if self.extruder is None:
-            self.log.debug("set_heater: T%d has no extruder! Nothing to do." % self.name )
+            self.log.debug("set_heater: T%d has no extruder! Nothing to do." % self.number )
             return None
 
         # self.log.info("T%d heater is at begingin %s. %s*C" % (self.name, self.heater_state, self.heater_active_temp ))
@@ -509,6 +518,7 @@ class ktc_tool:
         # self is always pointing to virtual tool but its timers and extruder are always pointing to the physical tool. When changing multiple virtual tools heaters the statistics can remain open when changing by timers of the parent if another one got in between.
         # Therefore it's important for all heater statistics to only point to physical parent.
 
+        # TODO: Change this to use the ktc_toolchanger instead of parentTool.
         if self.is_virtual == True:
             tool_for_tracking_heater = self.parentTool_id
         else:
@@ -538,27 +548,27 @@ class ktc_tool:
             if self.timer_idle_to_powerdown.get_status()["counting_down"] == True:
                 self.timer_idle_to_powerdown.set_timer(self.idle_to_powerdown_time, self.name)
                 if self.idle_to_powerdown_time > 2:
-                    self.log.info("T%d heater will shut down in %s seconds." % (self.name, self.log._seconds_to_human_string(self.idle_to_powerdown_time) ))
+                    self.log.info("KTC Tool %s: heater will shut down in %s seconds." % (self.name, ktc_log.seconds_to_human_string(self.idle_to_powerdown_time) ))
             if self.timer_idle_to_standby.get_status()["counting_down"] == True:
                 self.timer_idle_to_standby.set_timer(self.idle_to_standby_time, self.name)
                 if self.idle_to_standby_time > 2:
-                    self.log.info("T%d heater will go in standby in %s seconds." % (self.name, self.log._seconds_to_human_string(self.idle_to_standby_time) ))
+                    self.log.info("KTC Tool %s heater will go in standby in %s seconds." % (self.name, ktc_log.seconds_to_human_string(self.idle_to_standby_time) ))
 
 
         # Change Active mode, Continuing with part two of temp changing.:
         if "heater_state" in kwargs:
             if self.heater_state == chng_state:                                                         # If we don't actually change the state don't do anything.
                 if chng_state == self.HEATER_STATE_ACTIVE:
-                    self.log.trace("set_heater: T%d heater state not changed. Setting active temp." % self.name )
+                    self.log.trace("set_heater: KTC Tool %s heater state not changed. Setting active temp." % self.name )
                     heater.set_temp(self.heater_active_temp)
                 elif chng_state == self.HEATER_STATE_STANDBY:
-                    self.log.trace("set_heater: T%d heater state not changed. Setting standby temp." % self.name )
+                    self.log.trace("set_heater: KTC Tool %s heater state not changed. Setting standby temp." % self.name )
                     heater.set_temp(self.heater_standby_temp)
                 else:
-                    self.log.trace("set_heater: T%d heater state not changed." % self.name )
+                    self.log.trace("set_heater: KTC Tool %s heater state not changed." % self.name )
                 return None
             if chng_state == self.HEATER_STATE_OFF:                                                                         # If Change to Shutdown
-                self.log.trace("set_heater: T%d heater state now OFF." % self.name )
+                self.log.trace("set_heater: KTC Tool %s heater state now OFF." % self.name )
                 self.timer_idle_to_standby.set_timer(0, self.name)
                 self.timer_idle_to_powerdown.set_timer(0.1, self.name)
                 # self.log.track_standby_heater_end(self.name)                                                # Set the standby as finishes in statistics.
@@ -576,16 +586,16 @@ class ktc_tool:
                     self.timer_idle_to_standby.set_timer(self.idle_to_standby_time, self.name)
                     self.timer_idle_to_powerdown.set_timer(self.idle_to_powerdown_time, self.name)
                     if self.idle_to_standby_time > 2:
-                        self.log.always("T%d heater will go in standby in %s seconds." % (self.name, self.log._seconds_to_human_string(self.idle_to_standby_time) ))
+                        self.log.always("KTC Tool %s heater will go in standby in %s seconds." % (self.name, ktc_log.seconds_to_human_string(self.idle_to_standby_time) ))
                 else:                                                                                   # Else (Standby temperature is lower than the current temperature)
-                    self.log.trace("set_heater: T%d standbytemp:%d;heater_state:%d; current_temp:%d." % (self.name, int(self.heater_state), int(self.heater_standby_temp), int(heater.get_status(curtime)["temperature"])))
+                    self.log.trace("set_heater: KTC Tool %s standbytemp:%d;heater_state:%d; current_temp:%d." % (self.name, int(self.heater_state), int(self.heater_standby_temp), int(heater.get_status(curtime)["temperature"])))
                     self.timer_idle_to_standby.set_timer(0.1, self.name)
                     self.timer_idle_to_powerdown.set_timer(self.idle_to_powerdown_time, self.name)
                 if self.idle_to_powerdown_time > 2:
-                    self.log.always("T%d heater will shut down in %s seconds." % (self.name, self.log._seconds_to_human_string(self.idle_to_powerdown_time)))
+                    self.log.always("KTC Tool %s heater will shut down in %s seconds." % (self.name, ktc_log.seconds_to_human_string(self.idle_to_powerdown_time)))
             self.heater_state = chng_state
 
-        # self.log.info("T%d heater is at end %s. %s*C" % (self.name, self.heater_state, self.heater_active_temp ))
+        # self.log.info("KTC Tool %s heater is at end %s. %s*C" % (self.name, self.heater_state, self.heater_active_temp ))
 
 
     def get_timer_to_standby(self):
@@ -597,6 +607,8 @@ class ktc_tool:
     def get_status(self, eventtime= None):
         status = {
             "name": self.name,
+            "number": self.number,
+            "toolchanger": self.toolchanger.name,
             "is_virtual": self.is_virtual,
             "parentTool_id": self.parentTool_id,
             "extruder": self.extruder,

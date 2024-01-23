@@ -83,10 +83,10 @@ class ktc:
         except Exception as e:
             self.log.always('Warning: Error booting up KTC: %s' % str(e))
 
-    def set_current_tool_state(self, t : int):
+    def set_current_tool_state(self, t : str):
         self.active_tool = t
-        self.log.trace("Saving current tool: " + str(t))
-        self.ktc_persistent.save_variable('current_tool', str(t), section="State", force_save=True)
+        self.log.trace("Saving current tool: " + t)
+        self.ktc_persistent.save_variable('current_tool', t, section="State", force_save=True)
 
     cmd_KTC_DROPOFF_help = "Deselect all tools"
     def cmd_KTC_DROPOFF(self, gcmd = None):

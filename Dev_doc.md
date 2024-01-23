@@ -12,6 +12,7 @@ ktc_tool.py is initialized for each tool.
 
 ToDo:
     ktc_save_variables sparar innnan den hämtar nya. Både statistik och active_tool.
+    KTC_SAVE_VARIABLES_FILENAME och KTC_SAVE_VARIABLES_DELAY borde laddas från config filen när de finns.
 
     initialize_tool_lock to use ktc_persistent
     Add option to save instantly (when for example current tool is changed.)
@@ -39,10 +40,17 @@ ToDo:
 
 
 # To try to keep terms apart:
+Each tool has a id (name) (ktc_tool name) and a nr.
+
+
+
 # Mount: Tool is selected and loaded for use, be it a physical or a virtual on physical.
-# Unmopunt: Tool is unselected and unloaded, be it a physical or a virtual on physical.
+    A parent tool is mounted but not selected when a child tool is selected.
+# Unmount: Tool is unselected and unloaded, be it a physical or a virtual on physical.
+
 # Pickup: Tool is physically picked up and attached to the toolchanger head.
 # Droppoff: Tool is physically parked and dropped of the toolchanger head.
-# ToolLock: Toollock is engaged.
-# ToolUnLock: Toollock is disengaged.
 
+Maybe delete?
+# ToolLock: Tool is locked in place.
+# ToolUnLock: Toollock is disengaged and tool is free.

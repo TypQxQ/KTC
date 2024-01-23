@@ -19,6 +19,7 @@ class ktc_toolchanger:
         self.gcode = self.printer.lookup_object('gcode')
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
 
+        self.name: str = config.get_name().split(" ", 1)[1]
         self.params = ktc.get_params_dict(config)
 
         self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
@@ -84,7 +85,7 @@ class ktc_toolchanger:
             self.tool_lock_gcode_template.run_gcode_from_command()
             self.ktc.set_current_tool_state(TOOL_UNKNOWN)
             self.log.trace("Tool Locked")
-            self.log.increase_statistics('total_toollocks') #self.log.total_stats.toollocks
+            self.log.total_stats.toollocks += 1
             
 
     # cmd_KTC_TOOL_DROPOFF_ALL_help = "Deselect all tools"
@@ -124,7 +125,7 @@ class ktc_toolchanger:
         self.tool_unlock_gcode_template.run_gcode_from_command()
         self.ktc.set_current_tool_state(TOOL_UNLOCKED)
         self.log.trace("ToolLock Unlocked.")
-        self.log.increase_statistics('total_toolunlocks')
+        self.log.total_stats.toolunlocks += 1
 
 
     def printer_is_homed_for_toolchange(self, lazy_home_when_parking =0):
@@ -512,6 +513,7 @@ class ktc_toolchanger:
     def get_status(self, eventtime= None):
         status = {
             # "global_offset": self.global_offset,
+            "name": self.name,
             "active_tool": self.active_tool,
             # "saved_fan_speed": self.saved_fan_speed,
             # "purge_on_toolchange": self.purge_on_toolchange,
@@ -650,5 +652,5 @@ class ktc_toolchanger:
 
 #         self.last_endstop_query[endstop_name] = is_triggered
 
-def load_config(config):
+def load_config_prefix(config):
     return ktc_toolchanger(config)

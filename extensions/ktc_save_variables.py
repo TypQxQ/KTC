@@ -1,26 +1,41 @@
-# This is copied from the save_variables.py to be able to save variables from the KTC inddependent of other plugins.
-# Using the default save_variables.py will cause conflicts when other plugins such as HappyHare tries to load it again.
-# Will use a different filename to avoid this.
+# KTC - Klipper Tool Changer code (v.2)
+# Persistent storage of variables for the KTC
+#
+# Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
+#
+# This file may be distributed under the terms of the GNU GPLv3 license.
+#
+
+# This is based on the Klipper save_variables.py to be able to 
+# save variables from KTC inddependent of other plugins.
+# Using the default save_variables.py will cause conflicts when 
+# other plugins such as HappyHare tries to reference the file again.
+# This will use a different filename to avoid this incompatibility
+# T
 import os.path, ast, configparser
 from . import ktc_log, ktc
+
 
 class KtcSaveVariables:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
-        self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')  # Load the log object.
-        
+        self.log: ktc_log.Ktc_Log = self.printer.load_object(
+            config, "ktc_log"
+        )  # Load the log object.
+
         self.filename = os.path.expanduser(ktc.KTC_SAVE_VARIABLES_FILENAME)
 
         self.vars = {}
         self.ready_to_save = False
 
-        # Set up timer to only save values when needed 
+        # Set up timer to only save values when needed
         # and no more than once every 10 seconds to allow for
         # multiple changes and avoid excessive writes
         self.timer_save = self.reactor.register_timer(
-            self._save_changes_timer_event, self.reactor.monotonic() 
-            + (ktc.KTC_SAVE_VARIABLES_DELAY))
+            self._save_changes_timer_event,
+            self.reactor.monotonic() + (ktc.KTC_SAVE_VARIABLES_DELAY),
+        )
 
         try:
             if not os.path.exists(self.filename):
@@ -48,22 +63,22 @@ class KtcSaveVariables:
             raise msg
         self.vars = allvars
 
-    def save_variable(self, varname, value, section='Variables', force_save=False):
-        # self.log.trace("Saving variable '%s' as '%s' to the '%s' section" % (varname, value, section))
+    def save_variable(self, varname, value, section="Variables", force_save=False):
         try:
             value = ast.literal_eval(value)
         except ValueError as e:
             raise Exception("Unable to parse '%s' as a literal" % (value,))
 
         if not section in self.vars:
+            self.log.trace("Creating section %s" % (section,))
             self.vars[section] = {}
 
         self.vars[section][varname] = value
+        self.log.trace("save_variable  %s" % (varname,))
         self.ready_to_save = True
-        
+
         if force_save:
             self._save_changes_timer_event(self.reactor.monotonic())
-        
 
     def _save_changes_timer_event(self, eventtime):
         try:
@@ -74,10 +89,11 @@ class KtcSaveVariables:
                 # Write file
                 varfile = configparser.ConfigParser()
                 for section, vars in sorted(self.vars.items()):
+                    self.log.trace("Saving section %s" % (section,))
                     varfile.add_section(section)
                     for name, val in sorted(vars.items()):
+                        self.log.trace("Saving variable %s" % (name,))
                         varfile.set(section, name, repr(val))
-                        # self.log.trace("Saving to file variable '%s' as '%s' in section '%s'" % (name, val, section))
 
                 f = open(self.filename, "w")
                 varfile.write(f)
@@ -87,12 +103,13 @@ class KtcSaveVariables:
             raise e.with_traceback(e.__traceback__)
         nextwake = eventtime + ktc.KTC_SAVE_VARIABLES_DELAY
         return nextwake
-    
-    def get_status(self, eventtime= None):
+
+    def get_status(self, eventtime=None):
         status = {
             "vars": self.vars,
         }
         return status
+
 
 def load_config(config):
     return KtcSaveVariables(config)
