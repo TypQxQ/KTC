@@ -131,7 +131,8 @@ class Ktc_Log:
     
         except Exception as e:
             self.debug("Unexpected error while loading persistent swap stats: %s" % e)
-
+        
+        self.trace("_load_persisted_state: Loading tool stats.")
         # Load tool statistics
         self.tool_stats = {}
         for tool in self.printer.lookup_objects('ktc_tool'):
@@ -159,6 +160,7 @@ class Ktc_Log:
                 self.debug("Unexpected error while loading persistent tool stats: %s" % str(e))
                 self.debug("Resetting tool stats for tool: %s" % toolname)
                 self.tool_stats[toolname] = Tool_Statistics()
+        self.trace("_load_persisted_state: Done loading tool stats.")
 
     # This could be optimized to only save for the changed tool and not iterate over all tools but it's not a big deal
     def _persist_statistics(self):

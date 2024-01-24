@@ -13,8 +13,7 @@
 # This will use a different filename to avoid this incompatibility
 # T
 import os.path, ast, configparser
-from . import ktc_log, ktc
-
+from . import ktc, ktc_log
 
 class KtcSaveVariables:
     def __init__(self, config):
@@ -63,11 +62,12 @@ class KtcSaveVariables:
             raise msg
         self.vars = allvars
 
-    def save_variable(self, varname, value, section="Variables", force_save=False):
+    def save_variable(self, varname: str, value: str, section: str ="Variables", force_save: bool=False) -> None:
         try:
+            self.log.trace("save_variable  %s %s, value type %s" % (varname, value, type(value)))
             value = ast.literal_eval(value)
         except ValueError as e:
-            raise Exception("Unable to parse '%s' as a literal" % (value,))
+            raise Exception("Unable to parse '%s' as a literal: %s" % (value, e))
 
         if not section in self.vars:
             self.log.trace("Creating section %s" % (section,))

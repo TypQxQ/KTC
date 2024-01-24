@@ -8,9 +8,13 @@
 
 from . import ktc, ktc_save_variables, ktc_log
 
-TOOL_UNKNOWN = -2
-TOOL_UNLOCKED = -1
+# TOOL_UNKNOWN_N = ktc.TOOL_UNKNOWN_N
+# TOOL_NONE_N = ktc.TOOL_NONE_N
 
+# TOOL_UNKNOWN = ktc.TOOL_UNKNOWN
+# TOOL_NONE = ktc.TOOL_NONE
+
+# TOOL_UNKNOWN_N = ktc.TOOL_UNKNOWN_N
 class ktc_toolchanger:
 
     def __init__(self, config):
@@ -23,7 +27,7 @@ class ktc_toolchanger:
         self.params = ktc.get_params_dict(config)
 
         self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
-        self.active_tool = TOOL_UNLOCKED          # -2 Unknown tool locked, -1 No tool locked, 0 and up are tools.
+        self.active_tool = ktc.TOOL_NONE_N          # -2 Unknown tool locked, -1 No tool locked, 0 and up are tools.
         self.init_printer_to_last_tool = config.getboolean(
             'init_printer_to_last_tool', True)
 
@@ -38,18 +42,9 @@ class ktc_toolchanger:
         self.tool_lock_gcode_template = gcode_macro.load_template(config, 'tool_lock_gcode', '')
         self.tool_unlock_gcode_template = gcode_macro.load_template(config, 'tool_unlock_gcode', '')
 
-        # Register commands
-        handlers = [
-            'KTC_TOOL_LOCK', 'KTC_TOOL_UNLOCK'  # Need to move to so can specify toolchanger. (ERCF is lock and unlock servo)
-            ]
-        for cmd in handlers:
-            func = getattr(self, 'cmd_' + cmd)
-            desc = getattr(self, 'cmd_' + cmd + '_help', None)
-            self.gcode.register_command(cmd, func, False, desc)
-
-        self.ktc : ktc.ktc = self.printer.load_object(config, 'ktc')
+        self.ktc : ktc.Ktc = self.printer.load_object(config, 'ktc')
         self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')  # Load the log object.
-        self.ktc_persistent : ktc_save_variables.Ktc_Save_Variables = self.printer.load_object(config, 'ktc_save_variables')  # Load the ktc_save_variables object.
+        self.ktc_persistent : ktc_save_variables.KtcSaveVariables = self.printer.load_object(config, 'ktc_save_variables')  # Load the ktc_save_variables object.
 
         # self.printer.register_event_handler('klippy:connect', self.handle_connect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
@@ -61,32 +56,46 @@ class ktc_toolchanger:
         if not self.init_printer_to_last_tool:
             return None
         
-        self.ktc.active_tool = self.ktc_persistent.vars.get("tool_current", TOOL_UNLOCKED)
+        self.active_tool = self.ktc_persistent.vars.get("tool_current", ktc.TOOL_NONE.name)
+        self.log.trace("KTC initialized with active tool: %s." % self.active_tool)
+        # self.ktc.active_tool = self.ktc_persistent.vars.get("tool_current", ktc.TOOL_NONE_N)
 
-        if self.ktc.active_tool == TOOL_UNLOCKED:
-            self.unlock()
-            self.log.always("KTC initialized with unlocked ToolLock")
+        # TODO: Change this to use name instead of number.
+        # if self.ktc.active_tool == ktc.TOOL_NONE_N:
+        #     self.unlock()
+        #     self.log.always("KTC initialized with unlocked ToolLock")
 
-        else:
-            self.ToolLock(True)
-            self.log.always("KTC initialized with T%s." % self.ktc.active_tool) 
+        # else:
+        #     self.ToolLock(True)
+        #     self.log.always("KTC initialized with T%s." % self.ktc.active_tool) 
 
-        self.ktc.set_current_tool_state(self.ktc.active_tool)
+        self.ktc.set_active_tool_state(self.ktc.active_tool)
 
-    cmd_KTC_TOOL_LOCK_help = "Lock the ToolLock."
-    def cmd_KTC_TOOL_LOCK(self, gcmd = None):
-        self.ToolLock()
+    # cmd_KTC_TOOL_LOCK_help = "Lock the ToolLock."
+    # def cmd_KTC_TOOL_LOCK(self, gcmd = None):
+    #     self.ToolLock()
 
     def ToolLock(self, ignore_locked = False):
         self.log.trace("KTC_TOOL_LOCK running. ")
-        if not ignore_locked and int(self.ktc.active_tool) != TOOL_UNLOCKED:
+        if not ignore_locked and int(self.ktc.active_tool) != ktc.TOOL_NONE_N:
             self.log.always("KTC_TOOL_LOCK is already locked with tool " + self.ktc.active_tool + ".")
         else:
             self.tool_lock_gcode_template.run_gcode_from_command()
-            self.ktc.set_current_tool_state(TOOL_UNKNOWN)
+            self.ktc.set_active_tool_state(ktc.TOOL_UNKNOWN.name)
             self.log.trace("Tool Locked")
             self.log.total_stats.toollocks += 1
             
+    # cmd_KTC_TOOL_UNLOCK_help = "Unlock the ToolLock."
+    # def cmd_KTC_TOOL_UNLOCK(self, gcmd = None):
+    #     self.unlock()
+
+    def unlock(self):
+        self.log.trace("KTC_TOOL_UNLOCK running.")
+        self.tool_unlock_gcode_template.run_gcode_from_command()
+        self.ktc.set_active_tool_state(ktc.TOOL_NONE.name)
+        self.log.trace("ToolLock Unlocked.")
+        self.log.total_stats.toolunlocks += 1
+
 
     # cmd_KTC_TOOL_DROPOFF_ALL_help = "Deselect all tools"
     # def cmd_KTC_TOOL_DROPOFF_ALL(self, gcmd = None):
@@ -105,7 +114,7 @@ class ktc_toolchanger:
     #             all_checked_once =True # If no breaks in next For loop then we can exit the While loop.
     #             for tool_name, tool in all_tools.items():
     #                 # If there is a virtual tool loaded:
-    #                 if tool.get_status()["virtual_loaded"] > TOOL_UNLOCKED:
+    #                 if tool.get_status()["virtual_loaded"] > TOOL_NONE:
     #                     # Pickup and then unload and drop the tool.
     #                     self.log.trace("cmd_KTC_TOOL_DROPOFF_ALL: Picking up and dropping forced: %s." % str(tool.get_status()["virtual_loaded"]))
     #                     self.printer.lookup_object('ktc_tool ' + str(tool.get_status()["virtual_loaded"])).select_tool_actual()
@@ -116,35 +125,7 @@ class ktc_toolchanger:
     #     except Exception as e:
     #         raise Exception('cmd_KTC_TOOL_DROPOFF_ALL: Error: %s' % str(e))
 
-    cmd_KTC_TOOL_UNLOCK_help = "Unlock the ToolLock."
-    def cmd_KTC_TOOL_UNLOCK(self, gcmd = None):
-        self.unlock()
 
-    def unlock(self):
-        self.log.trace("KTC_TOOL_UNLOCK running.")
-        self.tool_unlock_gcode_template.run_gcode_from_command()
-        self.ktc.set_current_tool_state(TOOL_UNLOCKED)
-        self.log.trace("ToolLock Unlocked.")
-        self.log.total_stats.toolunlocks += 1
-
-
-    def printer_is_homed_for_toolchange(self, lazy_home_when_parking =0):
-        curtime = self.printer.get_reactor().monotonic()
-        toolhead = self.printer.lookup_object('toolhead')
-        homed = toolhead.get_status(curtime)['homed_axes'].lower()
-        if all(axis in homed for axis in ['x','y','z']):
-            return True
-        elif lazy_home_when_parking == 0 and not all(axis in homed for axis in ['x','y','z']):
-            return False
-        elif lazy_home_when_parking == 1 and 'z' not in homed:
-            return False
-
-        axes_to_home = ""
-        for axis in ['x', 'y', 'z']:
-            if axis not in homed: 
-                axes_to_home += axis
-        self.gcode.run_script_from_command("G28 " + axes_to_home.upper())
-        return True
 
     # def save_current_tool(self, t):
     #     self.tool_current = str(t)
@@ -261,13 +242,13 @@ class ktc_toolchanger:
 
     #     if tool_id is None:
     #         tool_id = self.tool_current
-    #     if not int(tool_id) > TOOL_UNLOCKED:
+    #     if not int(tool_id) > TOOL_NONE:
     #         self.log.always("_get_tool_id_from_gcmd: Tool " + str(tool_id) + " is not valid.")
     #         return None
     #     else:
     #         # Check if the requested tool has been remaped to another one.
     #         tool_is_remaped = self.tool_is_remaped(int(tool_id))
-    #         if tool_is_remaped > TOOL_UNLOCKED:
+    #         if tool_is_remaped > TOOL_NONE:
     #             tool_id = tool_is_remaped
     #     return tool_id
 
@@ -534,7 +515,7 @@ class ktc_toolchanger:
 
 #         self.log.trace("Setting offsets to those of T" + str(current_tool_id) + ".")
 
-#         if current_tool_id <= TOOL_UNLOCKED:
+#         if current_tool_id <= TOOL_NONE:
 #             msg = "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL: Unknown tool mounted. Can't set offsets."
 #             self.log.always(msg)
 #             # raise self.printer.command_error(msg)
