@@ -15,7 +15,7 @@ from . import ktc, ktc_save_variables, ktc_log
 # TOOL_NONE = ktc.TOOL_NONE
 
 # TOOL_UNKNOWN_N = ktc.TOOL_UNKNOWN_N
-class ktc_toolchanger:
+class KtcToolchanger:
 
     def __init__(self, config):
         self.printer = config.get_printer()
@@ -25,9 +25,14 @@ class ktc_toolchanger:
 
         self.name: str = config.get_name().split(" ", 1)[1]
         self.params = ktc.get_params_dict(config)
-
+        
         self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
-        self.active_tool = ktc.TOOL_NONE_N          # -2 Unknown tool locked, -1 No tool locked, 0 and up are tools.
+
+        self.active_tool = ktc.TOOL_NONE          # -2 Unknown tool locked, -1 No tool locked, 0 and up are tools.
+        
+        self.tools: list = [] # List of all tools.
+
+
         self.init_printer_to_last_tool = config.getboolean(
             'init_printer_to_last_tool', True)
 
@@ -56,20 +61,27 @@ class ktc_toolchanger:
         if not self.init_printer_to_last_tool:
             return None
         
-        self.active_tool = self.ktc_persistent.vars.get("tool_current", ktc.TOOL_NONE.name)
+        active_tool_name = self.ktc_persistent.vars.get("tool_current", ktc.TOOL_NONE.name)
+        if active_tool_name == ktc.TOOL_NONE.name:
+            self.active_tool = ktc.TOOL_NONE
+        elif active_tool_name == ktc.TOOL_UNKNOWN.name:
+            self.active_tool = ktc.TOOL_UNKNOWN
+        else:
+            self.active_tool = self.printer.load_object(self.printer.config, 'ktc_tool ' + active_tool_name)
+            
+        self.ktc.set_active_tool_state(self.active_tool.name)
+
         self.log.trace("KTC initialized with active tool: %s." % self.active_tool)
-        # self.ktc.active_tool = self.ktc_persistent.vars.get("tool_current", ktc.TOOL_NONE_N)
 
         # TODO: Change this to use name instead of number.
-        # if self.ktc.active_tool == ktc.TOOL_NONE_N:
-        #     self.unlock()
-        #     self.log.always("KTC initialized with unlocked ToolLock")
+        if self.active_tool == ktc.TOOL_NONE:
+            self.unlock()
+            self.log.always("KTC initialized with unlocked ToolLock")
+        else:
+            self.ToolLock(True)
+            self.log.always("KTC initialized with KTC Tool %s." % self.ktc.active_tool.name)
 
-        # else:
-        #     self.ToolLock(True)
-        #     self.log.always("KTC initialized with T%s." % self.ktc.active_tool) 
-
-        self.ktc.set_active_tool_state(self.ktc.active_tool)
+        self.ktc.set_active_tool_state(self.ktc.active_tool.name)
 
     # cmd_KTC_TOOL_LOCK_help = "Lock the ToolLock."
     # def cmd_KTC_TOOL_LOCK(self, gcmd = None):
@@ -495,7 +507,8 @@ class ktc_toolchanger:
         status = {
             # "global_offset": self.global_offset,
             "name": self.name,
-            "active_tool": self.active_tool,
+            "active_tool": self.active_tool.name,
+            "active_tool_n": self.active_tool.number,
             # "saved_fan_speed": self.saved_fan_speed,
             # "purge_on_toolchange": self.purge_on_toolchange,
             # "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
@@ -634,4 +647,4 @@ class ktc_toolchanger:
 #         self.last_endstop_query[endstop_name] = is_triggered
 
 def load_config_prefix(config):
-    return ktc_toolchanger(config)
+    return KtcToolchanger(config)

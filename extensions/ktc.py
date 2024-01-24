@@ -22,6 +22,7 @@ INDEX_TO_XYZ = ['X','Y','Z']
 # Value of Unknown and None tools. Do not change.
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
+
 # Special tool objects for unknown and none tools.
 TOOL_UNKNOWN = ktc_tool.KtcTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
 TOOL_NONE = ktc_tool.KtcTool(name="KTC_None", number=TOOL_NONE_N)
@@ -38,6 +39,9 @@ class Ktc:
 
         self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
         self.__active_tool = TOOL_UNKNOWN # The currently active tool.
+
+        self.tools: list = []         # List of all tools.
+        self.toolchangers: list = []  # List of all toolchangers.
         
         self.global_offset = [0,0,0]      # Global offset for all tools.
         self.params = get_params_dict(config)
@@ -97,22 +101,31 @@ class Ktc:
             self.log.always('Warning: Error booting up KTC: %s' % str(e))
 
     # Logic to check if a tool is valid when set.
+    # Takes either a KtcTool object or the name of the tool.
+    # For backwards compatibility it also takes an int for the tool number.
     @property
     def active_tool(self) -> ktc_tool.KtcTool:
         return self.__active_tool
 
     @active_tool.setter
-    def number(self, value: str or ktc_tool.KtcTool):
-        if isinstance(value, str):
-            value = ktc_tool.KtcTool(name=value, number=value)
-        elif isinstance(value, ktc_tool.KtcTool):
+    def active_tool(self, value: str or ktc_tool.KtcTool):
+        if isinstance(value, ktc_tool.KtcTool):
             self.__active_tool = value
+        elif isinstance(value, str):
+            if value == TOOL_NONE.name:
+                self.__active_tool = TOOL_NONE
+            elif value == TOOL_UNKNOWN.name:
+                self.__active_tool = TOOL_UNKNOWN
+            else:
+                # TODO: Add check if tool exists.
+                self.printer.lookup_object('ktc_tool ' + value, TOOL_UNKNOWN)
         elif isinstance(value, int): # If value is an int for backwayds compatibility.
             if value == TOOL_NONE_N:
                 self.__active_tool = TOOL_NONE
             elif value == TOOL_UNKNOWN_N:
                 self.__active_tool = TOOL_UNKNOWN
             else:
+                # TODO: Add check aginst list of toolnumbers.
                 raise ValueError("active_tool must be a KtcTool or a string representing the tool name")
         else:
             raise TypeError("active_tool must be a KtcTool or a string representing the tool name")
@@ -142,10 +155,10 @@ class Ktc:
     cmd_KTC_DROPOFF_help = "Deselect all tools"
     def cmd_KTC_DROPOFF(self, gcmd = None):
         self.log.trace("KTC_TOOL_DROPOFF_ALL running. ")# + gcmd.get_raw_command_parameters())
-        if self.active_tool == "-2":
+        if self.active_tool == TOOL_UNKNOWN:
             raise self.printer.command_error("cmd_KTC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool.")
-        if self.active_tool != "-1":
-            self.printer.lookup_object('ktc_tool ' + str(self.active_tool)).Dropoff( force_virtual_unload = True )
+        if self.active_tool != TOOL_NONE:
+            self.active_tool.Dropoff( force_virtual_unload = True )
         
 
         try:
@@ -176,7 +189,7 @@ class Ktc:
     cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED_help = "Save the fan speed to be recovered at ToolChange."
     def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd):
         fanspeed = gcmd.get_float('S', 1, minval=0, maxval=255)
-        tool_id = gcmd.get_int('P', int(self.active_tool), minval=0)
+        tool_id = gcmd.get_int('P', int(self.active_tool_n), minval=0)
 
         # The minval above doesn't seem to work.
         if tool_id < 0:
@@ -232,9 +245,9 @@ class Ktc:
             self.log.always("cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE: Can't use both P and H parameter at the same time.")
             return None
         elif tool_id is None and heater_id is None:
-            tool_id = self.active_tool
-            if int(self.active_tool) >= 0:
-                heater_name = self.printer.lookup_object('ktc_tool ' + self.active_tool).get_status()["extruder"]
+            tool_id = self.active_tool_n
+            if int(self.active_tool_n) > TOOL_NONE_N:
+                heater_name = self.active_tool.extruder
             #wait for bed
             self._Temperature_wait_with_tolerance(curtime, "heater_bed", tolerance)
 
@@ -271,13 +284,13 @@ class Ktc:
                 " MAXIMUM=" + str(target_temp + tolerance) )
             self.log.always("Wait for heater " + heater_name + " complete.")
 
-    def _get_tool_id_from_gcmd(self, gcmd):
+    def get_tool_id_from_gcmd(self, gcmd):
         tool_id = gcmd.get_int('TOOL', None, minval=0)
 
         if tool_id is None:
-            tool_id = self.active_tool
+            tool_id = self.active_tool_n
         if not int(tool_id) > TOOL_NONE_N:
-            self.log.always("_get_tool_id_from_gcmd: Tool " + str(tool_id) + " is not valid.")
+            self.log.always("get_tool_id_from_gcmd: Tool " + str(tool_id) + " is not valid.")
             return None
         else:
             # Check if the requested tool has been remaped to another one.
@@ -298,7 +311,7 @@ class Ktc:
 #  SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting off the heater, optional.
 #      Use for example 86400 to wait 24h if you want to disable shutdown timer.
     def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd):
-        tool_id = self._get_tool_id_from_gcmd(gcmd)
+        tool_id = self.get_tool_id_from_gcmd(gcmd)
         if tool_id is None: return
 
         stdb_tmp = gcmd.get_float('STDB_TMP', None, minval=0)
@@ -384,7 +397,7 @@ class Ktc:
 
     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
     def cmd_KTC_SET_TOOL_OFFSET(self, gcmd):
-        tool_id = self._get_tool_id_from_gcmd(gcmd)
+        tool_id = self.get_tool_id_from_gcmd(gcmd)
         if tool_id is None: return
 
         x_pos = gcmd.get_float('X', None)
@@ -519,7 +532,7 @@ class Ktc:
 #    0: No move
 #    1: Move
     def cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL(self, gcmd):
-        current_tool_id = self.active_tool 
+        current_tool_id = self.active_tool_n
 
         self.log.trace("Setting offsets to those of T" + str(current_tool_id) + ".")
 
@@ -677,6 +690,7 @@ class Ktc:
         if tool_name:
             tool = self.printer.lookup_object(tool_name)
         elif tool_nr is not None:
+            # TODO: Implement this 
             tool = self.lookup_tool(tool_nr)
             if not tool:
                 raise gcmd.error("SET_TOOL_TEMPERATURE: T%d not found" % (tool_nr))

@@ -13,10 +13,10 @@ class KtcTool:
     HEATER_STATE_ACTIVE = 2
 
 
-    def __init__(self, config = None, name = None, number = ktc.TOOL_NONE_N):
+    def __init__(self, config = None, name = None, number = -2):
         self.name: str = name
         self.number: int = number           # Tool number to register this tool as. Default as ktc.TOOL_NONE_N (-2)
-        self.toolchanger: ktc_toolchanger.ktc_toolchanger = None
+        self.toolchanger: ktc_toolchanger.KtcToolchanger = None
         self.is_virtual = False
         self.parentTool_id = ktc.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
         self.parentTool = None              # Initialize physical parent as a dummy object.
@@ -94,7 +94,7 @@ class KtcTool:
                     "Toolchanger for section '%s' is not well formated."
                     % (config.get_name()))
             
-        self.toolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
+        self.toolchanger: ktc_toolchanger.KtcToolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
 
         ##### Physical Parent #####
         self.parentTool_id = config.getint('parent_tool', ktc.TOOL_NONE_N)
@@ -209,6 +209,10 @@ class KtcTool:
         ##### Register Tool select command #####
         if self.number is not None:
             self.gcode.register_command("KTC_T" + str(self.number), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
+            
+        ##### Add to list of tools #####
+        self.ktc.tools.append(self)
+        self.toolchanger.tools.append(self)
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
@@ -265,7 +269,7 @@ class KtcTool:
 
     # To avoid recursive remaping.
     def select_tool_actual(self, restore_mode = None):
-        current_tool_id = int(self.ktc.active_tool)
+        current_tool_id = int(self.ktc.active_tool_n)
 
         self.log.trace("Current Tool is T" + str(current_tool_id) + ".")
         # self.log.trace("This tool is_virtual is " + str(self.is_virtual) + ".")
