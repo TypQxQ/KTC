@@ -18,7 +18,7 @@
 import os.path, ast, configparser
 from . import ktc, ktc_log
 
-class KtcPersistable:
+class KtcPersisting:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
@@ -115,4 +115,4 @@ class KtcPersistable:
 
 
 def load_config(config):
-    return KtcPersistable(config)
+    return KtcPersisting(config)

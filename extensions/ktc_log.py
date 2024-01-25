@@ -58,7 +58,7 @@ class Ktc_Log:
 
     def handle_connect(self):
         # Load the persistent variables object
-        self.ktc_persistent : ktc_persisting.KtcPersistable = self.printer.load_object(self.config, 'ktc_persisting')
+        self.ktc_persistent : ktc_persisting.KtcPersisting = self.printer.load_object(self.config, 'ktc_persisting')
 
         # Register G-code commands
         handlers = [

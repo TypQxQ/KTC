@@ -35,7 +35,7 @@ class KtcToolchanger:
             self.log: ktc_log.Ktc_Log = self.printer.load_object(
                 config, "ktc_log"
             )  # Load the log object.
-            self.ktc_persistent: ktc_persisting.KtcPersistable = (
+            self.ktc_persistent: ktc_persisting.KtcPersisting = (
                 self.printer.load_object(config, "ktc_persisting")
             )  # Load the ktc_persisting object.
 

@@ -128,7 +128,7 @@ class Ktc:
                 tool.toolchanger = self.default_toolchanger
 
         # Load the persistent variables object
-        self.ktc_persistent: ktc_persisting.KtcPersistable = (
+        self.ktc_persistent: ktc_persisting.KtcPersisting = (
             self.printer.load_object(self.config, "ktc_persisting")
         )
 
