@@ -11,7 +11,7 @@
 from __future__ import annotations  # To reference the class itself in type hints
 import logging, threading, queue, time, ast, dataclasses
 import math, os.path, copy, re
-from . import ktc_save_variables
+from . import ktc_persisting
 
 ####################################
 # Main Logging Class for KTC       #
@@ -56,6 +56,10 @@ class Ktc_Log:
         self.tool_stats : dict[str, Tool_Statistics] = {}
         self.print_tool_stats : dict[str, Tool_Statistics] = {}
 
+    def handle_connect(self):
+        # Load the persistent variables object
+        self.ktc_persistent : ktc_persisting.KtcPersistable = self.printer.load_object(self.config, 'ktc_persisting')
+
         # Register G-code commands
         handlers = [
             'KTC_LOG_TRACE', 'KTC_LOG_DEBUG', 'KTC_LOG_INFO', 'KTC_LOG_ALWAYS', 
@@ -66,21 +70,17 @@ class Ktc_Log:
             desc = getattr(self, 'cmd_' + cmd + '_help', None)
             self.gcode.register_command(cmd, func, False, desc)
 
-    def handle_connect(self):
-        # Load the persistent variables object
-        self.ktc_persistent : ktc_save_variables.KtcSaveVariables = self.printer.load_object(self.config, 'ktc_save_variables')
-
         # Load persihabele statitstics 
         self._load_persisted_state()
 
         # Init persihabele statistics
         self._reset_print_statistics()
 
-    def handle_disconnect(self):
-        self.ktc_persistent.disconnect()
-
     def handle_ready(self):
         self.always('KTC Log Ready')
+
+    def handle_disconnect(self):
+        self.ktc_persistent.disconnect()
 
 ####################################
 # LOGGING FUNCTIONS                #

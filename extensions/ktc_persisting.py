@@ -10,12 +10,15 @@
 # save variables from KTC inddependent of other plugins.
 # Using the default save_variables.py will cause conflicts when 
 # other plugins such as HappyHare tries to reference the file again.
-# This will use a different filename to avoid this incompatibility
-# T
+# This will use a different filename to avoid this incompatibility.
+# 
+# This plugin will also only save the variables when needed and no more.
+# This is to avoid excessive writes to the SD card and overhaed on the system.
+
 import os.path, ast, configparser
 from . import ktc, ktc_log
 
-class KtcSaveVariables:
+class KtcPersistable:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
@@ -112,4 +115,4 @@ class KtcSaveVariables:
 
 
 def load_config(config):
-    return KtcSaveVariables(config)
+    return KtcPersistable(config)

@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-from . import ktc, ktc_save_variables, ktc_log
+from . import ktc as ktc, ktc_persisting, ktc_log
 
 # TOOL_UNKNOWN_N = ktc.TOOL_UNKNOWN_N
 # TOOL_NONE_N = ktc.TOOL_NONE_N
@@ -14,45 +14,74 @@ from . import ktc, ktc_save_variables, ktc_log
 # TOOL_UNKNOWN = ktc.TOOL_UNKNOWN
 # TOOL_NONE = ktc.TOOL_NONE
 
+
 # TOOL_UNKNOWN_N = ktc.TOOL_UNKNOWN_N
 class KtcToolchanger:
+    # Initialize general static class variables.
+    printer = None
+    reactor = None
+    gcode = None
+    ktc = None
+    log = None
+    ktc_persistent = None
 
-    def __init__(self, config):
-        self.printer = config.get_printer()
-        self.reactor = self.printer.get_reactor()
-        self.gcode = self.printer.lookup_object('gcode')
-        gcode_macro = self.printer.load_object(config, 'gcode_macro')
+    def __init__(self, config, name: str = None):
+        # Initialize general class variables if not already initialized.
+        if KtcToolchanger.printer is None:
+            self.printer = config.get_printer()
+            self.reactor = self.printer.get_reactor()
+            self.gcode = self.printer.lookup_object("gcode")
+            self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
+            self.log: ktc_log.Ktc_Log = self.printer.load_object(
+                config, "ktc_log"
+            )  # Load the log object.
+            self.ktc_persistent: ktc_persisting.KtcPersistable = (
+                self.printer.load_object(config, "ktc_persisting")
+            )  # Load the ktc_persisting object.
 
-        self.name: str = config.get_name().split(" ", 1)[1]
-        self.params = ktc.get_params_dict(config)
-        
-        self.saved_fan_speed = 0          # Saved partcooling fan speed when deselecting a tool with a fan.
+        # Initialize object variables.
+        self.name = name
+        self.params = {}
+        self.init_printer_to_last_tool = True
+        self.tool_lock_gcode_template = None
+        self.tool_unlock_gcode_template = None
 
-        self.active_tool = ktc.TOOL_NONE          # -2 Unknown tool locked, -1 No tool locked, 0 and up are tools.
-        
-        self.tools: list = [] # List of all tools.
-
-
-        self.init_printer_to_last_tool = config.getboolean(
-            'init_printer_to_last_tool', True)
-
+        self.saved_fan_speed = (
+            0  # Saved partcooling fan speed when deselecting a tool with a fan.
+        )
+        self.active_tool = (
+            ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
+        )
+        self.tools: list = []  # List of all tools.
         self.saved_position = None
-        self.restore_axis_on_toolchange = '' # string of axis to restore: XYZ
-
+        self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
         self.tool_map = {}
         self.last_endstop_query = {}
-        self.changes_made_by_set_all_tool_heaters_off={}
+        self.changes_made_by_set_all_tool_heaters_off = {}
 
-        # G-Code macros
-        self.tool_lock_gcode_template = gcode_macro.load_template(config, 'tool_lock_gcode', '')
-        self.tool_unlock_gcode_template = gcode_macro.load_template(config, 'tool_unlock_gcode', '')
-
-        self.ktc : ktc.Ktc = self.printer.load_object(config, 'ktc')
-        self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')  # Load the log object.
-        self.ktc_persistent : ktc_save_variables.KtcSaveVariables = self.printer.load_object(config, 'ktc_save_variables')  # Load the ktc_save_variables object.
-
-        # self.printer.register_event_handler('klippy:connect', self.handle_connect)
+        # Register handlers for events.
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        
+        # Add itself to the list of toolchangers.
+        self.ktc.toolchangers.append(self)
+
+        # If not called with a specific name, then load the config.
+        if name is None:
+            self.name: str = config.get_name().split(" ", 1)[1]
+            self.params = ktc.get_params_dict(config)
+
+            self.init_printer_to_last_tool = config.getboolean(
+                "init_printer_to_last_tool", True
+            )
+
+            # G-Code macros
+            gcode_macro = self.printer.load_object(config, "gcode_macro")
+            self.tool_lock_gcode_template = gcode_macro.load_template(
+                config, "tool_lock_gcode", ""
+            )
+            self.tool_unlock_gcode_template = gcode_macro.load_template(
+                config, "tool_unlock_gcode", ""
+            )
 
     def handle_ready(self):
         self.initialize_tool_lock()
@@ -60,54 +89,76 @@ class KtcToolchanger:
     def initialize_tool_lock(self):
         if not self.init_printer_to_last_tool:
             return None
-        
-        active_tool_name = self.ktc_persistent.vars.get("tool_current", ktc.TOOL_NONE.name)
+
+        active_tool_name = self.ktc_persistent.vars.get(
+            "tool_current", ktc.TOOL_NONE.name
+        )
         if active_tool_name == ktc.TOOL_NONE.name:
             self.active_tool = ktc.TOOL_NONE
         elif active_tool_name == ktc.TOOL_UNKNOWN.name:
             self.active_tool = ktc.TOOL_UNKNOWN
         else:
-            self.active_tool = self.printer.load_object(self.printer.config, 'ktc_tool ' + active_tool_name)
-            
+            self.active_tool = self.printer.load_object(
+                self.printer.config, "ktc_tool " + active_tool_name
+            )
+
         self.ktc.set_active_tool_state(self.active_tool.name)
 
         self.log.trace("KTC initialized with active tool: %s." % self.active_tool)
 
         # TODO: Change this to use name instead of number.
         if self.active_tool == ktc.TOOL_NONE:
-            self.unlock()
+            self.disengage()
             self.log.always("KTC initialized with unlocked ToolLock")
         else:
-            self.ToolLock(True)
-            self.log.always("KTC initialized with KTC Tool %s." % self.ktc.active_tool.name)
+            self.engage(True)
+            self.log.always(
+                "KTC initialized with KTC Tool %s." % self.ktc.active_tool.name
+            )
 
         self.ktc.set_active_tool_state(self.ktc.active_tool.name)
 
     # cmd_KTC_TOOL_LOCK_help = "Lock the ToolLock."
     # def cmd_KTC_TOOL_LOCK(self, gcmd = None):
-    #     self.ToolLock()
+    #     self.engage()
 
-    def ToolLock(self, ignore_locked = False):
-        self.log.trace("KTC_TOOL_LOCK running. ")
+    def engage(self, ignore_locked=False):
+        if self.tool_lock_gcode_template is None:
+            self.log.always(
+                "ktc_toolchanger.engage(): No tool lock gcode template" +
+                " defined for ktc_toolchanger %s." % self.name
+            )
+            return None
+
+        self.log.trace("ktc_toolchanger.engage() running. ")
         if not ignore_locked and int(self.ktc.active_tool) != ktc.TOOL_NONE_N:
-            self.log.always("KTC_TOOL_LOCK is already locked with tool " + self.ktc.active_tool + ".")
+            self.log.always(
+                "ktc_toolchanger %s is already locked with tool %s."
+                % (self.name, self.ktc.active_tool.name)
+            )
         else:
             self.tool_lock_gcode_template.run_gcode_from_command()
             self.ktc.set_active_tool_state(ktc.TOOL_UNKNOWN.name)
             self.log.trace("Tool Locked")
             self.log.total_stats.toollocks += 1
-            
+
     # cmd_KTC_TOOL_UNLOCK_help = "Unlock the ToolLock."
     # def cmd_KTC_TOOL_UNLOCK(self, gcmd = None):
-    #     self.unlock()
+    #     self.disengage()
 
-    def unlock(self):
+    def disengage(self):
+        if self.tool_unlock_gcode_template is None:
+            self.log.always(
+                "ktc_toolchanger.disengage(): No tool unlock gcode template" +
+                " defined for ktc_toolchanger %s." % self.name
+            )
+            return None
+
         self.log.trace("KTC_TOOL_UNLOCK running.")
         self.tool_unlock_gcode_template.run_gcode_from_command()
         self.ktc.set_active_tool_state(ktc.TOOL_NONE.name)
         self.log.trace("ToolLock Unlocked.")
         self.log.total_stats.toolunlocks += 1
-
 
     # cmd_KTC_TOOL_DROPOFF_ALL_help = "Deselect all tools"
     # def cmd_KTC_TOOL_DROPOFF_ALL(self, gcmd = None):
@@ -116,7 +167,6 @@ class KtcToolchanger:
     #         raise self.printer.command_error("cmd_KTC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool.")
     #     if self.tool_current != "-1":
     #         self.printer.lookup_object('ktc_tool ' + str(self.tool_current)).Dropoff( force_virtual_unload = True )
-        
 
     #     try:
     #         # Need to check all tools at least once but reload them after each time.
@@ -136,8 +186,6 @@ class KtcToolchanger:
 
     #     except Exception as e:
     #         raise Exception('cmd_KTC_TOOL_DROPOFF_ALL: Error: %s' % str(e))
-
-
 
     # def save_current_tool(self, t):
     #     self.tool_current = str(t)
@@ -168,16 +216,15 @@ class KtcToolchanger:
     #     self.SetAndSaveFanSpeed(tool_id, fanspeed)
 
     #
-    # Todo: 
+    # Todo:
     # Implement Fan Scale. Inspired by https://github.com/jschuh/klipper-macros/blob/main/fans.cfg
     # Can change fan scale for diffrent materials or tools from slicer. Maybe max and min too?
-    #    
+    #
     # def SetAndSaveFanSpeed(self, tool_id, fanspeed):
     #     # Check if the requested tool has been remaped to another one.
     #     tool_is_remaped = self.tool_is_remaped(int(tool_id))
     #     if tool_is_remaped > -1:
     #         tool_id = tool_is_remaped
-
 
     #     tool = self.printer.lookup_object('ktc_tool ' + str(tool_id))
 
@@ -186,19 +233,19 @@ class KtcToolchanger:
     #     else:
     #         self.SaveFanSpeed(fanspeed)
     #         self.gcode.run_script_from_command(
-    #             "SET_FAN_SPEED FAN=%s SPEED=%f" % 
-    #             (tool.fan, 
+    #             "SET_FAN_SPEED FAN=%s SPEED=%f" %
+    #             (tool.fan,
     #             fanspeed))
 
     # cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE_help = "Waits for current tool temperature, or a specified (TOOL) tool or (HEATER) heater's temperature within (TOLERANCE) tolerance."
-#  Waits for all temperatures, or a specified tool or heater's temperature.
-#  This command can be used without any additional parameters.
-#  Without parameters it waits for bed and current extruder.
-#  Only one of either P or H may be used.
-#
-#  TOOL=nnn Tool number.
-#  HEATER=nnn Heater number. 0="heater_bed", 1="extruder", 2="extruder1", etc.
-#  TOLERANCE=nnn Tolerance in degC. Defaults to 1*C. Wait will wait until heater is between set temperature +/- tolerance.
+    #  Waits for all temperatures, or a specified tool or heater's temperature.
+    #  This command can be used without any additional parameters.
+    #  Without parameters it waits for bed and current extruder.
+    #  Only one of either P or H may be used.
+    #
+    #  TOOL=nnn Tool number.
+    #  HEATER=nnn Heater number. 0="heater_bed", 1="extruder", 2="extruder1", etc.
+    #  TOLERANCE=nnn Tolerance in degC. Defaults to 1*C. Wait will wait until heater is between set temperature +/- tolerance.
     # def cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE(self, gcmd):
     #     curtime = self.printer.get_reactor().monotonic()
     #     heater_name = None
@@ -235,17 +282,16 @@ class KtcToolchanger:
     #     if heater_name is not None:
     #         self._Temperature_wait_with_tolerance(curtime, heater_name, tolerance)
 
-
     # def _Temperature_wait_with_tolerance(self, curtime, heater_name, tolerance):
     #     target_temp = int(self.printer.lookup_object(       # Get the heaters target temperature.
     #                 heater_name).get_status(curtime)["target"]
     #                       )
-        
+
     #     if target_temp > 40:                                # Only wait if set temperature is over 40*C
     #         self.log.always("Wait for heater " + heater_name + " to reach " + str(target_temp) + " with a tolerance of " + str(tolerance) + ".")
     #         self.gcode.run_script_from_command(
-    #             "TEMPERATURE_WAIT SENSOR=" + heater_name + 
-    #             " MINIMUM=" + str(target_temp - tolerance) + 
+    #             "TEMPERATURE_WAIT SENSOR=" + heater_name +
+    #             " MINIMUM=" + str(target_temp - tolerance) +
     #             " MAXIMUM=" + str(target_temp + tolerance) )
     #         self.log.always("Wait for heater " + heater_name + " complete.")
 
@@ -264,17 +310,16 @@ class KtcToolchanger:
     #             tool_id = tool_is_remaped
     #     return tool_id
 
-
     # cmd_KTC_SET_TOOL_TEMPERATURE_help = "Waits for all temperatures, or a specified (TOOL) tool or (HEATER) heater's temperature within (TOLERANCE) tolerance."
-#  Set tool temperature.
-#  TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
-#  STDB_TMP= Standby temperature(s), optional
-#  ACTV_TMP= Active temperature(s), optional
-#  CHNG_STATE = Change Heater State, optional: 0 = off, 1 = standby temperature(s), 2 = active temperature(s).
-#  STDB_TIMEOUT = Time in seconds to wait between changing heater state to standby and setting heater target temperature to standby temperature when standby temperature is lower than tool temperature.
-#      Use for example 0.1 to change immediately to standby temperature.
-#  SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting off the heater, optional.
-#      Use for example 86400 to wait 24h if you want to disable shutdown timer.
+    #  Set tool temperature.
+    #  TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
+    #  STDB_TMP= Standby temperature(s), optional
+    #  ACTV_TMP= Active temperature(s), optional
+    #  CHNG_STATE = Change Heater State, optional: 0 = off, 1 = standby temperature(s), 2 = active temperature(s).
+    #  STDB_TIMEOUT = Time in seconds to wait between changing heater state to standby and setting heater target temperature to standby temperature when standby temperature is lower than tool temperature.
+    #      Use for example 0.1 to change immediately to standby temperature.
+    #  SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting off the heater, optional.
+    #      Use for example 86400 to wait 24h if you want to disable shutdown timer.
     # def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd):
     #     tool_id = self._get_tool_id_from_gcmd(gcmd)
     #     if tool_id is None: return
@@ -321,189 +366,187 @@ class KtcToolchanger:
     #                 msg += "\n Will power down in %s seconds." % tool.timer_idle_to_powerdown.get_status()["next_wake"]
     #         gcmd.respond_info(msg)
 
-#     cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = "Turns off all heaters and saves changes made to be resumed by KTC_RESUME_ALL_TOOL_HEATERS."
-#     def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):
-#         self.set_all_tool_heaters_off()
+    #     cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = "Turns off all heaters and saves changes made to be resumed by KTC_RESUME_ALL_TOOL_HEATERS."
+    #     def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):
+    #         self.set_all_tool_heaters_off()
 
-#     def set_all_tool_heaters_off(self):
-#         all_tools = dict(self.printer.lookup_objects('ktc_tool'))
-#         self.changes_made_by_set_all_tool_heaters_off = {}
+    #     def set_all_tool_heaters_off(self):
+    #         all_tools = dict(self.printer.lookup_objects('ktc_tool'))
+    #         self.changes_made_by_set_all_tool_heaters_off = {}
 
-#         try:
-#             for tool_name, tool in all_tools.items():
-#                 if tool.get_status()["extruder"] is None:
-#                     # self.log.trace("set_all_tool_heaters_off: T%s has no extruder! Nothing to do." % str(tool_name))
-#                     continue
-#                 if tool.get_status()["heater_state"] == 0:
-#                     # self.log.trace("set_all_tool_heaters_off: T%s already off! Nothing to do." % str(tool_name))
-#                     continue
-#                 self.log.trace("set_all_tool_heaters_off: T%s saved with heater_state: %str." % ( str(tool_name), str(tool.get_status()["heater_state"])))
-#                 self.changes_made_by_set_all_tool_heaters_off[tool_name] = tool.get_status()["heater_state"]
-#                 tool.set_heater(heater_state = 0)
-#         except Exception as e:
-#             raise Exception('set_all_tool_heaters_off: Error: %s' % str(e))
+    #         try:
+    #             for tool_name, tool in all_tools.items():
+    #                 if tool.get_status()["extruder"] is None:
+    #                     # self.log.trace("set_all_tool_heaters_off: T%s has no extruder! Nothing to do." % str(tool_name))
+    #                     continue
+    #                 if tool.get_status()["heater_state"] == 0:
+    #                     # self.log.trace("set_all_tool_heaters_off: T%s already off! Nothing to do." % str(tool_name))
+    #                     continue
+    #                 self.log.trace("set_all_tool_heaters_off: T%s saved with heater_state: %str." % ( str(tool_name), str(tool.get_status()["heater_state"])))
+    #                 self.changes_made_by_set_all_tool_heaters_off[tool_name] = tool.get_status()["heater_state"]
+    #                 tool.set_heater(heater_state = 0)
+    #         except Exception as e:
+    #             raise Exception('set_all_tool_heaters_off: Error: %s' % str(e))
 
-#     cmd_KTC_RESUME_ALL_TOOL_HEATERS_help = "Resumes all heaters previously turned off by KTC_SET_ALL_TOOL_HEATERS_OFF."
-#     def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):
-#         self.resume_all_tool_heaters()
+    #     cmd_KTC_RESUME_ALL_TOOL_HEATERS_help = "Resumes all heaters previously turned off by KTC_SET_ALL_TOOL_HEATERS_OFF."
+    #     def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):
+    #         self.resume_all_tool_heaters()
 
-#     def resume_all_tool_heaters(self):
-#         try:
-#             # Loop it 2 times, first for all heaters standby and then the active.
+    #     def resume_all_tool_heaters(self):
+    #         try:
+    #             # Loop it 2 times, first for all heaters standby and then the active.
 
-#             for tool_name, v in self.changes_made_by_set_all_tool_heaters_off.items():
-#                 if v == 1:
-#                     self.printer.lookup_object(str(tool_name)).set_heater(heater_state = v)
+    #             for tool_name, v in self.changes_made_by_set_all_tool_heaters_off.items():
+    #                 if v == 1:
+    #                     self.printer.lookup_object(str(tool_name)).set_heater(heater_state = v)
 
-#             for tool_name, v in self.changes_made_by_set_all_tool_heaters_off.items():
-#                 if v == 2:
-#                     self.printer.lookup_object(str(tool_name)).set_heater(heater_state = v)
+    #             for tool_name, v in self.changes_made_by_set_all_tool_heaters_off.items():
+    #                 if v == 2:
+    #                     self.printer.lookup_object(str(tool_name)).set_heater(heater_state = v)
 
-#         except Exception as e:
-#             raise Exception('set_all_tool_heaters_off: Error: %s' % str(e))
+    #         except Exception as e:
+    #             raise Exception('set_all_tool_heaters_off: Error: %s' % str(e))
 
+    #     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
+    #     def cmd_KTC_SET_TOOL_OFFSET(self, gcmd):
+    #         tool_id = self._get_tool_id_from_gcmd(gcmd)
+    #         if tool_id is None: return
 
-#     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
-#     def cmd_KTC_SET_TOOL_OFFSET(self, gcmd):
-#         tool_id = self._get_tool_id_from_gcmd(gcmd)
-#         if tool_id is None: return
+    #         x_pos = gcmd.get_float('X', None)
+    #         x_adjust = gcmd.get_float('X_ADJUST', None)
+    #         y_pos = gcmd.get_float('Y', None)
+    #         y_adjust = gcmd.get_float('Y_ADJUST', None)
+    #         z_pos = gcmd.get_float('Z', None)
+    #         z_adjust = gcmd.get_float('Z_ADJUST', None)
 
-#         x_pos = gcmd.get_float('X', None)
-#         x_adjust = gcmd.get_float('X_ADJUST', None)
-#         y_pos = gcmd.get_float('Y', None)
-#         y_adjust = gcmd.get_float('Y_ADJUST', None)
-#         z_pos = gcmd.get_float('Z', None)
-#         z_adjust = gcmd.get_float('Z_ADJUST', None)
+    #         tool = self.printer.lookup_object('ktc_tool ' + str(tool_id))
+    #         set_offset_cmd = {}
 
-#         tool = self.printer.lookup_object('ktc_tool ' + str(tool_id))
-#         set_offset_cmd = {}
+    #         if x_pos is not None:
+    #             set_offset_cmd["x_pos"] = x_pos
+    #         elif x_adjust is not None:
+    #             set_offset_cmd["x_adjust"] = x_adjust
+    #         if y_pos is not None:
+    #             set_offset_cmd["y_pos"] = y_pos
+    #         elif y_adjust is not None:
+    #             set_offset_cmd["y_adjust"] = y_adjust
+    #         if z_pos is not None:
+    #             set_offset_cmd["z_pos"] = z_pos
+    #         elif z_adjust is not None:
+    #             set_offset_cmd["z_adjust"] = z_adjust
+    #         if len(set_offset_cmd) > 0:
+    #             tool.set_offset(**set_offset_cmd)
 
-#         if x_pos is not None:
-#             set_offset_cmd["x_pos"] = x_pos
-#         elif x_adjust is not None:
-#             set_offset_cmd["x_adjust"] = x_adjust
-#         if y_pos is not None:
-#             set_offset_cmd["y_pos"] = y_pos
-#         elif y_adjust is not None:
-#             set_offset_cmd["y_adjust"] = y_adjust
-#         if z_pos is not None:
-#             set_offset_cmd["z_pos"] = z_pos
-#         elif z_adjust is not None:
-#             set_offset_cmd["z_adjust"] = z_adjust
-#         if len(set_offset_cmd) > 0:
-#             tool.set_offset(**set_offset_cmd)
+    #     cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset"
+    #     def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):
+    #         x_pos = gcmd.get_float('X', None)
+    #         x_adjust = gcmd.get_float('X_ADJUST', None)
+    #         y_pos = gcmd.get_float('Y', None)
+    #         y_adjust = gcmd.get_float('Y_ADJUST', None)
+    #         z_pos = gcmd.get_float('Z', None)
+    #         z_adjust = gcmd.get_float('Z_ADJUST', None)
 
-#     cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset"
-#     def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):
-#         x_pos = gcmd.get_float('X', None)
-#         x_adjust = gcmd.get_float('X_ADJUST', None)
-#         y_pos = gcmd.get_float('Y', None)
-#         y_adjust = gcmd.get_float('Y_ADJUST', None)
-#         z_pos = gcmd.get_float('Z', None)
-#         z_adjust = gcmd.get_float('Z_ADJUST', None)
+    #         if x_pos is not None:
+    #             self.global_offset[0] = float(x_pos)
+    #         elif x_adjust is not None:
+    #             self.global_offset[0] = float(self.global_offset[0]) + float(x_adjust)
+    #         if y_pos is not None:
+    #             self.global_offset[1] = float(y_pos)
+    #         elif y_adjust is not None:
+    #             self.global_offset[1] = float(self.global_offset[1]) + float(y_adjust)
+    #         if z_pos is not None:
+    #             self.global_offset[2] = float(z_pos)
+    #         elif z_adjust is not None:
+    #             self.global_offset[2] = float(self.global_offset[2]) + float(z_adjust)
 
-#         if x_pos is not None:
-#             self.global_offset[0] = float(x_pos)
-#         elif x_adjust is not None:
-#             self.global_offset[0] = float(self.global_offset[0]) + float(x_adjust)
-#         if y_pos is not None:
-#             self.global_offset[1] = float(y_pos)
-#         elif y_adjust is not None:
-#             self.global_offset[1] = float(self.global_offset[1]) + float(y_adjust)
-#         if z_pos is not None:
-#             self.global_offset[2] = float(z_pos)
-#         elif z_adjust is not None:
-#             self.global_offset[2] = float(self.global_offset[2]) + float(z_adjust)
+    #         self.log.trace("Global offset now set to: %f, %f, %f." % (float(self.global_offset[0]), float(self.global_offset[1]), float(self.global_offset[2])))
 
-#         self.log.trace("Global offset now set to: %f, %f, %f." % (float(self.global_offset[0]), float(self.global_offset[1]), float(self.global_offset[2])))
+    #     cmd_KTC_SET_PURGE_ON_TOOLCHANGE_help = "Set the global variable if the tool should be purged or primed with filament at toolchange."
+    #     def cmd_KTC_SET_PURGE_ON_TOOLCHANGE(self, gcmd = None):
+    #         param = gcmd.get('VALUE', 'FALSE')
 
-#     cmd_KTC_SET_PURGE_ON_TOOLCHANGE_help = "Set the global variable if the tool should be purged or primed with filament at toolchange."
-#     def cmd_KTC_SET_PURGE_ON_TOOLCHANGE(self, gcmd = None):
-#         param = gcmd.get('VALUE', 'FALSE')
+    #         if param.upper() == 'FALSE' or param == '0':
+    #             self.purge_on_toolchange = False
+    #         else:
+    #             self.purge_on_toolchange = True
 
-#         if param.upper() == 'FALSE' or param == '0':
-#             self.purge_on_toolchange = False
-#         else:
-#             self.purge_on_toolchange = True
+    #     def SaveFanSpeed(self, fanspeed):
+    #         self.saved_fan_speed = float(fanspeed)
 
-#     def SaveFanSpeed(self, fanspeed):
-#         self.saved_fan_speed = float(fanspeed)
-       
-#     cmd_KTC_SAVE_POSITION_help = "Save the specified G-Code position for later restore."
-# #   Saves the axis positions to be restored.
-# #   Without parameters it will set to not restoring axis.
-#     def cmd_KTC_SAVE_POSITION(self, gcmd):
-#         param_X = gcmd.get_float('X', None)
-#         param_Y = gcmd.get_float('Y', None)
-#         param_Z = gcmd.get_float('Z', None)
-#         self.SavePosition(param_X, param_Y, param_Z)
+    #     cmd_KTC_SAVE_POSITION_help = "Save the specified G-Code position for later restore."
+    # #   Saves the axis positions to be restored.
+    # #   Without parameters it will set to not restoring axis.
+    #     def cmd_KTC_SAVE_POSITION(self, gcmd):
+    #         param_X = gcmd.get_float('X', None)
+    #         param_Y = gcmd.get_float('Y', None)
+    #         param_Z = gcmd.get_float('Z', None)
+    #         self.SavePosition(param_X, param_Y, param_Z)
 
-#     def SavePosition(self, param_X = None, param_Y = None, param_Z = None):
-#         self.saved_position = [param_X, param_Y, param_Z]
+    #     def SavePosition(self, param_X = None, param_Y = None, param_Z = None):
+    #         self.saved_position = [param_X, param_Y, param_Z]
 
-#         restore_axis = ''
-#         if param_X is not None:
-#             restore_axis += 'X'
-#         if param_Y is not None:
-#             restore_axis += 'Y'
-#         if param_Z is not None:
-#             restore_axis += 'Z'
-#         self.restore_axis_on_toolchange = restore_axis
+    #         restore_axis = ''
+    #         if param_X is not None:
+    #             restore_axis += 'X'
+    #         if param_Y is not None:
+    #             restore_axis += 'Y'
+    #         if param_Z is not None:
+    #             restore_axis += 'Z'
+    #         self.restore_axis_on_toolchange = restore_axis
 
+    #     cmd_KTC_SAVE_CURRENT_POSITION_help = "Save the current G-Code position."
+    # #  Saves current position.
+    # #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified, restore_position_on_toolchange_type will not be changed.
+    # #    0: No restore
+    # #    1: Restore XY
+    # #    2: Restore XYZ
+    # #    XYZ: Restore specified axis
 
-#     cmd_KTC_SAVE_CURRENT_POSITION_help = "Save the current G-Code position."
-# #  Saves current position. 
-# #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified, restore_position_on_toolchange_type will not be changed.
-# #    0: No restore
-# #    1: Restore XY
-# #    2: Restore XYZ
-# #    XYZ: Restore specified axis
+    #     def cmd_KTC_SAVE_CURRENT_POSITION(self, gcmd):
+    #         # Save optional RESTORE_POSITION_TYPE parameter to restore_position_on_toolchange_type variable.
+    #         restore_axis = ktc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE')
+    #         self.SaveCurrentPosition(restore_axis)
 
-#     def cmd_KTC_SAVE_CURRENT_POSITION(self, gcmd):
-#         # Save optional RESTORE_POSITION_TYPE parameter to restore_position_on_toolchange_type variable.
-#         restore_axis = ktc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE')
-#         self.SaveCurrentPosition(restore_axis)
+    #     def SaveCurrentPosition(self, restore_axis = None):
+    #         if restore_axis is not None:
+    #             self.restore_axis_on_toolchange = restore_axis
+    #         gcode_move = self.printer.lookup_object('gcode_move')
+    #         self.saved_position = gcode_move._get_gcode_position()
 
-#     def SaveCurrentPosition(self, restore_axis = None):
-#         if restore_axis is not None:
-#             self.restore_axis_on_toolchange = restore_axis        
-#         gcode_move = self.printer.lookup_object('gcode_move')
-#         self.saved_position = gcode_move._get_gcode_position()
+    #     cmd_KTC_RESTORE_POSITION_help = "Restore a previously saved G-Code position."
+    # #  Restores the previously saved possition.
+    # #   With no parameters it will Restore to previousley saved type.
+    # #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified, previousley saved restore_position_on_toolchange_type will be used.
+    # #    0: No restore
+    # #    1: Restore XY
+    # #    2: Restore XYZ
+    # #    XYZ: Restore specified axis
+    #     def cmd_KTC_RESTORE_POSITION(self, gcmd):
+    #         self.restore_axis_on_toolchange = ktc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE', default=self.restore_axis_on_toolchange)
+    #         self.log.trace("KTC_RESTORE_POSITION running: " + str(self.restore_axis_on_toolchange))
+    #         speed = gcmd.get_int('F', None)
 
-#     cmd_KTC_RESTORE_POSITION_help = "Restore a previously saved G-Code position."
-# #  Restores the previously saved possition.
-# #   With no parameters it will Restore to previousley saved type.
-# #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified, previousley saved restore_position_on_toolchange_type will be used.
-# #    0: No restore
-# #    1: Restore XY
-# #    2: Restore XYZ
-# #    XYZ: Restore specified axis
-#     def cmd_KTC_RESTORE_POSITION(self, gcmd):
-#         self.restore_axis_on_toolchange = ktc_parse_restore_type(gcmd, 'RESTORE_POSITION_TYPE', default=self.restore_axis_on_toolchange)
-#         self.log.trace("KTC_RESTORE_POSITION running: " + str(self.restore_axis_on_toolchange))
-#         speed = gcmd.get_int('F', None)
+    #         if not self.restore_axis_on_toolchange:
+    #             return # No axis to restore
 
-#         if not self.restore_axis_on_toolchange:
-#             return # No axis to restore
+    #         if self.saved_position is None:
+    #             raise gcmd.error("No previously saved g-code position.")
 
-#         if self.saved_position is None:
-#             raise gcmd.error("No previously saved g-code position.")
+    #         try:
+    #             p = self.saved_position
+    #             cmd = 'G1'
+    #             for t in self.restore_axis_on_toolchange:
+    #                 cmd += ' %s%.3f' % (t, p[XYZ_TO_INDEX[t]])
+    #             if speed:
+    #                 cmd += " F%i" % (speed,)
 
-#         try:
-#             p = self.saved_position
-#             cmd = 'G1'
-#             for t in self.restore_axis_on_toolchange:
-#                 cmd += ' %s%.3f' % (t, p[XYZ_TO_INDEX[t]])
-#             if speed:
-#                 cmd += " F%i" % (speed,)
+    #             # Restore position
+    #             self.log.trace("KTC_RESTORE_POSITION running: " + cmd)
+    #             self.gcode.run_script_from_command(cmd)
+    #         except:
+    #             raise gcmd.error("Could not restore position.")
 
-#             # Restore position
-#             self.log.trace("KTC_RESTORE_POSITION running: " + cmd)
-#             self.gcode.run_script_from_command(cmd)
-#         except:
-#             raise gcmd.error("Could not restore position.")
-
-    def get_status(self, eventtime= None):
+    def get_status(self, eventtime=None):
         status = {
             # "global_offset": self.global_offset,
             "name": self.name,
@@ -517,6 +560,7 @@ class KtcToolchanger:
         }
         return status
 
+
 #     cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL_help = "Set G-Code offset to the one of current tool."
 # #  Sets the G-Code offset to the one of the current tool.
 # #   With no parameters it will not move the toolhead.
@@ -524,7 +568,7 @@ class KtcToolchanger:
 # #    0: No move
 # #    1: Move
 #     def cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL(self, gcmd):
-#         current_tool_id = int(self.get_status()['tool_current']) 
+#         current_tool_id = int(self.get_status()['tool_current'])
 
 #         self.log.trace("Setting offsets to those of T" + str(current_tool_id) + ".")
 
@@ -645,6 +689,7 @@ class KtcToolchanger:
 #         # self.log.debug("Endstop %s is %s Triggered after #%d checks." % (endstop_name, ("" if is_triggered else "Not"), i))
 
 #         self.last_endstop_query[endstop_name] = is_triggered
+
 
 def load_config_prefix(config):
     return KtcToolchanger(config)

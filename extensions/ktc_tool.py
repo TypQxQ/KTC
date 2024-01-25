@@ -12,14 +12,18 @@ class KtcTool:
     HEATER_STATE_STANDBY = 1
     HEATER_STATE_ACTIVE = 2
 
+    # Define static class variables.
+    printer = None
+    gcode = None
+    gcode_macro = None
+    ktc = None
+    log = None
+
 
     def __init__(self, config = None, name = None, number = -2):
         self.name: str = name
         self.number: int = number           # Tool number to register this tool as. Default as ktc.TOOL_NONE_N (-2)
         self.toolchanger: ktc_toolchanger.KtcToolchanger = None
-        self.is_virtual = False
-        self.parentTool_id = ktc.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
-        self.parentTool = None              # Initialize physical parent as a dummy object.
 
         self.extruder = None                # Name of extruder connected to this tool. Defaults to None.
         self.fan = None                     # Name of general fan configuration connected to this tool as a part fan. Defaults to "none".
@@ -28,7 +32,12 @@ class KtcTool:
                                             # Wipe. -1 = none, 1= Only load filament, 2= Wipe in front of carriage, 3= Pebble wiper, 4= First Silicone, then pebble. Defaults to None.
         self.zone = None                    # Position of the parking zone in the format X, Y  
         self.park = None                    # Position to move to when fully parking the tool in the dock in the format X, Y
+
         self.offset = None                  # Offset of the nozzle in the format X, Y, Z
+
+        self.is_virtual = False
+        self.parentTool_id = ktc.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
+        self.parentTool = None              # Initialize physical parent as a dummy object.
 
         self.pickup_gcode = None            # The plain gcode string for pickup of the tool.
         self.dropoff_gcode = None           # The plain gcode string for droppoff of the tool.
@@ -69,12 +78,13 @@ class KtcTool:
         if config is None:
             return
 
-        # Load used objects.
-        self.printer = config.get_printer()
-        self.gcode = self.printer.lookup_object('gcode')
-        self.gcode_macro = self.printer.load_object(config, 'gcode_macro')
-        self.ktc : ktc.Ktc = self.printer.load_object(config, 'ktc')
-        self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')
+        # Initialize static class variables if not already done.
+        if KtcTool.printer is None:
+            self.printer = config.get_printer()
+            self.gcode = self.printer.lookup_object('gcode')
+            self.gcode_macro = self.printer.load_object(config, 'gcode_macro')
+            self.ktc : ktc.Ktc = self.printer.load_object(config, 'ktc')
+            self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')
 
         ##### Name #####
         try:
@@ -89,6 +99,7 @@ class KtcTool:
         
         ##### Toolchanger #####
         toolchanger_name = config.get('toolchanger', None)
+        
         if toolchanger_name is None:
             raise config.error(
                     "Toolchanger for section '%s' is not well formated."
