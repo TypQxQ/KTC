@@ -19,15 +19,6 @@ ktc_tool.py is initialized for each tool.
 
 
 ToDo:
-    Check so toollock and tool name does not have breaks inside so the names can be passed as GCode variables.
-
-    Implement Toollock gcode command in Ktc.
-
-    Add logic to check if tool.number is already added and return error on what tool is already added on.
-    Add logic to add tools to dictionary on ktc and array on toolchanger
-
-    Add logic to compare ktc_tool < > on number. None allways being smallest.
-
     ktc_persisting sparar innnan den hämtar nya. Både statistik och active_tool.
     KTC_SAVE_VARIABLES_FILENAME och KTC_SAVE_VARIABLES_DELAY borde laddas från config filen när de finns.
 
@@ -57,6 +48,9 @@ ToDo:
 
     A tool can have multiple partcooling fans.
 
+    current_tool_id change to active_tool_n?
+
+    Add logic to compare ktc_tool < > on number. None allways being smallest.
 
 # To try to keep terms apart:
 Each tool has a id (name) (ktc_tool name) and a nr.

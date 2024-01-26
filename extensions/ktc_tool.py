@@ -89,23 +89,22 @@ class KtcTool:
         ##### Name #####
         try:
             self.name = config.get_name().split(" ", 1)[1]
+            if self.name == ktc.TOOL_NONE.name or self.name == ktc.TOOL_UNKNOWN.name:
+                raise config.error(
+                        "Name of section '%s' is not well formated. Name is reserved for internal use."
+                        % (config.get_name()))
         except ValueError:
             raise config.error(
                     "Name of section '%s' contains illegal characters. Use only integer tool number."
                     % (config.get_name()))
 
         ##### Tool Number #####
+        # Will be added to the ktc.tools_by_number dict in ktc._config_tools()
         self.number = config.getint('tool_number', None)
         
         ##### Toolchanger #####
-        toolchanger_name = config.get('toolchanger', None)
-        
-        # if toolchanger_name is None:
-        #     raise config.error(
-        #             "Toolchanger for section '%s' is not well formated."
-        #             % (config.get_name()))
-            
         # If none, then the default toolchanger will be set in ktc._config_default_toolchanger()
+        toolchanger_name = config.get('toolchanger', None)
         if toolchanger_name is not None:
             self.toolchanger: ktc_toolchanger.KtcToolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
 
@@ -373,7 +372,7 @@ class KtcTool:
                 self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Picked up physical tool and now Loading virtual tool.")
                 self.LoadVirtual()
 
-        self.ktc.set_active_tool_state(self.name)
+        self.ktc.active_tool = self
         self.log.track_selected_tool_start(self.name)
 
 
@@ -419,7 +418,7 @@ class KtcTool:
             self.gcode.run_script_from_command(cmd)
 
         # Save current picked up tool and print on screen.
-        self.ktc.set_active_tool_state(self.name)
+        self.ktc.active_tool = self
         if self.is_virtual:
             self.log.always("Physical Tool for T%d picked up." % (self.number))
         else:
@@ -461,7 +460,7 @@ class KtcTool:
         except Exception as e:
             raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
 
-        self.ktc.set_active_tool_state(ktc.TOOL_NONE.name)   # Dropoff successfull
+        self.ktc.active_tool = ktc.TOOL_NONE                 # Dropoff successfull
         self.log.track_unmount_end(self.name)                 # Log the time it takes for tool change.
 
 
@@ -483,7 +482,7 @@ class KtcTool:
         parentTool.set_virtual_loaded(self.number)
 
         # Save current picked up tool and print on screen.
-        self.ktc.set_active_tool_state(self.name)
+        self.ktc.active_tool = self
         self.log.trace("Virtual T%d Loaded" % (self.number))
         self.log.track_mount_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
 
@@ -509,7 +508,7 @@ class KtcTool:
         parentTool.set_virtual_loaded(-1)
 
         # Save current picked up tool and print on screen.
-        self.ktc.set_active_tool_state(self.name)
+        self.ktc.active_tool = self
         self.log.trace("Virtual T%d Unloaded" % (int(self.number)))
 
         self.log.track_unmount_end(self.name)                 # Log the time it takes for tool unload. 

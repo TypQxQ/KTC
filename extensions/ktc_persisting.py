@@ -95,7 +95,6 @@ class KtcPersisting:
                     self.log.trace("Saving section %s" % (section,))
                     varfile.add_section(section)
                     for name, val in sorted(vars.items()):
-                        self.log.trace("Saving variable %s" % (name,))
                         varfile.set(section, name, repr(val))
 
                 f = open(self.filename, "w")

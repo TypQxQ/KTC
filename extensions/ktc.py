@@ -45,6 +45,7 @@ class Ktc:
         self.__active_tool = TOOL_UNKNOWN  # The currently active tool.
 
         self.tools: dict[str, ktc_tool.KtcTool] = {}  # List of all tools.
+        self.tools_by_number: dict[int, ktc_tool.KtcTool] = {}  # List of all tools by number.
         self.toolchangers: dict[str, ktc_toolchanger.KtcToolchanger] = {}  # List of all toolchangers.
 
         self.default_toolchanger: ktc_toolchanger.KtcToolchanger = config.get(
@@ -117,6 +118,8 @@ class Ktc:
             tc = ktc_toolchanger.KtcToolchanger(self.config, name="default_toolchanger")
 
         self._config_default_toolchanger()
+        
+        self._config_tools()
 
         ############################
         # Load the persistent variables object
@@ -179,9 +182,25 @@ class Ktc:
             tool.toolchanger = self.default_toolchanger
             self.default_toolchanger.tools[tool.name] = tool
 
+    def _config_tools(self):
+        self.tools[TOOL_NONE.name] = TOOL_NONE
+        self.tools[TOOL_UNKNOWN.name] = TOOL_UNKNOWN
+        
+        # All tools that are not TOOL_NONE or TOOL_UNKNOWN should have a toolchanger.
+        # Default toolchanger is set in _config_default_toolchanger.
+        for tool in [tool for tool in self.tools.values() if tool.toolchanger is not None]:
+            tool.toolchanger.tools[tool.name] = tool
+            if tool.number is not None:
+                if self.tools_by_number.get(tool.number) is not None:
+                    raise self.config.error(
+                        "Tool number %d is already used by tool %s."
+                        % (tool.number, self.tools_by_number[tool.number].name)
+                    )
+                self.tools_by_number[tool.number] = tool
+            
+        
     # Logic to check if a tool is valid when set.
-    # Takes either a KtcTool object or the name of the tool.
-    # For backwards compatibility it also takes an int for the tool number.
+    # Takes either a KtcTool object, the name of the tool or the number of the tool.
     @property
     def active_tool(self) -> ktc_tool.KtcTool:
         return self.__active_tool
@@ -189,29 +208,37 @@ class Ktc:
     @active_tool.setter
     def active_tool(self, value: str or ktc_tool.KtcTool):
         if isinstance(value, ktc_tool.KtcTool):
-            self.__active_tool = value
+            tool = value
         elif isinstance(value, str):
-            if value == TOOL_NONE.name:
-                self.__active_tool = TOOL_NONE
-            elif value == TOOL_UNKNOWN.name:
-                self.__active_tool = TOOL_UNKNOWN
-            else:
-                # TODO: Add check if tool exists.
-                self.printer.lookup_object("ktc_tool " + value, TOOL_UNKNOWN)
-        elif isinstance(value, int):  # If value is an int for backwayds compatibility.
-            if value == TOOL_NONE_N:
-                self.__active_tool = TOOL_NONE
-            elif value == TOOL_UNKNOWN_N:
-                self.__active_tool = TOOL_UNKNOWN
-            else:
-                # TODO: Add check aginst list of toolnumbers.
+            tool = self.tools.get(value, None)
+            if tool == None:
                 raise ValueError(
-                    "active_tool must be a KtcTool or a string representing the tool name"
+                    "active_tool: tool name not found: %s." % str(value)
+                )
+                
+        elif isinstance(value, int):  # If value is an int for backwayds compatibility.
+            tool = self.tools_by_number.get(value, None)
+            if tool == None:
+                raise ValueError(
+                    "active_tool: tool number not found: %s." % str(value)
                 )
         else:
             raise TypeError(
-                "active_tool must be a KtcTool or a string representing the tool name"
+                "active_tool must be a KtcTool, a string representing the tool name"
+                + " or an int representing the current tool number."
             )
+
+        self.__active_tool = tool
+        
+        # Set the active tool in the toolchanger if not TOOL_NONE or TOOL_UNKNOWN.
+        if self.__active_tool.toolchanger is not None:
+            self.__active_tool.toolchanger.active_tool = tool
+
+        self.log.trace("ktc.active_tool set to: " + tool.name)
+        
+        self.ktc_persistent.save_variable(
+            "current_tool", str("'" + tool.name + "'"), section="State", force_save=True
+        )
 
     @property
     def active_tool_n(self) -> int:
@@ -234,6 +261,7 @@ class Ktc:
         if tc_name is None:
             tc = self.default_toolchanger
         else:
+            self.log.trace("KTC_TOOLCHANGER_DISENGAGE: Toolchanger: %s." % str(tc_name))
             tc: ktc_toolchanger.KtcToolchanger = self.printer.lookup_object(
                 "ktc_toolchanger " + tc_name, None
             )
@@ -243,15 +271,6 @@ class Ktc:
                     "KTC_TOOLCHANGER_DISENGAGE: Unknown toolchanger: %s." % str(tc_name)
                 )
         return tc
-
-    def set_active_tool_state(self, t: str):
-        t = str(t)
-        self.active_tool = t
-        self.log.trace("Saving active tool: " + t)
-        self.ktc_persistent.save_variable(
-            "current_tool", str("'" + t + "'"), section="State", force_save=True
-        )
-        # self.ktc_persistent.save_variable("current_tool", str("'KTC_None'"), section="State", force_save=True)
 
     cmd_KTC_DROPOFF_help = "Deselect all tools"
 
@@ -298,8 +317,10 @@ class Ktc:
 
     def cmd_KTC_OVERRIDE_CURRENT_TOOL(self, gcmd):
         t = gcmd.get("TOOL", None)
+        t = gcmd.get("T", t)
         if t is not None:
-            self.set_active_tool_state(t)
+            self.active_tool = t
+            
 
     cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED_help = (
         "Save the fan speed to be recovered at ToolChange."
@@ -749,35 +770,29 @@ class Ktc:
     #    0: No move
     #    1: Move
     def cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL(self, gcmd):
-        current_tool_id = self.active_tool_n
+        self.log.trace("Setting offsets to those of ktc_tool %s." % self.active_tool.name)
 
-        self.log.trace("Setting offsets to those of T" + str(current_tool_id) + ".")
-
-        if current_tool_id <= TOOL_NONE_N:
+        if self.active_tool == TOOL_UNKNOWN or self.active_tool == TOOL_NONE:
             msg = "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL: Unknown tool mounted. Can't set offsets."
-            self.log.always(msg)
-            # raise self.printer.command_error(msg)
+            raise gcmd.error(msg)
         else:
             # If optional MOVE parameter is passed as 0 or 1
             param_Move = gcmd.get_int("MOVE", 0, minval=0, maxval=1)
-            current_tool = self.printer.lookup_object(
-                "ktc_tool " + str(current_tool_id)
-            )
             self.log.trace(
                 "SET_GCODE_OFFSET X=%s Y=%s Z=%s MOVE=%s"
                 % (
-                    str(current_tool.offset[0]),
-                    str(current_tool.offset[1]),
-                    str(current_tool.offset[2]),
+                    str(self.active_tool.offset[0]),
+                    str(self.active_tool.offset[1]),
+                    str(self.active_tool.offset[2]),
                     str(param_Move),
                 )
             )
             self.gcode.run_script_from_command(
                 "SET_GCODE_OFFSET X=%s Y=%s Z=%s MOVE=%s"
                 % (
-                    str(current_tool.offset[0]),
-                    str(current_tool.offset[1]),
-                    str(current_tool.offset[2]),
+                    str(self.active_tool.offset[0]),
+                    str(self.active_tool.offset[1]),
+                    str(self.active_tool.offset[2]),
                     str(param_Move),
                 )
             )
