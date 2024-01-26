@@ -5,8 +5,8 @@ ktc.py has all common functions that need only initialized once.
 ktc_log.py is is initialized once and used for logging, statistics and saving persistant settings like offsets.
 
 ktc_toolchanger.py is initialized for each toolchanger system and can have a parent_tool.
-    engage :        Function to engage the tool lock.
-    disengage :     Function to disengage the tool lock.
+    engage :        Function to engage the tool lock. Locking the tool
+    disengage :     Function to disengage the tool lock. Unlocking the tool.
     engaged :       Bool to display state.
     change :        Function to change the tool.
 
@@ -19,8 +19,6 @@ ktc_tool.py is initialized for each tool.
 
 
 ToDo:
-    cmd_KTC_TOOL_LOCK needs to know default toollock and handle option.
-
     Check so toollock and tool name does not have breaks inside so the names can be passed as GCode variables.
 
     Implement Toollock gcode command in Ktc.

@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-from . import ktc as ktc, ktc_persisting, ktc_log
+from . import ktc as ktc, ktc_persisting, ktc_log, ktc_tool
 
 # TOOL_UNKNOWN_N = ktc.TOOL_UNKNOWN_N
 # TOOL_NONE_N = ktc.TOOL_NONE_N
@@ -52,7 +52,7 @@ class KtcToolchanger:
         self.active_tool = (
             ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
         )
-        self.tools: list = []  # List of all tools.
+        self.tools: dict[str, ktc_tool.KtcTool] = {}  # List of all tools.
         self.saved_position = None
         self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
         self.tool_map = {}
@@ -62,8 +62,13 @@ class KtcToolchanger:
         # Register handlers for events.
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
         
-        # Add itself to the list of toolchangers.
-        self.ktc.toolchangers.append(self)
+        # Add itself to the list of toolchangers if not already added.
+        if self.ktc.toolchangers.get(self.name) is None:
+            self.ktc.toolchangers[self.name] = self
+        else:
+            self.log.always(
+                "KtcToolchanger: Toolchanger %s already registered." % self.name
+            )
 
         # If not called with a specific name, then load the config.
         if name is None:
@@ -118,8 +123,8 @@ class KtcToolchanger:
 
         self.ktc.set_active_tool_state(self.ktc.active_tool.name)
 
-    # cmd_KTC_TOOL_LOCK_help = "Lock the ToolLock."
-    # def cmd_KTC_TOOL_LOCK(self, gcmd = None):
+    # cmd_KTC_TOOLCHANGER_ENGAGE_help = "Lock the ToolLock."
+    # def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd = None):
     #     self.engage()
 
     def engage(self, ignore_locked=False):
@@ -142,8 +147,8 @@ class KtcToolchanger:
             self.log.trace("Tool Locked")
             self.log.total_stats.toollocks += 1
 
-    # cmd_KTC_TOOL_UNLOCK_help = "Unlock the ToolLock."
-    # def cmd_KTC_TOOL_UNLOCK(self, gcmd = None):
+    # cmd_KTC_TOOLCHANGER_DISENGAGE_help = "Unlock the ToolLock."
+    # def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd = None):
     #     self.disengage()
 
     def disengage(self):
@@ -154,7 +159,7 @@ class KtcToolchanger:
             )
             return None
 
-        self.log.trace("KTC_TOOL_UNLOCK running.")
+        self.log.trace("KTC_TOOLCHANGER_DISENGAGE running.")
         self.tool_unlock_gcode_template.run_gcode_from_command()
         self.ktc.set_active_tool_state(ktc.TOOL_NONE.name)
         self.log.trace("ToolLock Unlocked.")

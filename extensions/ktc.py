@@ -44,12 +44,14 @@ class Ktc:
         )
         self.__active_tool = TOOL_UNKNOWN  # The currently active tool.
 
-        self.tools: list = []  # List of all tools.
-        self.toolchangers: list = []  # List of all toolchangers.
+        self.tools: dict[str, ktc_tool.KtcTool] = {}  # List of all tools.
+        self.toolchangers: dict[str, ktc_toolchanger.KtcToolchanger] = {}  # List of all toolchangers.
 
         self.default_toolchanger: ktc_toolchanger.KtcToolchanger = config.get(
             "default_toolchanger", None
         )
+
+        self.log.trace("KTC: Default toolchanger: %s." % str(self.default_toolchanger))
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
         self.params = get_params_dict(config)
@@ -90,12 +92,11 @@ class Ktc:
             "KTC_DISPLAY_TOOL_MAP",
             "KTC_REMAP_TOOL",
             "KTC_ENDSTOP_QUERY",  # Move to own file.
-            "KTC_TOOL_LOCK",
-            "KTC_TOOL_UNLOCK",
+            "KTC_TOOLCHANGER_ENGAGE",
+            "KTC_TOOLCHANGER_DISENGAGE",
             "KTC_SET_ALL_TOOL_HEATERS_OFF",
             "KTC_RESUME_ALL_TOOL_HEATERS",
         ]
-        # 'KTC_TOOL_LOCK', 'KTC_TOOL_UNLOCK',
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)
             desc = getattr(self, "cmd_" + cmd + "_help", None)
@@ -106,32 +107,24 @@ class Ktc:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
         # self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
 
+    # This function is called when all objects are loaded, initialized and configured.
     def handle_connect(self):
+        ############################
         # Check if no toolchangers are defined. If so create a default one.
         # The toolchanger init will add itself to the list of toolchangers.
         if len(self.toolchangers) == 0:
             self.log.trace("No toolchangers defined. Creating default toolchanger.")
             tc = ktc_toolchanger.KtcToolchanger(self.config, name="default_toolchanger")
 
-        # Check if the printer has a toolchanger. If only one then set it as default.
-        if len(self.toolchangers) == 1:
-            self.log.trace("Only one toolchanger defined. Setting it as default.")
-            self.default_toolchanger = self.toolchangers[0]
+        self._config_default_toolchanger()
 
-        # Set default toolchanger to all tools that don't have one.
-        for tool in self.tools:
-            if tool.toolchanger is None:
-                self.log.trace(
-                    "Tool %s has no toolchanger. Setting default toolchanger: %s."
-                    % (tool.name, self.default_toolchanger.name)
-                )
-                tool.toolchanger = self.default_toolchanger
-
+        ############################
         # Load the persistent variables object
-        self.ktc_persistent: ktc_persisting.KtcPersisting = (
-            self.printer.load_object(self.config, "ktc_persisting")
+        self.ktc_persistent: ktc_persisting.KtcPersisting = self.printer.load_object(
+            self.config, "ktc_persisting"
         )
 
+    # This function is called when the printer is ready to print.
     def handle_ready(self):
         # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
         self.tool_map = self.log.ktc_persistent.vars.get(VARS_KTC_TOOL_MAP, {})
@@ -142,6 +135,49 @@ class Ktc:
                 self.log.always(self._tool_map_to_human_string())
         except Exception as e:
             self.log.always("Warning: Error booting up KTC: %s" % str(e))
+
+    # Validate default_toolchanger and set it to all tools that don't have toolchanger specified.
+    def _config_default_toolchanger(self):
+        ############################
+        # If Default_ToolChanger is defined, check if it is valid.
+        if self.default_toolchanger is not None:
+            if not isinstance(self.default_toolchanger, str):
+                raise TypeError("default_toolchanger in section [ktc] is not a string.")
+
+            if self.default_toolchanger.strip() == "":
+                raise ValueError(
+                    "default_toolchanger in section [ktc] is an empty string."
+                )
+
+            self.default_toolchanger = self.printer.lookup_object(
+                # self.config,
+                "ktc_toolchanger " + self.default_toolchanger,
+                None,
+            )
+            if self.default_toolchanger is None:
+                raise self.config.error(
+                    "default_toolchanger in section [ktc] is not a valid"
+                    + " toolchanger."
+                )
+        else:
+            # Check if the printer has a toolchanger. If only one then set it as default.
+            if len(self.toolchangers) == 1 and self.default_toolchanger is None:
+                self.log.trace("Only one toolchanger defined. Setting it as default.")
+                self.default_toolchanger = list(self.toolchangers.values())[0]
+            elif len(self.toolchangers) > 1 and self.default_toolchanger is None:
+                raise self.config.error(
+                    "More than one toolchanger defined but no default toolchanger set."
+                    + "Please set default_toolchanger in the [ktc] section of your printer.cfg file."
+                )
+
+        # Set default toolchanger to all tools that don't have one.
+        for _, tool in {k: v for k, v in self.tools.items() if v.toolchanger is None}.items():
+            self.log.trace(
+                "Tool %s has no toolchanger. Setting default toolchanger: %s."
+                % (tool.name, self.default_toolchanger.name)
+            )
+            tool.toolchanger = self.default_toolchanger
+            self.default_toolchanger.tools[tool.name] = tool
 
     # Logic to check if a tool is valid when set.
     # Takes either a KtcTool object or the name of the tool.
@@ -181,17 +217,32 @@ class Ktc:
     def active_tool_n(self) -> int:
         return self.__active_tool.number
 
-    cmd_KTC_TOOL_LOCK_help = "Lock the ToolLock."
+    cmd_KTC_TOOLCHANGER_ENGAGE_help = (
+        "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]" )
+    def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd=None):
+        self._get_toolchanger_from_gcmd(gcmd).engage()
 
-    def cmd_KTC_TOOL_LOCK(self, gcmd=None):
-        gcmd.respond_info("KTC_TOOL_LOCK not implemented yet.")
-        return
+    cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
+        + "from place. [TOOLCHANGER: Default_ToolChanger]" )
+    def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd=None):
+        self._get_toolchanger_from_gcmd(gcmd).disengage()
 
-    cmd_KTC_TOOL_UNLOCK_help = "Unlock the ToolLock."
-
-    def cmd_KTC_TOOL_UNLOCK(self, gcmd=None):
-        gcmd.respond_info("KTC_TOOL_UNLOCK not implemented yet.")
-        return
+    # Returns the toolchanger object specified in the gcode command or the default toolchanger.
+    def _get_toolchanger_from_gcmd(self, gcmd):
+        tc_name = gcmd.get("TOOLCHANGER", None)
+        
+        if tc_name is None:
+            tc = self.default_toolchanger
+        else:
+            tc: ktc_toolchanger.KtcToolchanger = self.printer.lookup_object(
+                "ktc_toolchanger " + tc_name, None
+            )
+            
+            if tc is None:
+                raise self.printer.command_error(
+                    "KTC_TOOLCHANGER_DISENGAGE: Unknown toolchanger: %s." % str(tc_name)
+                )
+        return tc
 
     def set_active_tool_state(self, t: str):
         t = str(t)

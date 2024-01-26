@@ -100,12 +100,14 @@ class KtcTool:
         ##### Toolchanger #####
         toolchanger_name = config.get('toolchanger', None)
         
-        if toolchanger_name is None:
-            raise config.error(
-                    "Toolchanger for section '%s' is not well formated."
-                    % (config.get_name()))
+        # if toolchanger_name is None:
+        #     raise config.error(
+        #             "Toolchanger for section '%s' is not well formated."
+        #             % (config.get_name()))
             
-        self.toolchanger: ktc_toolchanger.KtcToolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
+        # If none, then the default toolchanger will be set in ktc._config_default_toolchanger()
+        if toolchanger_name is not None:
+            self.toolchanger: ktc_toolchanger.KtcToolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
 
         ##### Physical Parent #####
         self.parentTool_id = config.getint('parent_tool', ktc.TOOL_NONE_N)
@@ -222,8 +224,9 @@ class KtcTool:
             self.gcode.register_command("KTC_T" + str(self.number), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
             
         ##### Add to list of tools #####
-        self.ktc.tools.append(self)
-        self.toolchanger.tools.append(self)
+        self.ktc.tools[self.name] = self
+        if self.toolchanger is not None:
+            self.toolchanger.tools[self.name] = self
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
