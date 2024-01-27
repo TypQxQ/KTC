@@ -10,7 +10,14 @@ ktc_log.py is is initialized once and used for logging, statistics and saving pe
 
 ktc_toolchanger.py is initialized for each toolchanger system and can have a parent_tool.
     Name:       is case sensitive and can contain spaces
-    params_*:   Aditional personizable options that can be used by macros.
+    params_*:           Aditional personizable options that can be used by macros.
+    disengage_gcode:    G-Code run when disengaging 
+    init_mode:          When to initialize the toolchanger: manual, on_start or on_first_use.
+                        Defaults to manula.
+
+    init_gcode:         G-code running on initialization.
+    engage_gcode:       G-code running when engaging tool-lock.
+    disengage_gcode:    G-code running when disengaging tool-lock.
 
     engage :        Function to engage the tool lock. Locking the tool
     disengage :     Function to disengage the tool lock. Unlocking the tool.

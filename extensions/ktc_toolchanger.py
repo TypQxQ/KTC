@@ -13,7 +13,7 @@ from . import ktc as ktc, ktc_persisting, ktc_log, ktc_tool
 class KtcToolchanger:
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
-    A "default_toolchanger" will be initialized if no toolchanger 
+    A "default_toolchanger" will be initialized if no toolchanger
     is specified in the config."""
 
     # Initialize general static class variables.
@@ -24,12 +24,11 @@ class KtcToolchanger:
     log = None
     ktc_persistent = None
 
-    def __init__(self, config, name: str = None):
+    def __init__(self, config):
         """_summary_
 
         Args:
             config (Klipper configuration): required for initialization.
-            name (str, optional): Name to use when called to add . Defaults to None.
 
         Returns:
             _type_: _description_
@@ -48,70 +47,61 @@ class KtcToolchanger:
             )  # Load the ktc_persisting object.
 
         # Initialize object variables.
-        self.name = name
-        self.params = {}
-        self.status = KtcToolchangerStatus.uninitialized
-        self.init_printer_to_last_tool = True
-        self.tool_lock_gcode_template = None
-        self.tool_unlock_gcode_template = None
-
-        self.saved_fan_speed = (
-            0  # Saved partcooling fan speed when deselecting a tool with a fan.
-        )
+        self.name: str = config.get_name().split(" ", 1)[1]
+        self.params = ktc.get_params_dict_from_config(config)
+        self.status = STATUS.UNINITIALIZED
+        self.tools: dict[str, ktc_tool.KtcTool] = {}  # All tools on this toolchanger.
+        self.init_mode = INIT_MODE.MANUAL
         self.active_tool = (
             ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
         )
-        self.tools: dict[str, ktc_tool.KtcTool] = {}  # List of all tools.
-        self.saved_position = None
+
+        ######
+        # TODO: Check if implemented and if needs to move to ktc or ktc_tool.
+        self.saved_fan_speed = (
+            0  # Saved partcooling fan speed when deselecting a tool with a fan.
+        )
+
         self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
         self.tool_map = {}
         self.last_endstop_query = {}
         self.changes_made_by_set_all_tool_heaters_off = {}
+        self.saved_position = None
+        ######
 
 
-        self.log.trace("Toolchanger %s has configuration section: %s" % (self.name, config.get_name()))
-
-        # When initialized from another component it has no own config section.
-        # if not config.get_name().startswith("ktc_toolchanger"):
-        #     return None
-
-        self.name: str = config.get_name().split(" ", 1)[1]
+        # G-Code macros
+        gcode_macro = self.printer.load_object(config, "gcode_macro")
+        self.engage_gcode_template = gcode_macro.load_template(
+            config, "engage_gcode", ""
+        )
+        self.disengage_gcode_template = gcode_macro.load_template(
+            config, "disengage_gcode", ""
+        )
+        self.init_gcode_template = gcode_macro.load_template(
+            config, "tool_init_gcode", ""
+        )
 
         # Add itself to the list of toolchangers if not already added.
         if self.ktc.toolchangers.get(self.name) is None:
             self.ktc.toolchangers[self.name] = self
         else:
-            self.log.always(
+            raise Exception(
                 "KtcToolchanger: Toolchanger %s already registered." % self.name
             )
 
-        self.params = ktc.get_params_dict_from_config(config)
-
-        self.log.trace("KtcToolchanger: Loading config for %s." % self.name)
-        
-        self.init_printer_to_last_tool = config.getboolean(
-            "init_printer_to_last_tool", True
-        )
-
-        # G-Code macros
-        gcode_macro = self.printer.load_object(config, "gcode_macro")
-        self.tool_lock_gcode_template = gcode_macro.load_template(
-            config, "tool_lock_gcode", ""
-        )
-        self.tool_unlock_gcode_template = gcode_macro.load_template(
-            config, "tool_unlock_gcode", ""
-        )
-
         # Register handlers for events.
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
-        
 
     def handle_ready(self):
-        self.initialize_tool_lock()
+        if self.init_mode == INIT_MODE.ON_START:
+            self.initialize_tool_lock()
 
     def initialize_tool_lock(self):
-        if not self.init_printer_to_last_tool:
-            return None
+        context = self.init_gcode_template.create_template_context()
+        context['myself'] = self.get_status()
+        context['ktc'] = self.ktc.get_status()
+        self.pickup_gcode_template.run_gcode_from_command(context)
 
         active_tool_name = self.ktc_persistent.vars.get(
             "tool_current", ktc.TOOL_NONE.name
@@ -127,62 +117,50 @@ class KtcToolchanger:
 
         self.ktc.active_tool = self.active_tool
 
-        self.log.trace("KTC initialized with active tool: %s." % self.active_tool)
+        self.log.trace("KTC initialized with active tool: %s." % self.active_tool.name)
 
-        # TODO: Change this to use name instead of number.
         if self.active_tool == ktc.TOOL_NONE:
             self.disengage()
-            self.log.always("KTC initialized with unlocked ToolLock")
         else:
             self.engage(True)
             self.log.always(
-                "KTC initialized with KTC Tool %s." % self.ktc.active_tool.name
             )
 
         self.ktc.active_tool = self.active_tool
 
-    # cmd_KTC_TOOLCHANGER_ENGAGE_help = "Lock the ToolLock."
-    # def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd = None):
-    #     self.engage()
-
-    def engage(self, ignore_locked=False):
-        if self.tool_lock_gcode_template is None:
+    def engage(self, ignore_engaged=False):
+        if self.engage_gcode_template is None:
             self.log.always(
-                "ktc_toolchanger.engage(): No tool lock gcode template" +
-                " defined for ktc_toolchanger %s." % self.name
+                "ktc_toolchanger.engage(): No tool lock gcode template"
+                + " defined for ktc_toolchanger %s." % self.name
             )
             return None
 
         self.log.trace("ktc_toolchanger.engage() running. ")
-        if not ignore_locked and int(self.ktc.active_tool) != ktc.TOOL_NONE_N:
+        if not ignore_engaged and int(self.ktc.active_tool) != ktc.TOOL_NONE_N:
             self.log.always(
                 "ktc_toolchanger %s is already locked with tool %s."
                 % (self.name, self.ktc.active_tool.name)
             )
         else:
-            self.tool_lock_gcode_template.run_gcode_from_command()
+            self.engage_gcode_template.run_gcode_from_command()
             self.ktc.active_tool = ktc.TOOL_UNKNOWN
             self.log.trace("Tool Locked")
             self.log.total_stats.toollocks += 1
 
-    # cmd_KTC_TOOLCHANGER_DISENGAGE_help = "Unlock the ToolLock."
-    # def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd = None):
-    #     self.disengage()
-
     def disengage(self):
-        if self.tool_unlock_gcode_template is None:
+        if self.disengage_gcode_template is None:
             self.log.always(
-                "ktc_toolchanger.disengage(): No tool unlock gcode template" +
-                " defined for ktc_toolchanger %s." % self.name
+                "ktc_toolchanger.disengage(): No tool unlock gcode template"
+                + " defined for ktc_toolchanger %s." % self.name
             )
             return None
 
         self.log.trace("KTC_TOOLCHANGER_DISENGAGE running.")
-        self.tool_unlock_gcode_template.run_gcode_from_command()
+        self.disengage_gcode_template.run_gcode_from_command()
         self.ktc.active_tool = ktc.TOOL_NONE
         self.log.trace("ToolLock Unlocked.")
         self.log.total_stats.toolunlocks += 1
-
 
     def get_status(self, eventtime=None):
         status = {
@@ -198,13 +176,25 @@ class KtcToolchanger:
         }
         return status
 
+
 # @dataclasses.dataclass
-class KtcToolchangerStatus:
-    uninitialized = -1
-    initialized = 0
-    ready = 1
-    engaged = 2
+class STATUS:
+    """Constants for the status of the toolchanger."""
+    ERROR = -3
+    UNINITIALIZED = -2
+    INITIALIZING = -1
+    INITIALIZED = 0
+    READY = 1
+    CHANGING = 2
+    ENGAGING = 3
+    ENGAGED = 4
     
+    
+class INIT_MODE:
+    """Constants for the initialization mode of the toolchanger."""
+    MANUAL = "manual"
+    ON_START = "on_start"
+    ON_FIRST_USE = "on_first_use"
 
 def load_config_prefix(config):
     return KtcToolchanger(config)

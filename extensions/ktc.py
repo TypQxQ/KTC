@@ -249,28 +249,27 @@ class Ktc:
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
         "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd=None):
-        self._get_toolchanger_from_gcmd(gcmd).engage()
+        self.parse_gcmd_get_toolchanger(gcmd).engage()
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd=None):
-        self._get_toolchanger_from_gcmd(gcmd).disengage()
+        self.parse_gcmd_get_toolchanger(gcmd).disengage()
 
     # Returns the toolchanger object specified in the gcode command or the default toolchanger.
-    def _get_toolchanger_from_gcmd(self, gcmd):
+    def parse_gcmd_get_toolchanger(self, gcmd):
         tc_name = gcmd.get("TOOLCHANGER", None)
         
         if tc_name is None:
             tc = self.default_toolchanger
         else:
-            self.log.trace("KTC_TOOLCHANGER_DISENGAGE: Toolchanger: %s." % str(tc_name))
             tc: ktc_toolchanger.KtcToolchanger = self.printer.lookup_object(
                 "ktc_toolchanger " + tc_name, None
             )
             
             if tc is None:
                 raise self.printer.command_error(
-                    "KTC_TOOLCHANGER_DISENGAGE: Unknown toolchanger: %s." % str(tc_name)
+                    "Unknown TOOLCHANGER: %s." % str(tc_name)
                 )
         return tc
 
