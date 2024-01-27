@@ -74,9 +74,9 @@ Each tool has a id (name) (ktc_tool name) and a nr.
 
 
 
-# Mount: Tool is selected and loaded for use, be it a physical or a virtual on physical.
-    A parent tool is mounted but not selected when a child tool is selected.
-# Unmount: Tool is unselected and unloaded, be it a physical or a virtual on physical.
+# Select: Tool is selected and loaded for use, be it a physical or a virtual on physical.
+    When a child tool is selected it will be active on it's toolchanger and on ktc while the parent only on it's toolchanger.
+# Deselect: Tool is deselected and unloaded, be it a physical or a virtual on physical.
 
 # Pickup: Tool is physically picked up and attached to the toolchanger head.
 # Droppoff: Tool is physically parked and dropped of the toolchanger head.

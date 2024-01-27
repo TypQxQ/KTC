@@ -295,7 +295,7 @@ class KtcTool:
             self.log.always(msg)
             raise self.printer.command_error(msg)
         
-        self.log.tool_stats[self.name].toolmounts_started += 1
+        self.log.tool_stats[self.name].selects_started += 1
 
 
         if self.extruder is not None:               # If the new tool to be selected has an extruder prepare warmup before actual tool change so all unload commands will be done while heating up.

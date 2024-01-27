@@ -111,14 +111,6 @@ class Ktc:
     # This function is called when all objects are loaded, initialized and configured.
     def handle_connect(self):
         ############################
-        # Check if no toolchangers are defined. If so create a default one.
-        # The toolchanger init will add itself to the list of toolchangers.
-        # tcc = ktc_toolchanger.KtcToolchanger(self.config, name="default_toolchanger2")
-        tcc = self.printer.load_object(self.config, 'ktc_toolchanger default_toolchanger')
-        if len(self.toolchangers) == 0:
-            self.log.trace("No toolchangers defined. Creating default toolchanger.")
-            tc = ktc_toolchanger.KtcToolchanger(self.config, name="default_toolchanger")
-
         self._config_default_toolchanger()
         
         self._config_tools()
@@ -132,7 +124,7 @@ class Ktc:
     # This function is called when the printer is ready to print.
     def handle_ready(self):
         # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
-        self.tool_map = self.log.ktc_persistent.vars.get(VARS_KTC_TOOL_MAP, {})
+        self.tool_map = self.log.ktc_persistent.content.get(VARS_KTC_TOOL_MAP, {})
         self.tool_map = {}
 
         try:
@@ -144,6 +136,12 @@ class Ktc:
     # Validate default_toolchanger and set it to all tools that don't have toolchanger specified.
     def _config_default_toolchanger(self):
         ############################
+        # Check if no toolchangers are defined. If so create a default one.
+        # The toolchanger init will add itself to the list of toolchangers.
+        if len(self.toolchangers) == 0:
+            self.log.trace("No toolchangers defined. Creating default toolchanger.")
+            tc = self.printer.load_object(self.config, 'ktc_toolchanger default_toolchanger')
+
         # If Default_ToolChanger is defined, check if it is valid.
         if self.default_toolchanger is not None:
             if not isinstance(self.default_toolchanger, str):
@@ -272,6 +270,23 @@ class Ktc:
                     "Unknown TOOLCHANGER: %s." % str(tc_name)
                 )
         return tc
+
+    def parse_gcmd_get_tooln(self, gcmd):
+        tool_id = gcmd.get_int("TOOL", None, minval=0)
+
+        if tool_id is None:
+            tool_id = self.active_tool_n
+        if not int(tool_id) > TOOL_NONE_N:
+            self.log.always(
+                "parse_gcmd_get_tooln: Tool " + str(tool_id) + " is not valid."
+            )
+            return None
+        else:
+            # Check if the requested tool has been remaped to another one.
+            tool_is_remaped = self.tool_is_remaped(int(tool_id))
+            if tool_is_remaped > TOOL_NONE_N:
+                tool_id = tool_is_remaped
+        return tool_id
 
     cmd_KTC_DROPOFF_help = "Deselect all tools"
 
@@ -449,23 +464,6 @@ class Ktc:
             )
             self.log.always("Wait for heater " + heater_name + " complete.")
 
-    def get_tool_id_from_gcmd(self, gcmd):
-        tool_id = gcmd.get_int("TOOL", None, minval=0)
-
-        if tool_id is None:
-            tool_id = self.active_tool_n
-        if not int(tool_id) > TOOL_NONE_N:
-            self.log.always(
-                "get_tool_id_from_gcmd: Tool " + str(tool_id) + " is not valid."
-            )
-            return None
-        else:
-            # Check if the requested tool has been remaped to another one.
-            tool_is_remaped = self.tool_is_remaped(int(tool_id))
-            if tool_is_remaped > TOOL_NONE_N:
-                tool_id = tool_is_remaped
-        return tool_id
-
     cmd_KTC_SET_TOOL_TEMPERATURE_help = "Waits for all temperatures, or a specified (TOOL) tool or (HEATER) heater's temperature within (TOLERANCE) tolerance."
 
     #  Set tool temperature.
@@ -478,7 +476,7 @@ class Ktc:
     #  SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting off the heater, optional.
     #      Use for example 86400 to wait 24h if you want to disable shutdown timer.
     def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd):
-        tool_id = self.get_tool_id_from_gcmd(gcmd)
+        tool_id = self.parse_gcmd_get_tooln(gcmd)
         if tool_id is None:
             return
 
@@ -617,7 +615,7 @@ class Ktc:
     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
 
     def cmd_KTC_SET_TOOL_OFFSET(self, gcmd):
-        tool_id = self.get_tool_id_from_gcmd(gcmd)
+        tool_id = self.parse_gcmd_get_tooln(gcmd)
         if tool_id is None:
             return
 

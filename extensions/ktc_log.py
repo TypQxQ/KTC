@@ -64,7 +64,7 @@ class Ktc_Log:
         handlers = [
             'KTC_LOG_TRACE', 'KTC_LOG_DEBUG', 'KTC_LOG_INFO', 'KTC_LOG_ALWAYS', 
             'KTC_SET_LOG_LEVEL', 'KTC_DUMP_STATS', 'KTC_RESET_STATS',
-            'KTC_INIT_PRINT_STATS', 'KTC_DUMP_PRINT_STATS']
+            'KTC_INIT_PRINT_STATS', 'KTC_DUMP_PRINT_STATS', 'KTC_SAVE_STATS']
         for cmd in handlers:
             func = getattr(self, 'cmd_' + cmd)
             desc = getattr(self, 'cmd_' + cmd + '_help', None)
@@ -117,14 +117,14 @@ class Ktc_Log:
         self.trace("Loading persisted state.")
         
         # Load general statistics
-        loaded_stats : dict = self.ktc_persistent.vars.get("Statistics", {})
-        if loaded_stats is None or loaded_stats == {}:
-            self.debug("Did not find any saved statistics.")
+        loaded_stats : dict = self.ktc_persistent.content.get("Statistics", {})
+        if loaded_stats == {}:
+            self.debug("Did not find any saved statistics. Initialized empty.")
         
-        swap_stats_dict : dict = loaded_stats.get("swap", {})
+        swap_stats_dict : dict = loaded_stats.get("total", {})
         try:
-            if swap_stats_dict is None or swap_stats_dict == {}:
-                raise Exception("Couldn't find any saved statistics.")
+            if swap_stats_dict == {}:
+                self.debug("Couldn't find any saved total statistics.")
             
             for key, value in swap_stats_dict.items():
                 setattr(self.total_stats, key, value)
@@ -170,9 +170,12 @@ class Ktc_Log:
             self.ktc_persistent.save_variable("total", str(swap_stats_dict), section="Statistics")
             
             self.trace("_persist_statistics: Saving swap stats: %s" % swap_stats_dict)
+            
+            self.trace("tool_stats length: %s" % len(self.tool_stats))
 
             # Save tool statistics for each tool
-            for tid, tool in self.tool_stats:
+            for tid, tool in self.tool_stats.items():
+                self.trace("_persist_statistics: Saving tool stats for tool: %s" % tid)
                 # Convert to dict and remove the start_time_* variables so we don't save them
                 tool_dict = dataclasses.asdict(tool)
                 tool_dict = {k: v for k, v in tool_dict.items() if not k.startswith("start_time_")}
@@ -231,10 +234,12 @@ class Ktc_Log:
             seconds_to_human_string(s.time_spent_mounting))
         result += "\n%s spent unmounting tools" % (
             seconds_to_human_string(s.time_spent_unmounting))
-        result += "\n%d tool locks completed" % s.toollocks
-        result += "\n%d tool unlocks completed" % s.toolunlocks
-        result += "\n%d tool mounts completed" % s.toolmounts
-        result += "\n%d tool unmounts completed" % s.toolunmounts
+        if s.engages > 0:
+            result += "\n%d engages completed" % s.engages
+        if s.disengages > 0:
+            result += "\n%d disengages completed" % s.disengages
+        result += "\n%d tool selects completed" % s.selects
+        result += "\n%d tool deselectss completed" % s.deselects
         result += "\n------------\n"
         return result
 
@@ -242,19 +247,19 @@ class Ktc_Log:
     def _tool_stats_to_human_string(tid: str, t: Tool_Statistics) -> str:
         result = "Tool %s:\n" % (tid)
 
-        result += "Completed %d out of %d mounts in %s. Average of %s per toolmount.\n" % (
-            t.toolmounts_completed, t.toolmounts_started,
+        result += "Completed %d out of %d selects in %s. Average of %s per toolmount.\n" % (
+            t.selects_completed, t.selects_started,
             seconds_to_human_string(t.time_spent_mounting),
             seconds_to_human_string(division(
-                t.time_spent_mounting, t.toolmounts_completed)))
+                t.time_spent_mounting, t.selects_completed)))
         
         result += "Time spent mounting: %s\n" % seconds_to_human_string(t.time_spent_mounting)
 
-        result += "Completed %d out of %d unmounts in %s. Average of %s per toolunmount.\n" % (
-            t.toolunmounts_completed, t.toolunmounts_started,
+        result += "Completed %d out of %d deselectss in %s. Average of %s per toolunmount.\n" % (
+            t.deselects_completed, t.deselects_started,
             seconds_to_human_string(t.time_spent_unmounting),
             seconds_to_human_string(division(
-                t.time_spent_unmounting, t.toolunmounts_completed)))
+                t.time_spent_unmounting, t.deselects_completed)))
 
         result += "%s spent selected." % seconds_to_human_string(t.time_selected)
         
@@ -302,12 +307,12 @@ class Ktc_Log:
 
     def track_mount_start(self, tool_id: str):
         self.tool_stats[tool_id].start_time_spent_mounting = time.time()
-        self.tool_stats[tool_id].toolmounts_started += 1
+        self.tool_stats[tool_id].selects_started += 1
         
     def track_mount_end(self, tool_id: str):
         self.trace("track_mount_end: Running for Tool: %s." % (tool_id))
         self._increase_tool_time_diff(tool_id, "time_spent_mounting", "time_spent_mounting")
-        self.tool_stats[tool_id].toolmounts_completed += 1
+        self.tool_stats[tool_id].selects_completed += 1
         
         # start_time = self.tool_stats[tool_id].start_time_spent_mounting
         # if start_time is not None and start_time != 0:
@@ -320,7 +325,7 @@ class Ktc_Log:
 
     def track_unmount_start(self, tool_id: str):
         self.tool_stats[tool_id].start_time_unmount = time.time()
-        self.tool_stats[tool_id].toolunmounts_started += 1
+        self.tool_stats[tool_id].deselects_started += 1
 
     def track_unmount_end(self, tool_id):
         # self.trace("track_unmount_end: Running for Tool: %s." % (tool_id))
@@ -331,14 +336,14 @@ class Ktc_Log:
             self.tool_stats[tool_id].time_spent_unmounting += time_spent
             self.total_stats.time_spent_unmounting += time_spent
             self.tool_stats[tool_id].start_time_unmount = 0
-            self.tool_stats[tool_id].toolunmounts_completed += 1
-            self.total_stats.toolunmounts += 1
+            self.tool_stats[tool_id].deselects_completed += 1
+            self.total_stats.deselects += 1
             self._persist_statistics()
 
     def track_selected_tool_start(self, tool_id):
         self.tool_stats[str(tool_id)].start_time_selected = time.time()
-        self.tool_stats[str(tool_id)].toolmounts_completed += 1
-        self.total_stats.toolmounts += 1
+        self.tool_stats[str(tool_id)].selects_completed += 1
+        self.total_stats.selects += 1
 
     def track_selected_tool_end(self, tool_id):
         self._increase_tool_time_diff(tool_id, "time_selected")
@@ -360,6 +365,10 @@ class Ktc_Log:
 
 ### LOGGING AND STATISTICS FUNCTIONS GCODE FUNCTIONS
 
+    cmd_KTC_SAVE_STATS_help = "Save the KTC statistics"
+    def cmd_KTC_SAVE_STATS(self, gcmd):
+        self._persist_statistics()
+    
     cmd_KTC_RESET_STATS_help = "Reset the KTC statistics"
     def cmd_KTC_RESET_STATS(self, gcmd):
         param = gcmd.get('SURE', "no")
@@ -468,26 +477,28 @@ class KtcMultiLineFormatter(logging.Formatter):
 class Swap_Statistics:
     time_spent_mounting: int = 0
     time_spent_unmounting: int = 0
-    toollocks: int = 0
-    toolunlocks: int = 0
-    toolmounts: int = 0
-    toolunmounts: int = 0
+    engages: int = 0
+    disengages: int = 0
+    selects: int = 0
+    deselects: int = 0
 
 @dataclasses.dataclass
 class Changer_Statistics:
-    toollocks: int = 0
-    toolunlocks: int = 0
-    toolmounts: int = 0
-    toolunmounts: int = 0
+    engages: int = 0
+    disengages: int = 0
+    selects: int = 0
+    deselects: int = 0
     time_spent_mounting: int = 0
     time_spent_unmounting: int = 0
 
 @dataclasses.dataclass
 class Tool_Statistics:
-    toolmounts_completed: int = 0
-    toolunmounts_completed: int = 0
-    toolmounts_started: int = 0
-    toolunmounts_started: int = 0
+    selects_completed: int = 0
+    selects_completed: int = 0
+    deselects_completed: int = 0
+    deselects_completed: int = 0
+    selects_started: int = 0
+    deselects_started: int = 0
     time_selected: int = 0
     time_heater_active: int = 0
     time_heater_standby: int = 0

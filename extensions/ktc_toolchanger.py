@@ -98,14 +98,19 @@ class KtcToolchanger:
             self.initialize_tool_lock()
 
     def initialize_tool_lock(self):
+        """Initialize the tool lock."""
+        # Get the active tool from the persistent variables.
+        active_tool_name = self.ktc_persistent.content.get(
+            "tool_current", ktc.TOOL_NONE.name
+        )
+
+        # Run the init gcode template.
         context = self.init_gcode_template.create_template_context()
         context['myself'] = self.get_status()
         context['ktc'] = self.ktc.get_status()
         self.pickup_gcode_template.run_gcode_from_command(context)
 
-        active_tool_name = self.ktc_persistent.vars.get(
-            "tool_current", ktc.TOOL_NONE.name
-        )
+
         if active_tool_name == ktc.TOOL_NONE.name:
             self.active_tool = ktc.TOOL_NONE
         elif active_tool_name == ktc.TOOL_UNKNOWN.name:
@@ -146,7 +151,7 @@ class KtcToolchanger:
             self.engage_gcode_template.run_gcode_from_command()
             self.ktc.active_tool = ktc.TOOL_UNKNOWN
             self.log.trace("Tool Locked")
-            self.log.total_stats.toollocks += 1
+            self.log.total_stats.engages += 1
 
     def disengage(self):
         if self.disengage_gcode_template is None:
@@ -160,7 +165,7 @@ class KtcToolchanger:
         self.disengage_gcode_template.run_gcode_from_command()
         self.ktc.active_tool = ktc.TOOL_NONE
         self.log.trace("ToolLock Unlocked.")
-        self.log.total_stats.toolunlocks += 1
+        self.log.total_stats.disengages += 1
 
     def get_status(self, eventtime=None):
         status = {
