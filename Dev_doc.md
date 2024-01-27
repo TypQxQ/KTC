@@ -2,9 +2,16 @@ ktc.py has all common functions that need only initialized once.
     TOOL_UNKNOWN :  Special tool indicating stateunknown.
     TOOL_NONE :     Special tool when known state is that a toolchanger has no tool engaged.
 
+    params_*:   Aditional personizable options that can be used by macros.
+
+
 ktc_log.py is is initialized once and used for logging, statistics and saving persistant settings like offsets.
 
+
 ktc_toolchanger.py is initialized for each toolchanger system and can have a parent_tool.
+    Name:       is case sensitive and can contain spaces
+    params_*:   Aditional personizable options that can be used by macros.
+
     engage :        Function to engage the tool lock. Locking the tool
     disengage :     Function to disengage the tool lock. Unlocking the tool.
     engaged :       Bool to display state.
@@ -13,7 +20,10 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
     
 
 ktc_tool.py is initialized for each tool.
-    toolchanger Optional alternative. Uses default if not specified.
+    Name is case sensitive and can contain spaces
+    params_*:        Aditional personizable options that can be used by macros.
+    toolchanger:     Optional alternative. Uses default if not specified.
+    
     Offset is overwritten to persistant variable.
 
 

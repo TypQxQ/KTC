@@ -6,9 +6,16 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
+import dataclasses
 from . import ktc as ktc, ktc_persisting, ktc_log, ktc_tool
 
+
 class KtcToolchanger:
+    """Class initialized for each toolchanger.
+    At least one toolchanger will be initialized for each printer.
+    A "default_toolchanger" will be initialized if no toolchanger 
+    is specified in the config."""
+
     # Initialize general static class variables.
     printer = None
     reactor = None
@@ -18,6 +25,15 @@ class KtcToolchanger:
     ktc_persistent = None
 
     def __init__(self, config, name: str = None):
+        """_summary_
+
+        Args:
+            config (Klipper configuration): required for initialization.
+            name (str, optional): Name to use when called to add . Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         # Initialize general class variables if not already initialized.
         if KtcToolchanger.printer is None:
             self.printer = config.get_printer()
@@ -34,6 +50,7 @@ class KtcToolchanger:
         # Initialize object variables.
         self.name = name
         self.params = {}
+        self.status = KtcToolchangerStatus.uninitialized
         self.init_printer_to_last_tool = True
         self.tool_lock_gcode_template = None
         self.tool_unlock_gcode_template = None
@@ -51,9 +68,15 @@ class KtcToolchanger:
         self.last_endstop_query = {}
         self.changes_made_by_set_all_tool_heaters_off = {}
 
-        # Register handlers for events.
-        self.printer.register_event_handler("klippy:ready", self.handle_ready)
-        
+
+        self.log.trace("Toolchanger %s has configuration section: %s" % (self.name, config.get_name()))
+
+        # When initialized from another component it has no own config section.
+        # if not config.get_name().startswith("ktc_toolchanger"):
+        #     return None
+
+        self.name: str = config.get_name().split(" ", 1)[1]
+
         # Add itself to the list of toolchangers if not already added.
         if self.ktc.toolchangers.get(self.name) is None:
             self.ktc.toolchangers[self.name] = self
@@ -62,25 +85,26 @@ class KtcToolchanger:
                 "KtcToolchanger: Toolchanger %s already registered." % self.name
             )
 
-        # If not called with a specific name, then load the config.
-        if name is None:
-            self.name: str = config.get_name().split(" ", 1)[1]
-            self.params = ktc.get_params_dict(config)
+        self.params = ktc.get_params_dict_from_config(config)
 
-            self.log.trace("KtcToolchanger: Loading config for %s." % self.name)
-            
-            self.init_printer_to_last_tool = config.getboolean(
-                "init_printer_to_last_tool", True
-            )
+        self.log.trace("KtcToolchanger: Loading config for %s." % self.name)
+        
+        self.init_printer_to_last_tool = config.getboolean(
+            "init_printer_to_last_tool", True
+        )
 
-            # G-Code macros
-            gcode_macro = self.printer.load_object(config, "gcode_macro")
-            self.tool_lock_gcode_template = gcode_macro.load_template(
-                config, "tool_lock_gcode", ""
-            )
-            self.tool_unlock_gcode_template = gcode_macro.load_template(
-                config, "tool_unlock_gcode", ""
-            )
+        # G-Code macros
+        gcode_macro = self.printer.load_object(config, "gcode_macro")
+        self.tool_lock_gcode_template = gcode_macro.load_template(
+            config, "tool_lock_gcode", ""
+        )
+        self.tool_unlock_gcode_template = gcode_macro.load_template(
+            config, "tool_unlock_gcode", ""
+        )
+
+        # Register handlers for events.
+        self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        
 
     def handle_ready(self):
         self.initialize_tool_lock()
@@ -174,7 +198,13 @@ class KtcToolchanger:
         }
         return status
 
-
+# @dataclasses.dataclass
+class KtcToolchangerStatus:
+    uninitialized = -1
+    initialized = 0
+    ready = 1
+    engaged = 2
+    
 
 def load_config_prefix(config):
     return KtcToolchanger(config)

@@ -55,7 +55,7 @@ class Ktc:
         self.log.trace("KTC: Default toolchanger: %s." % str(self.default_toolchanger))
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
-        self.params = get_params_dict(config)
+        self.params = get_params_dict_from_config(config)
 
         self.tool_map = {}
         self.last_endstop_query = {}
@@ -113,6 +113,8 @@ class Ktc:
         ############################
         # Check if no toolchangers are defined. If so create a default one.
         # The toolchanger init will add itself to the list of toolchangers.
+        # tcc = ktc_toolchanger.KtcToolchanger(self.config, name="default_toolchanger2")
+        tcc = self.printer.load_object(self.config, 'ktc_toolchanger default_toolchanger')
         if len(self.toolchangers) == 0:
             self.log.trace("No toolchangers defined. Creating default toolchanger.")
             tc = ktc_toolchanger.KtcToolchanger(self.config, name="default_toolchanger")
@@ -993,8 +995,14 @@ def ktc_parse_restore_type(restore_type: str, default: str = None) -> str:
     # Parses a string into a list of floats.
 
 
-def get_params_dict(config):
+def get_params_dict_from_config(config):
     result = {}
+
+    # If the section doesn't exist inside the config,
+    # don't try to set any params or it will throw an error.
+    if not config.has_section(config.get_name()):
+        return result
+    
     for option in config.get_prefix_options("params_"):
         try:
             result[option] = ast.literal_eval(config.get(option))
