@@ -95,10 +95,16 @@ class KtcToolchanger:
 
     def handle_ready(self):
         if self.init_mode == INIT_MODE.ON_START:
-            self.initialize_tool_lock()
+            self.initialize()
 
-    def initialize_tool_lock(self):
+    def initialize(self):
         """Initialize the tool lock."""
+        if self.status > STATUS.UNINITIALIZED:
+            self.log.always(
+                "ktc_toolchanger.initialize(): Toolchanger %s already initialized." % self.name
+            )
+            return None
+        
         # Get the active tool from the persistent variables.
         active_tool_name = self.ktc_persistent.content.get(
             "tool_current", ktc.TOOL_NONE.name
@@ -193,7 +199,8 @@ class STATUS:
     CHANGING = 2
     ENGAGING = 3
     ENGAGED = 4
-    
+    def get_name(self, status):
+        return next((key for key, value in dataclasses.asdict(self) if value == status), None)
     
 class INIT_MODE:
     """Constants for the initialization mode of the toolchanger."""

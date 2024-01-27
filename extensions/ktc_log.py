@@ -20,8 +20,8 @@ class Ktc_Log:
     def __init__(self, config):
         # Initialize object variables
         self.config = config
-        self.gcode = config.get_printer().lookup_object('gcode')
         self.printer = config.get_printer()
+        self.gcode = self.printer.lookup_object('gcode')
 
         # Register event handlers
         self.printer.register_event_handler('klippy:connect', self.handle_connect)
@@ -52,8 +52,10 @@ class Ktc_Log:
             
         # Statistics variables
         self.total_stats = Swap_Statistics()
-        self.print_stats = Swap_Statistics()
+        self.changer_stats: dict[str, Changer_Statistics] = {}
         self.tool_stats : dict[str, Tool_Statistics] = {}
+        self.print_stats = Swap_Statistics()
+        self.print_changer_stats: dict[str, Changer_Statistics] = {}
         self.print_tool_stats : dict[str, Tool_Statistics] = {}
 
     def handle_connect(self):
@@ -364,7 +366,7 @@ class Ktc_Log:
         self._persist_statistics()
 
 ### LOGGING AND STATISTICS FUNCTIONS GCODE FUNCTIONS
-
+    # TODO: Remove this function after a while
     cmd_KTC_SAVE_STATS_help = "Save the KTC statistics"
     def cmd_KTC_SAVE_STATS(self, gcmd):
         self._persist_statistics()

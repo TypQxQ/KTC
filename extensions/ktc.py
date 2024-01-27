@@ -244,6 +244,11 @@ class Ktc:
     def active_tool_n(self) -> int:
         return self.__active_tool.number
 
+    cmd_KTC_TOOLCHANGER_INITIALIZE_help = ( "Initialize the toolchanger before use."
+        + "from place. [TOOLCHANGER: Default_ToolChanger]" )
+    def cmd_KTC_TOOLCHANGER_INITIALIZE(self, gcmd=None):
+        self.parse_gcmd_get_toolchanger(gcmd).initialize()
+
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
         "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd=None):

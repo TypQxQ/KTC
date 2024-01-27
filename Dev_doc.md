@@ -36,6 +36,8 @@ ktc_tool.py is initialized for each tool.
 
 
 ToDo:
+    Lägg till stats för varje toolchanger.
+
     ktc_persisting sparar innnan den hämtar nya. Både statistik och active_tool.
     KTC_SAVE_VARIABLES_FILENAME och KTC_SAVE_VARIABLES_DELAY borde laddas från config filen när de finns.
 
