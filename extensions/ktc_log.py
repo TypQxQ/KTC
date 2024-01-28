@@ -138,40 +138,41 @@ class Ktc_Log:
         self.trace("_load_persisted_state: Loading changer stats.")
         # Load tool statistics
 
-        self.changer_stats = self._get_persisted_section('ktc_tool_changer', Changer_Statistics)
+        self.changer_stats = self._get_persisted_items('Statistics', 'ktc_tool_changer', Changer_Statistics )
+        self.changer_stats = self._get_persisted_items('Statistics', 'ktc_tool', Changer_Statistics )
 
-        self.trace("_load_persisted_state: Loading tool stats.")
-        # Load tool statistics
-        self.tool_stats = {}
-        for tool in self.printer.lookup_objects('ktc_tool'):
-            try:
-                toolname=str(tool[0])
-                toolname=toolname.split(" ", 1)[1]
+        # self.trace("_load_persisted_state: Loading tool stats.")
+        # # Load tool statistics
+        # self.tool_stats = {}
+        # for tool in self.printer.lookup_objects('ktc_tool'):
+        #     try:
+        #         toolname=str(tool[0])
+        #         toolname=toolname.split(" ", 1)[1]
                 
-                self.tool_stats[toolname] = Tool_Statistics()
+        #         self.tool_stats[toolname] = Tool_Statistics()
                 
-                tool_stats_dict : dict[str, Tool_Statistics] = loaded_stats.get("tool_%s" % toolname, {})
+        #         tool_stats_dict : dict[str, Tool_Statistics] = loaded_stats.get("tool_%s" % toolname, {})
 
-                if tool_stats_dict is None or tool_stats_dict == {}:
-                    raise Exception("Couldn't find any saved tool stats for tool_.%s" % toolname)
+        #         if tool_stats_dict is None or tool_stats_dict == {}:
+        #             raise Exception("Couldn't find any saved tool stats for tool_.%s" % toolname)
                 
-                for key, value in tool_stats_dict.items():
-                    if hasattr(self.tool_stats[toolname], key):
-                        setattr(self.tool_stats[toolname], key, value)
+        #         for key, value in tool_stats_dict.items():
+        #             if hasattr(self.tool_stats[toolname], key):
+        #                 setattr(self.tool_stats[toolname], key, value)
                 
-                #  Backwards compatibility. delete this after a while
-                self.tool_stats[toolname].time_spent_mounting = tool_stats_dict.get("total_time_spent_mounting", 0)
-                self.tool_stats[toolname].time_spent_unmounting = tool_stats_dict.get("total_time_spent_unmounting", 0)
+        #         #  Backwards compatibility. delete this after a while
+        #         self.tool_stats[toolname].time_spent_mounting = tool_stats_dict.get("total_time_spent_mounting", 0)
+        #         self.tool_stats[toolname].time_spent_unmounting = tool_stats_dict.get("total_time_spent_unmounting", 0)
                 
         
-            except Exception as e:
-                self.debug("Unexpected error while loading persistent tool stats: %s" % str(e))
-                self.debug("Resetting tool stats for tool: %s" % toolname)
-                self.tool_stats[toolname] = Tool_Statistics()
-        self.trace("_load_persisted_state: Done loading tool stats.")
+        #     except Exception as e:
+        #         self.debug("Unexpected error while loading persistent tool stats: %s" % str(e))
+        #         self.debug("Resetting tool stats for tool: %s" % toolname)
+        #         self.tool_stats[toolname] = Tool_Statistics()
+        # self.trace("_load_persisted_state: Done loading tool stats.")
 
-    def _get_persisted_section(self, section: str, item_type: str, Stat_Type):
-        self.trace("_get_persisted_section: Loading %s stats." % section)
+    def _get_persisted_items(self, section: str, item_type: str, Stat_Type):
+        self.trace("_get_persisted_items: Loading %s stats." % section)
 
         loaded_stats : dict = self.ktc_persistent.content.get(section, {})
         if loaded_stats == {}:
@@ -184,7 +185,7 @@ class Ktc_Log:
                 
                 items[item_name] = Stat_Type()
                 
-                item_dict : dict[str, Tool_Statistics] = loaded_stats.get("tool_%s" % item_name, {})
+                item_dict = loaded_stats.get("tool_%s" % item_name, {})
 
                 if item_dict == {}:
                     raise("Couldn't find the item %s in the saved %s section." % (item_name, section))
@@ -198,8 +199,6 @@ class Ktc_Log:
                 self.debug("Resetting section %s stats for item: %s" % (section, item_name))
                 items[item_name] = Stat_Type()
         self.trace("_load_persisted_state: Done loading tool stats.")
-                
-
 
     # This could be optimized to only save for the changed tool and not iterate over all tools but it's not a big deal
     def _persist_statistics(self):
@@ -208,93 +207,120 @@ class Ktc_Log:
             swap_stats_dict = dataclasses.asdict(self.total_stats)
             self.ktc_persistent.save_variable("total", str(swap_stats_dict), section="Statistics")
             
-            self.trace("_persist_statistics: Saving swap stats: %s" % swap_stats_dict)
+            self._set_persisted_items("Statistics", "ktc_tool_changer", self.changer_stats)
+            self._set_persisted_items("Statistics", "ktc_tool", self.tool_stats)
             
-            self.trace("tool_stats length: %s" % len(self.tool_stats))
+            # # Save tool statistics for each tool
+            # for tid, tool in self.tool_stats.items():
+            #     self.trace("_persist_statistics: Saving tool stats for tool: %s" % tid)
+            #     # Convert to dict and remove the start_time_* variables so we don't save them
+            #     tool_dict = dataclasses.asdict(tool)
+            #     tool_dict = {k: v for k, v in tool_dict.items() if not k.startswith("start_time_")}
 
-            # Save tool statistics for each tool
-            for tid, tool in self.tool_stats.items():
-                self.trace("_persist_statistics: Saving tool stats for tool: %s" % tid)
-                # Convert to dict and remove the start_time_* variables so we don't save them
-                tool_dict = dataclasses.asdict(tool)
-                tool_dict = {k: v for k, v in tool_dict.items() if not k.startswith("start_time_")}
-
-                # Save the tool statistics
-                self.ktc_persistent.save_variable("tool_%s" % tid, 
-                                                  str(tool_dict),
-                                                  section="Statistics")
+            #     # Save the tool statistics
+            #     self.ktc_persistent.save_variable("tool_%s" % tid, 
+            #                                       str(tool_dict),
+            #                                       section="Statistics")
         except Exception as e:
             self.debug("Unexpected error whiles saving variables in _persist_statistics: %s" % e)
+
+    def _set_persisted_items(self, section: str, item_type: str, items: dict[str, Tool_Statistics]):
+        try:
+            # Save tool statistics for each tool
+            for item_name, item in items.items():
+                self.trace("_persist_statistics: Saving %s stats for item: %s" % (section, item_name))
+                # Convert to dict and remove the start_time_* variables so we don't save them
+                item_dict = dataclasses.asdict(item)
+                item_dict = {k: v for k, v in item_dict.items() if not k.startswith("start_time_")}
+
+                # Save the tool statistics
+                self.ktc_persistent.save_variable(item_type + "_%s" % item_name,
+                                                  str(item_dict),
+                                                  section=section)
+        except Exception as e:
+            self.debug("Unexpected error whiles saving %s in %s: %s. Not saved." % (item_type, section, e))
 
     def _reset_statistics(self):
         self.debug("Reseting KTC statistics.")
         self.total_stats = Swap_Statistics()
 
+        self.changer_stats : dict[str, Changer_Statistics] = {}
+        for changer in self.printer.lookup_objects('ktc_tool_changer'):
+            self.changer_stats[str(changer[0]).split(" ", 1)[1]] = Changer_Statistics()
+        
         self.tool_stats : dict[str, Tool_Statistics] = {}
         for tool in self.printer.lookup_objects('ktc_tool'):
-            try:
-                toolname=str(tool[0])
-                toolname=toolname.split(" ", 1)[1]
-                
-                self.tool_stats[toolname] = Tool_Statistics()
-
-            except Exception as e:
-                self.debug("Unexpected error while reseting tool statistics: %s" % e)
+            self.tool_stats[str(tool[0]).split(" ", 1)[1]] = Tool_Statistics()
 
     def _reset_print_statistics(self):
         self.print_stats = copy.deepcopy(self.total_stats)
+        self.print_changer_stats = copy.deepcopy(self.changer_stats)
         self.print_tool_stats = copy.deepcopy(self.tool_stats)
 
     def _dump_statistics(self):
         msg = "KTC Total Statistics:\n"
-        msg += self._stats_to_human_string(self.total_stats)
+        msg += self._changer_stats_to_human_string(self.total_stats)
+
+        msg += "Changer Statistics:\n"
+        sorted_items = natural_keys_sorting(self.changer_stats.keys())
+        for id in sorted_items:
+            msg += self._changer_stats_to_human_string(id, self.changer_stats[id])
 
         msg += "Tool Statistics:\n"
-
         sorted_tools = natural_keys_sorting(self.tool_stats.keys())
         for tid in sorted_tools:
-            msg += self._tool_stats_to_human_string(tid, self.tool_stats[tid])
+            msg += self._tool_stats_to_human_string(tid)
 
         self.always(msg)
 
     def _dump_print_statistics(self):
         msg = "KTC Statistics for this print:\n"
-        msg += self._stats_to_human_string(self.print_stats)
+        msg += self._changer_stats_to_human_string(self.print_stats)
+
+        msg += "Changer Statistics:\n"
+        sorted_items = natural_keys_sorting(self.print_changer_stats.keys())
+        for id in sorted_items:
+            msg += self._changer_stats_to_human_string(id, self.print_changer_stats[id])
 
         msg += "Tool Statistics for this print:\n"
-
-        sorted_tools = natural_keys_sorting(self.print_tool_stats.keys())
-        for tid in sorted_tools:
-            msg += self._tool_stats_to_human_string(tid, self.print_tool_stats[tid])
+        sorted_items = natural_keys_sorting(self.print_tool_stats.keys())
+        for id in sorted_items:
+            msg += self._changer_stats_to_human_string(id, self.print_tool_stats[id])
                 
     @staticmethod
-    def _stats_to_human_string(s: Swap_Statistics) -> str:
-        result = "\n%s spent mounting tools" % (
-            seconds_to_human_string(s.time_spent_mounting))
-        result += "\n%s spent unmounting tools" % (
-            seconds_to_human_string(s.time_spent_unmounting))
+    def _changer_stats_to_human_string(s: Changer_Statistics) -> str:
+        if s.time_spent_mounting > 0:
+            result = "\n%s spent mounting tools" % (
+                seconds_to_human_string(s.time_spent_mounting))
+        if s.time_spent_unmounting > 0:
+            result += "\n%s spent unmounting tools" % (
+                seconds_to_human_string(s.time_spent_unmounting))
         if s.engages > 0:
             result += "\n%d engages completed" % s.engages
         if s.disengages > 0:
             result += "\n%d disengages completed" % s.disengages
-        result += "\n%d tool selects completed" % s.selects
-        result += "\n%d tool deselectss completed" % s.deselects
+        if s.selects > 0:
+            result += "\n%d tool selects completed" % s.selects
+        if s.deselects > 0:
+            result += "\n%d tool deselectss completed" % s.deselects
         result += "\n------------\n"
         return result
 
-    @staticmethod
-    def _tool_stats_to_human_string(tid: str, t: Tool_Statistics) -> str:
+    def _tool_stats_to_human_string(self, tid: str) -> str:
+        t = self.tool_stats[tid]
         result = "Tool %s:\n" % (tid)
 
-        result += "Completed %d out of %d selects in %s. Average of %s per toolmount.\n" % (
+        result += "Selects %d/%d completed in %s. (%s/select).\n" % (
+        # result += "Completed %d out of %d selects in %s. Average of %s per toolmount.\n" % (
             t.selects_completed, t.selects_started,
             seconds_to_human_string(t.time_spent_mounting),
             seconds_to_human_string(division(
                 t.time_spent_mounting, t.selects_completed)))
         
-        result += "Time spent mounting: %s\n" % seconds_to_human_string(t.time_spent_mounting)
+        # result += "Time spent mounting: %s\n" % seconds_to_human_string(t.time_spent_mounting)
 
-        result += "Completed %d out of %d deselectss in %s. Average of %s per toolunmount.\n" % (
+        result += "Deselects %d/%d completed in %s. (%s/deselect).\n" % (
+        # result += "Completed %d out of %d deselectss in %s. Average of %s per toolunmount.\n" % (
             t.deselects_completed, t.deselects_started,
             seconds_to_human_string(t.time_spent_unmounting),
             seconds_to_human_string(division(
@@ -302,10 +328,14 @@ class Ktc_Log:
 
         result += "%s spent selected." % seconds_to_human_string(t.time_selected)
         
-        if t.time_heater_active > 0 or t.time_heater_standby > 0:
-            result += " %s with active heater and %s with standby heater." % (
-                seconds_to_human_string(t.time_heater_active),
+        if t.time_heater_active > 0:
+            result += " %s with active heater" % (
+                seconds_to_human_string(t.time_heater_active))
+        
+        if t.time_heater_standby > 0:
+            result += ", %s with standby heater" % (
                 seconds_to_human_string(t.time_heater_standby))
+        result += "."
         
         result += "\n------------\n"
         return result
