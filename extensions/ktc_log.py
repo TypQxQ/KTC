@@ -11,7 +11,12 @@
 from __future__ import annotations  # To reference the class itself in type hints
 import logging, threading, queue, time, ast, dataclasses
 import math, os.path, copy, re
-from . import ktc_persisting
+
+# Do not import at runtime.
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from . import ktc_persisting
+
 
 ####################################
 # Main Logging Class for KTC       #
