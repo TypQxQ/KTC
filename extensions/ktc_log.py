@@ -11,11 +11,7 @@
 from __future__ import annotations  # To reference the class itself in type hints
 import logging, threading, queue, time, ast, dataclasses
 import math, os.path, copy, re
-
-# Do not import at runtime.
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from . import ktc_persisting
+from . import ktc_persisting
 
 
 ####################################
@@ -139,6 +135,11 @@ class Ktc_Log:
         except Exception as e:
             self.debug("Unexpected error while loading persistent swap stats: %s" % e)
         
+        self.trace("_load_persisted_state: Loading changer stats.")
+        # Load tool statistics
+
+        self.changer_stats = self._get_persisted_section('ktc_tool_changer', Changer_Statistics)
+
         self.trace("_load_persisted_state: Loading tool stats.")
         # Load tool statistics
         self.tool_stats = {}
@@ -168,6 +169,37 @@ class Ktc_Log:
                 self.debug("Resetting tool stats for tool: %s" % toolname)
                 self.tool_stats[toolname] = Tool_Statistics()
         self.trace("_load_persisted_state: Done loading tool stats.")
+
+    def _get_persisted_section(self, section: str, item_type: str, Stat_Type):
+        self.trace("_get_persisted_section: Loading %s stats." % section)
+
+        loaded_stats : dict = self.ktc_persistent.content.get(section, {})
+        if loaded_stats == {}:
+            self.debug("Did not find a saved %s section. Initialized empty." % section)
+
+        items = {}
+        for item in self.printer.lookup_objects(item_type):
+            try:
+                item_name=str(item[0]).split(" ", 1)[1]
+                
+                items[item_name] = Stat_Type()
+                
+                item_dict : dict[str, Tool_Statistics] = loaded_stats.get("tool_%s" % item_name, {})
+
+                if item_dict == {}:
+                    raise("Couldn't find the item %s in the saved %s section." % (item_name, section))
+                
+                for key, value in item_dict.items():
+                    if hasattr(items[item_name], key):
+                        setattr(items[item_name], key, value)
+               
+            except Exception as e:
+                self.debug("Error while loading persistent section %s stats: %s" % (section, str(e)))
+                self.debug("Resetting section %s stats for item: %s" % (section, item_name))
+                items[item_name] = Stat_Type()
+        self.trace("_load_persisted_state: Done loading tool stats.")
+                
+
 
     # This could be optimized to only save for the changed tool and not iterate over all tools but it's not a big deal
     def _persist_statistics(self):
