@@ -374,14 +374,16 @@ class Ktc_Log:
             # Handle any exceptions that occur during the process
             print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
 
-    def track_mount_start(self, tool_id: str):
-        self.tool_stats[tool_id].start_time_spent_mounting = time.time()
-        self.tool_stats[tool_id].selects_started += 1
+    def track_select_start(self, tool):
+        self.tool_stats[tool.name].start_time_spent_mounting = time.time()
+        self.tool_stats[tool.name].selects_started += 1
+        self.changer_stats[tool.toolchanger.name].selects_started += 1
         
-    def track_mount_end(self, tool_id: str):
-        self.trace("track_mount_end: Running for Tool: %s." % (tool_id))
+    def track_select_end(self, tool_id: str):
+        self.trace("track_select_end: Running for Tool: %s." % (tool_id))
         self._increase_tool_time_diff(tool_id, "time_spent_mounting", "time_spent_mounting")
         self.tool_stats[tool_id].selects_completed += 1
+        self.changer_stats[tool_id].selects += 1
         
         # start_time = self.tool_stats[tool_id].start_time_spent_mounting
         # if start_time is not None and start_time != 0:
@@ -392,15 +394,15 @@ class Ktc_Log:
         
         self._persist_statistics()
 
-    def track_unmount_start(self, tool_id: str):
+    def track_deselect_start(self, tool_id: str):
         self.tool_stats[tool_id].start_time_unmount = time.time()
         self.tool_stats[tool_id].deselects_started += 1
 
-    def track_unmount_end(self, tool_id):
-        # self.trace("track_unmount_end: Running for Tool: %s." % (tool_id))
+    def track_deselect_end(self, tool_id):
+        # self.trace("track_deselect_end: Running for Tool: %s." % (tool_id))
         start_time = self.tool_stats[tool_id].start_time_unmount
         if start_time is not None and start_time != 0:
-            # self.trace("track_unmount_end: start_time is not None for Tool: %s." % (tool_id))
+            # self.trace("track_deselect_end: start_time is not None for Tool: %s." % (tool_id))
             time_spent = time.time() - start_time
             self.tool_stats[tool_id].time_spent_unmounting += time_spent
             self.total_stats.time_spent_unmounting += time_spent

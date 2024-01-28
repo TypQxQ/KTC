@@ -377,7 +377,7 @@ class KtcTool:
 
 
     def Pickup(self):
-        self.log.track_mount_start(self.name)                 # Log the time it takes for tool mount.
+        self.log.track_select_start(self)                 # Log the time it takes for tool mount.
 
         # Check if homed
         if not self.ktc.printer_is_homed_for_toolchange():
@@ -424,7 +424,7 @@ class KtcTool:
         else:
             self.log.always("T%d picked up." % (self.number))
 
-        self.log.track_mount_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
+        self.log.track_select_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def Dropoff(self, force_virtual_unload = False):
         self.log.always("Dropoff: T%s - Running." % str(self.number))
@@ -450,7 +450,7 @@ class KtcTool:
                 self.log.info("Dropoff: T" + str(self.number) + "- Virtual - Running UnloadVirtual")
                 self.UnloadVirtual()
 
-        self.log.track_unmount_start(self.name)                 # Log the time it takes for tool change.
+        self.log.track_deselect_start(self.name)                 # Log the time it takes for tool change.
         # Run the gcode for dropoff.
         try:
             context = self.dropoff_gcode_template.create_template_context()
@@ -461,12 +461,12 @@ class KtcTool:
             raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
 
         self.ktc.active_tool = ktc.TOOL_NONE                 # Dropoff successfull
-        self.log.track_unmount_end(self.name)                 # Log the time it takes for tool change.
+        self.log.track_deselect_end(self.name)                 # Log the time it takes for tool change.
 
 
     def LoadVirtual(self):
         self.log.info("Loading virtual tool: T%d." % self.number)
-        self.log.track_mount_start(self.name)                 # Log the time it takes for tool mount.
+        self.log.track_select_start(self)                 # Log the time it takes for tool mount.
 
         # Run the gcode for Virtual Load.
         try:
@@ -484,7 +484,7 @@ class KtcTool:
         # Save current picked up tool and print on screen.
         self.ktc.active_tool = self
         self.log.trace("Virtual T%d Loaded" % (self.number))
-        self.log.track_mount_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
+        self.log.track_select_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def set_virtual_loaded(self, value = -1):
         self.virtual_loaded = value
@@ -493,7 +493,7 @@ class KtcTool:
 
     def UnloadVirtual(self):
         self.log.info("Unloading virtual tool: T%d." % self.number)
-        self.log.track_unmount_start(self.name)                 # Log the time it takes for tool unload.
+        self.log.track_deselect_start(self.name)                 # Log the time it takes for tool unload.
 
         # Run the gcode for Virtual Unload.
         try:
@@ -511,7 +511,7 @@ class KtcTool:
         self.ktc.active_tool = self
         self.log.trace("Virtual T%d Unloaded" % (int(self.number)))
 
-        self.log.track_unmount_end(self.name)                 # Log the time it takes for tool unload. 
+        self.log.track_deselect_end(self.name)                 # Log the time it takes for tool unload. 
 
     def set_offset(self, **kwargs):
         for i in kwargs:
