@@ -10,7 +10,7 @@
 
 from __future__ import annotations  # To reference the class itself in type hints
 import logging, threading, queue, time, ast, dataclasses
-import math, os.path, copy, re
+import math, os.path, copy, re, operator
 from . import ktc_persisting
 
 
@@ -344,42 +344,47 @@ class Ktc_Log:
                 seconds_to_human_string(division(
                     sum_stats["time_spent_deselecting"], sum_stats["deselects_completed"])))
 
-        ############################## Test Engages/Disengages
-        self.trace("_changer_stats_to_human_string for %s: engages: %d, disengages: %d" % (
-            changer_name, self.changer_stats[changer_name].engages, self.changer_stats[changer_name].disengages))
+        ############################## Engages/Disengages
+        changer_stats : Changer_Statistics = None
+        if not since_print_start:
+            changer_stats = self.changer_stats[changer_name]
+        else:
+            changer_stats = self.changer_stats[changer_name] - self.print_changer_stats[changer_name]
         
-        if self.changer_stats[changer_name].engages > 0:
-            result += "\n%s engages " % bignumber_to_human_string(self.changer_stats[changer_name].engages)
+        if changer_stats.engages > 0:
+            result += "\n%s engages " % bignumber_to_human_string(changer_stats.engages)
 
-        if self.changer_stats[changer_name].engages > 0 and self.changer_stats[changer_name].disengages > 0:
+        if changer_stats.engages > 0 and changer_stats.disengages > 0:
             result += " and "
-        elif self.changer_stats[changer_name].disengages > 0:
+        elif changer_stats.disengages > 0:
             result += "\n"
-        elif self.changer_stats[changer_name].engages > 0:
+        elif changer_stats.engages > 0:
             result += "."
             
-        if self.changer_stats[changer_name].disengages > 0:
-            result += "%d disengages completed" % self.changer_stats[changer_name].disengages
-        ##############################
-    
-        
+        if changer_stats.disengages > 0:
+            result += "%d disengages completed" % changer_stats.disengages
 
-        # if sum_stats["selects_completed"] > 0:
-        #     result += "\n%s/%s tool selects completed (%.1f%%)" % (
-        #         bignumber_to_human_string(sum_stats["selects_completed"]), 
-        #         bignumber_to_human_string(sum_stats["selects_started"]),
-        #         (sum_stats["selects_completed"] / sum_stats["selects_started"] * 100))
-        # if sum_stats["deselects_completed"] > 0:
-        #     result += "\n%s/%s tool deselectss completed (%.1f%%)" % (
-        #         bignumber_to_human_string(sum_stats["deselects_completed"]), 
-        #         bignumber_to_human_string(sum_stats["deselects_started"]),
-        #         (sum_stats["deselects_completed"] / sum_stats["deselects_started"] * 100))
+        ############################## Final
         result += "\n------------\n"
         return result
 
     def _sum_tool_stats_for_changer(self, changer_name: str, since_print_start = False) -> dict:
         """Add up all tool stats for a changer and return a dict with the sum.
         If since_print_start is True, subtract the print stats from the total stats"""
+        
+        result : Tool_Statistics = Tool_Statistics()
+        
+        for tool_name, tool in self.printer.lookup_object('ktc_toolchanger %s' % changer_name).tools.items():
+            result += self.tool_stats[tool_name]
+        
+            if since_print_start:
+                result -= self.print_tool_stats[tool_name]
+        
+        return dataclasses.asdict(result)
+        
+        
+        
+        
         result = {
             "selects_completed": 0,
             "deselects_completed": 0,
@@ -635,41 +640,37 @@ class KtcQueueListener(logging.handlers.TimedRotatingFileHandler):
         self.bg_thread.join()
 
 ####################################
-# MultiLineFormater                #
-####################################
-# Class to improve formatting of multi-line KTC messages
-class KtcMultiLineFormatter(logging.Formatter):
-    def format(self, record):
-        indent = ' ' * 9
-        lines = super(KtcMultiLineFormatter, self).format(record)
-        return lines.replace('\n', '\n' + indent)
-
-####################################
 # Statistics Data Classes          #
 ####################################
+# TODO: Remove after removing use
 @dataclasses.dataclass
 class Swap_Statistics:
+    """Old statistics for all tool changers"""
     time_spent_selecting: int = 0
     time_spent_deselecting: int = 0
     engages: int = 0
     disengages: int = 0
     selects: int = 0
     deselects: int = 0
+    def __add__(self, other):
+        return _add_subtract_stat(self, other, operator.add)
+    def __sub__(self, other):
+        return _add_subtract_stat(self, other, operator.sub)
 
 @dataclasses.dataclass
 class Changer_Statistics:
+    """Statistics for a tool changer"""
     engages: int = 0
     disengages: int = 0
-    selects: int = 0
-    deselects: int = 0
-    time_spent_selecting: int = 0
-    time_spent_deselecting: int = 0
+    def __add__(self, other):
+        return _add_subtract_stat(self, other, operator.add)
+    def __sub__(self, other):
+        return _add_subtract_stat(self, other, operator.sub)
 
 @dataclasses.dataclass
 class Tool_Statistics:
+    """Statistics for a tool"""
     selects_completed: int = 0
-    selects_completed: int = 0
-    deselects_completed: int = 0
     deselects_completed: int = 0
     selects_started: int = 0
     deselects_started: int = 0
@@ -683,21 +684,31 @@ class Tool_Statistics:
     start_time_standby: int = 0  # TRACKED_START_TIME_STANDBY
     start_time_spent_selecting: int = 0    # TRACKED_MOUNT_START_TIME
     start_time_unmount: int = 0  # TRACKED_UNMOUNT_START_TIME
+    def __add__(self, other):
+        return _add_subtract_stat(self, other, operator.add)
+    def __sub__(self, other):
+        return _add_subtract_stat(self, other, operator.sub)
 
-def natural_keys_sorting(list_to_sort):
-    return sorted(list_to_sort, key=natural_sorting)
+def _add_subtract_stat(a: Changer_Statistics | Tool_Statistics, b: Changer_Statistics | Tool_Statistics, op: operator):
+    """Add or subtract two statistics objects and return the result"""
+    result = copy.deepcopy(a)
+    for f in dataclasses.fields(result):
+        setattr(result, f.name, op(getattr(a, f.name), getattr(b, f.name)))
+    return result
 
-def natural_sorting(text):
-    '''
-    alist.sort(key=natural_keys) sorts in human order
-    http://nedbatchelder.com/blog/200712/human_sorting.html
-    (See Toothy's implementation in the comments)
-    '''
-    return [ __atoi(c) for c in re.split(r'(\d+)', text) ]
+####################################
+# MultiLineFormater                #
+####################################
+# Class to improve formatting of multi-line KTC messages
+class KtcMultiLineFormatter(logging.Formatter):
+    def format(self, record):
+        indent = ' ' * 9
+        lines = super(KtcMultiLineFormatter, self).format(record)
+        return lines.replace('\n', '\n' + indent)
 
-def __atoi(text):
-    return int(text) if text.isdigit() else text
-
+####################################
+# HELPER FUNCTIONS: data to string #
+####################################
 def seconds_to_human_string(seconds, long_format = False):
     """Convert a number of seconds to a human readable string in the format 1h 2m 3s
     or 1 hours 2 minutes 3 seconds if long_format is True."""
@@ -732,6 +743,27 @@ def bignumber_to_human_string(number):
 # Function to avoid division by zero
 def division(dividend, divisor):
     return dividend/divisor if divisor else 0
+
+####################################
+# HELPER FUNCTIONS: Natural Sorting#
+####################################
+# https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
+def natural_keys_sorting(list_to_sort):
+    return sorted(list_to_sort, key=natural_sorting)
+
+def natural_keys_sorting(list_to_sort):
+    return sorted(list_to_sort, key=natural_sorting)
+
+def natural_sorting(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ __atoi(c) for c in re.split(r'(\d+)', text) ]
+
+def __atoi(text):
+    return int(text) if text.isdigit() else text
 
 ####################################
 def load_config(config):

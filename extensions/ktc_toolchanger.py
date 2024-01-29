@@ -139,7 +139,7 @@ class KtcToolchanger:
 
         self.ktc.active_tool = self.active_tool
 
-    def engage(self, ignore_engaged=False):
+    def engage(self, ignore_engaged=False) -> bool:
         if self.engage_gcode_template is None:
             self.log.always(
                 "ktc_toolchanger.engage(): No tool lock gcode template"
@@ -159,19 +159,39 @@ class KtcToolchanger:
             self.log.trace("Tool Locked")
             self.log.total_stats.engages += 1
 
-    def disengage(self):
-        if self.disengage_gcode_template is None:
-            self.log.always(
-                "ktc_toolchanger.disengage(): No tool unlock gcode template"
-                + " defined for ktc_toolchanger %s." % self.name
-            )
-            return None
+    def disengage(self) -> bool:
+        """Disengage the lock on the tool so it can be removed.
+        Return: True if successful, False if not."""
+        
+        try:
+            if self.status < STATUS.READY:
+                raise Exception(
+                    "Toolchanger %s not ready." % self.name
+                )
+                
+            if self.disengage_gcode_template is None:
+                self.log.debug(
+                    "ktc_toolchanger.disengage(): No tool unlock gcode template"
+                    + " defined for ktc_toolchanger %s." % self.name
+                )
+                return true
 
-        self.log.trace("KTC_TOOLCHANGER_DISENGAGE running.")
-        self.disengage_gcode_template.run_gcode_from_command()
-        self.ktc.active_tool = ktc.TOOL_NONE
-        self.log.trace("ToolLock Unlocked.")
-        self.log.total_stats.disengages += 1
+            # Run the disengage gcode template.
+            # TODO: Add context. Myself, ktc, etc.
+            self.disengage_gcode_template.run_gcode_from_command()
+
+            # TODO: Check if this is apropiate.
+            self.ktc.active_tool = ktc.TOOL_NONE
+            
+            # Add disengage to statistics.
+            self.log.trace("Adding disengage to statistics: %s" % (self.log.changer_stats[self.name].disengages))
+            self.log.changer_stats[self.name].disengages += 1
+            self.log.trace("Added disengage to statistics: %s" % (self.log.changer_stats[self.name].disengages))
+            
+            return True
+        except Exception as e:
+            self.log.always("ktc_toolchanger.disengage(): failed for ktc_toolchanger %s with error: %s" % (self.name, e))
+            return False
 
     def get_status(self, eventtime=None):
         status = {
