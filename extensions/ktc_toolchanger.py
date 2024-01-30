@@ -157,7 +157,7 @@ class KtcToolchanger:
             self.engage_gcode_template.run_gcode_from_command()
             self.ktc.active_tool = ktc.TOOL_UNKNOWN
             self.log.trace("Tool Locked")
-            self.log.total_stats.engages += 1
+            self.log.changer_stats[self.name].engages += 1
 
     def disengage(self) -> bool:
         """Disengage the lock on the tool so it can be removed.

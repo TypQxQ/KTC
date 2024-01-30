@@ -11,7 +11,7 @@
 from __future__ import annotations  # To reference the class itself in type hints
 import logging, threading, queue, time, ast, dataclasses
 import math, os.path, copy, re, operator
-from . import ktc_persisting
+from . import ktc_persisting, ktc_toolchanger, ktc_tool
 
 
 class Ktc_Log:
@@ -52,12 +52,13 @@ class Ktc_Log:
             self._ktc_logger = logging.getLogger('ktc')
             self._ktc_logger.setLevel(logging.INFO)
             self._ktc_logger.addHandler(queue_handler)
+
+            # TODO: Delete after use is migrated
+            self.total_stats = Swap_Statistics()
             
         # Statistics variables
-        self.total_stats = Swap_Statistics()
         self.changer_stats: dict[str, Changer_Statistics] = {}
         self.tool_stats : dict[str, Tool_Statistics] = {}
-        self.print_stats = Swap_Statistics()
         self.print_changer_stats: dict[str, Changer_Statistics] = {}
         self.print_tool_stats : dict[str, Tool_Statistics] = {}
 
@@ -134,17 +135,6 @@ class Ktc_Log:
         if loaded_stats == {}:
             self.debug("Did not find any saved statistics. Initialized empty.")
         
-        # swap_stats_dict : dict = loaded_stats.get("total", {})
-        # try:
-        #     if swap_stats_dict == {}:
-        #         self.debug("Couldn't find any saved total statistics.")
-            
-        #     for key, value in swap_stats_dict.items():
-        #         setattr(self.total_stats, key, value)
-    
-        # except Exception as e:
-        #     self.debug("Unexpected error while loading persistent swap stats: %s" % e)
-        
         self.changer_stats = self._get_persisted_items("Statistics", "ktc_toolchanger", Changer_Statistics )
         self.tool_stats = self._get_persisted_items("Statistics", "ktc_tool", Tool_Statistics )
 
@@ -184,10 +174,6 @@ class Ktc_Log:
     def _persist_statistics(self):
         """Save all the statistics to the file"""
         try:
-            # Save general statistics
-            # swap_stats_dict = dataclasses.asdict(self.total_stats)
-            # self.ktc_persistent.save_variable("total", str(swap_stats_dict), section="Statistics")
-            
             self._set_persisted_items("Statistics", "ktc_toolchanger", self.changer_stats)
             self._set_persisted_items("Statistics", "ktc_tool", self.tool_stats)
         except Exception as e:
@@ -216,7 +202,6 @@ class Ktc_Log:
     def _reset_statistics(self):
         """Reset all the statistics to 0"""
         self.always("Reseting KTC statistics.")
-        self.total_stats = Swap_Statistics()
 
         self.changer_stats : dict[str, Changer_Statistics] = {}
         for changer in self.printer.lookup_objects('ktc_tool_changer'):
@@ -230,7 +215,6 @@ class Ktc_Log:
         """Reset all the print statistics to same as regular statistics.
         This is called at the start of each print to reset the print statistics.
         The print statistics are subtracted from the regular statistics to get the statistics for the print."""
-        self.print_stats = copy.deepcopy(self.total_stats)
         self.print_changer_stats = copy.deepcopy(self.changer_stats)
         self.print_tool_stats = copy.deepcopy(self.tool_stats)
 
@@ -243,256 +227,200 @@ class Ktc_Log:
         and only print the stats for the start of the print."""
 
         if not since_print_start:
-            msg = "KTC Total Statistics:\n"
+            msg = "KTC Total Statistics:"
         else:
             msg = "KTC Statistics since start of print:\n"
 
         # If has only one changer then only print for that changer as total stats are the same
         if len(self.changer_stats.keys()) == 1:
-            self._dump_statistics_for_changer(list(self.changer_stats.keys())[0])
+            self._dump_statistics_for_changer()
+            msg += self._changer_stats_to_human_string(list(self.changer_stats.keys())[0], since_print_start)
         else:
             # This will add the total stats for all changers as a sum and then print them
-            msg += self._total_stats_to_human_string()
+            msg += self._changer_stats_to_human_string(None, since_print_start)            
+            msg += ("\n========================================================\n")
 
             # This will print the stats for each changer in a sorted order
-            msg += "Changer Statistics:\n"
             sorted_items = natural_keys_sorting(self.changer_stats.keys())
             for changer_name in sorted_items:
                 msg += self._changer_stats_to_human_string(changer_name, since_print_start)
+                if changer_name != sorted_items[-1]:
+                    msg += "\n----------------------------------------------------------\n"
+                
 
-        msg += "Tool Statistics:\n"
-        sorted_tools = natural_keys_sorting(self.tool_stats.keys())
-        for tol_name in sorted_tools:
+        msg += ("\n========================================================\n")
+        sorted_items = natural_keys_sorting(self.tool_stats.keys())
+        for tol_name in sorted_items:
             msg += self._tool_stats_to_human_string(tol_name, since_print_start)
+            if tol_name != sorted_items[-1]:
+                msg += "\n-----------------------------\n"
+            else:
+                msg += ("\n========================================================\n")
 
         # Dump the message to the console and to the log file if enabled
         self.always(msg)
                 
-    def _total_stats_to_human_string(self) -> str:
-        return ""
-    
-    def _changer_stats_to_human_string(self, changer_name: str, since_print_start = False) -> str:
+    def _changer_stats_to_human_string(self, changer_name: str = None, since_print_start = False) -> str:
         selects = None
         deselects = None
         time_spent_selecting = None
         time_spent_deselecting = None
         
-        result = ("Changer %s:" % changer_name)
-        changer = self.printer.lookup_object('ktc_toolchanger %s' % changer_name)
-        
-        for tool in self.printer.lookup_object('ktc_toolchanger %s' % changer_name).tools:
-            sum_stats = self._sum_tool_stats_for_changer(changer_name, since_print_start)
-        
-        ############################## Test 1        
-        # if sum_stats["time_spent_selecting"] > 0:
-        #     result += "\nSpent %s selecting" % (
-        #         seconds_to_human_string(sum_stats["time_spent_selecting"]))
-        # if sum_stats["time_spent_deselecting"] > 0 and sum_stats["time_spent_deselecting"] > 0:
-        #     result += " and "
-        # else:
-        #     result += "\nSpent "
-        # if sum_stats["time_spent_deselecting"] > 0:
-        #     result += "%s deselecting tools." % (
-        #         seconds_to_human_string(sum_stats["time_spent_deselecting"]))
-        
-        ############################## Test 2
-        # if sum_stats["time_spent_selecting"] > 0:
-        #     result += "\nSpent %s selecting %s times with %.1f success rate." % (
-        #         seconds_to_human_string(sum_stats["time_spent_selecting"]),
-        #         bignumber_to_human_string(sum_stats["selects_completed"]),
-        #         (sum_stats["selects_completed"] / sum_stats["selects_started"] * 100))
-        # if sum_stats["time_spent_deselecting"] > 0:
-        #     result += "\nSpent %s deselecting %s times with %.1f success rate." % (
-        #         seconds_to_human_string(sum_stats["time_spent_deselecting"]),
-        #         bignumber_to_human_string(sum_stats["deselects_completed"]),
-        #         (sum_stats["deselects_completed"] / sum_stats["deselects_started"] * 100))
-
-        ############################## Test 3
-        # 264 selects completed in 1:00:00. Avg. 13.2s. 0.0% failed.
-        
-        # if sum_stats["time_spent_selecting"] > 0:
-        #     result += "\n%s selects completed in %s. Avg. %s. %.1f%% failed." % (
-        #         bignumber_to_human_string(sum_stats["selects_completed"]),
-        #         seconds_to_human_string(sum_stats["time_spent_selecting"]),
-        #         seconds_to_human_string(division(
-        #             sum_stats["time_spent_selecting"], sum_stats["selects_completed"])),
-        #         (sum_stats["selects_completed"] / sum_stats["selects_started"] * 100))
-        # if sum_stats["time_spent_deselecting"] > 0:
-        #     result += "\n%s deselects completed in %s. Avg. %s. %.1f%% failed." % (
-        #         bignumber_to_human_string(sum_stats["deselects_completed"]),
-        #         seconds_to_human_string(sum_stats["time_spent_deselecting"]),
-        #         seconds_to_human_string(division(
-        #             sum_stats["time_spent_deselecting"], sum_stats["deselects_completed"])),
-        #         (sum_stats["deselects_completed"] / sum_stats["deselects_started"] * 100))
-
-        ############################## Test 4
-        # 264 selects completed(100.0%) in 1:00:00, avg. 13.2s.
-        
-        if sum_stats["time_spent_selecting"] > 0:
-            result += "\n%s selects completed(%.1f%%) in %s. Avg. %s." % (
-                bignumber_to_human_string(sum_stats["selects_completed"]),
-                (sum_stats["selects_completed"] / sum_stats["selects_started"] * 100),
-                seconds_to_human_string(sum_stats["time_spent_selecting"]),
-                seconds_to_human_string(division(
-                    sum_stats["time_spent_selecting"], sum_stats["selects_completed"]))
-                )
-        if sum_stats["time_spent_deselecting"] > 0:
-            result += "\n%s deselects completed(%.1f%%) in %s. Avg. %s." % (
-                bignumber_to_human_string(sum_stats["deselects_completed"]),
-                (sum_stats["deselects_completed"] / sum_stats["deselects_started"] * 100),
-                seconds_to_human_string(sum_stats["time_spent_deselecting"]),
-                seconds_to_human_string(division(
-                    sum_stats["time_spent_deselecting"], sum_stats["deselects_completed"])))
-
-        ############################## Engages/Disengages
-        changer_stats : Changer_Statistics = None
-        if not since_print_start:
-            changer_stats = self.changer_stats[changer_name]
+        if changer_name is None:
+            result = ""
         else:
-            changer_stats = self.changer_stats[changer_name] - self.print_changer_stats[changer_name]
+            result = ("Changer %s:" % changer_name)
+
+        tool_stats_sum = self._sum_tool_stats_for_changer(changer_name, since_print_start)                
+            
+        ##############################  Selects
+        # 264 selects completed(100.0%) in 1:00:00, avg. 13.2s.
+        if tool_stats_sum.selects_started > 0:
+            result += "\n%s selects completed(%.1f%%) in %s. Avg. %s." % (
+                bignumber_to_human_string(tool_stats_sum.selects_completed),
+                (tool_stats_sum.selects_completed / tool_stats_sum.selects_started * 100),
+                seconds_to_human_string(tool_stats_sum.time_spent_selecting),
+                seconds_to_human_string(division(
+                    tool_stats_sum.time_spent_selecting, tool_stats_sum.selects_completed))
+                )
+
+        ##############################  Deselects
+        # 264 deselects completed(100.0%) in 1:00:00, avg. 13.2s.
+        if tool_stats_sum.deselects_started > 0:
+            result += "\n%s deselects completed(%.1f%%)" % (
+                bignumber_to_human_string(tool_stats_sum.deselects_completed),
+                (tool_stats_sum.deselects_completed / tool_stats_sum.deselects_started * 100)
+            )
+            result += " in %s." % (
+                seconds_to_human_string(tool_stats_sum.time_spent_deselecting)
+            )                
+            result += " Avg. %s." % (
+                seconds_to_human_string(division(
+                    tool_stats_sum.time_spent_deselecting, tool_stats_sum.deselects_completed))
+            )
         
+        ############################## Engages/Disengages
+        # 264 engages and 264 disengages completed.
+        # Check if total or specific changer
+        if changer_name is None:
+            changer_stats = Changer_Statistics()
+            # Add up all the stats for all changers
+            for item in self.printer.lookup_objects('ktc_tool_changer'):
+                item_name=str(item[0]).split(" ", 1)[1]
+                # Check if we display the stats for the start of the print or the total stats
+                if not since_print_start:
+                    changer_stats += self.changer_stats[item_name]
+                else:
+                    changer_stats += self.changer_stats[item_name] - self.print_changer_stats[item_name]
+        else:
+            # Check if we display the stats for the start of the print or the total stats
+            if not since_print_start:
+                changer_stats = self.changer_stats[changer_name]
+            else:
+                changer_stats = self.changer_stats[changer_name] - self.print_changer_stats[changer_name]
+        
+        # When there are engages, print them
         if changer_stats.engages > 0:
             result += "\n%s engages " % bignumber_to_human_string(changer_stats.engages)
 
+        # Middle of the sentence logic.
         if changer_stats.engages > 0 and changer_stats.disengages > 0:
             result += " and "
         elif changer_stats.disengages > 0:
             result += "\n"
         elif changer_stats.engages > 0:
             result += "."
-            
+        
+        # When there are disengages, print them
         if changer_stats.disengages > 0:
             result += "%d disengages completed" % changer_stats.disengages
 
         ############################## Final
-        result += "\n------------\n"
+        # if changer_name is None:
         return result
 
-    def _sum_tool_stats_for_changer(self, changer_name: str, since_print_start = False) -> dict:
+    def _sum_tool_stats_for_changer(self, changer_name: str, since_print_start = False) -> Tool_Statistics:
         """Add up all tool stats for a changer and return a dict with the sum.
         If since_print_start is True, subtract the print stats from the total stats"""
         
-        result : Tool_Statistics = Tool_Statistics()
+        result = Tool_Statistics()
         
-        for tool_name, tool in self.printer.lookup_object('ktc_toolchanger %s' % changer_name).tools.items():
-            result += self.tool_stats[tool_name]
+        if changer_name is None:
+            # Get all tools for all changers
+            tools_to_sum = self.printer.lookup_object("ktc").tools.items()
+        else:
+            # Get all tools for the specified changer
+            tools_to_sum = self.printer.lookup_object('ktc_toolchanger %s' % changer_name).tools.items()
         
-            if since_print_start:
-                result -= self.print_tool_stats[tool_name]
-        
-        return dataclasses.asdict(result)
-        
-        
-        
-        
-        result = {
-            "selects_completed": 0,
-            "deselects_completed": 0,
-            "selects_started": 0,
-            "deselects_started": 0,
-            "time_spent_selecting": 0,
-            "time_spent_deselecting": 0
-        }
-    
-        for tool_name, tool in self.printer.lookup_object('ktc_toolchanger %s' % changer_name).tools.items():
-            result["selects_completed"] += self.tool_stats[tool_name].selects_completed
-            result["deselects_completed"] += self.tool_stats[tool_name].deselects_completed
-            result["selects_started"] += self.tool_stats[tool_name].selects_started
-            result["deselects_started"] += self.tool_stats[tool_name].deselects_started
-            result["time_spent_selecting"] += self.tool_stats[tool_name].time_spent_selecting
-            result["time_spent_deselecting"] += self.tool_stats[tool_name].time_spent_deselecting
+        for tool_name, _ in tools_to_sum:
+            # Check if the tool_name has stats (None and Unknown has no stats now).
+            if tool_name in self.tool_stats:
+                result += self.tool_stats[tool_name]
             
-            if since_print_start:
-                result["selects_completed"] -= self.print_tool_stats[tool_name].selects_completed
-                result["deselects_completed"] -= self.print_tool_stats[tool_name].deselects_completed
-                result["selects_started"] -= self.print_tool_stats[tool_name].selects_started
-                result["deselects_started"] -= self.print_tool_stats[tool_name].deselects_started
-                result["time_spent_selecting"] -= self.print_tool_stats[tool_name].time_spent_selecting
-                result["time_spent_deselecting"] -= self.print_tool_stats[tool_name].time_spent_deselecting
-
+                if since_print_start:
+                    result -= self.print_tool_stats[tool_name]
+            
         return result
-
 
     def _tool_stats_to_human_string(self, tol_name: str, since_print_start = False) -> str:
         """Return a human readable string with the statistics for a given tool"""
         t = self.tool_stats[tol_name]
         result = "Tool %s:\n" % (tol_name)
 
-        result += "Selects %d/%d completed in %s. (%s/select).\n" % (
-        # result += "Completed %d out of %d selects in %s. Average of %s per toolmount.\n" % (
-            t.selects_completed, t.selects_started,
-            seconds_to_human_string(t.time_spent_selecting),
+        ##############################  Selected time
+        # Selected 1:00:00.
+        result += "Selected %s." % seconds_to_human_string(t.time_selected)
+        ##############################  Selects
+        # 264 selects completed(100.0%) in 1:00:00, avg. 13.2s.
+        result += "\n%s selects completed(%.1f%%)" % (
+            bignumber_to_human_string(t.selects_completed),
+            (t.selects_completed / t.selects_started * 100)
+        )
+        result += " in %s." % (
+            seconds_to_human_string(t.time_spent_selecting)
+        )                
+        result += " Avg. %s." % (
             seconds_to_human_string(division(
-                t.time_spent_selecting, t.selects_completed)))
+                t.time_spent_selecting, t.selects_completed))
+        )
         
-        # result += "Time spent mounting: %s\n" % seconds_to_human_string(t.time_spent_selecting)
-
-        result += "Deselects %d/%d completed in %s. (%s/deselect).\n" % (
-        # result += "Completed %d out of %d deselectss in %s. Average of %s per toolunmount.\n" % (
-            t.deselects_completed, t.deselects_started,
-            seconds_to_human_string(t.time_spent_deselecting),
+        ##############################  Deselects
+        # 264 deselects completed(100.0%) in 1:00:00, avg. 13.2s.
+        result += "\n%s deselects completed(%.1f%%)" % (
+            bignumber_to_human_string(t.deselects_completed),
+            (t.deselects_completed / t.deselects_started * 100)
+        )
+        result += " in %s." % (
+            seconds_to_human_string(t.time_spent_deselecting)
+        )                
+        result += " Avg. %s." % (
             seconds_to_human_string(division(
-                t.time_spent_deselecting, t.deselects_completed)))
-
-        result += "%s spent selected." % seconds_to_human_string(t.time_selected)
+                t.time_spent_deselecting, t.deselects_completed))
+        )
         
-        if t.time_heater_active > 0:
-            result += " %s with active heater" % (
+        ##############################  Active times
+        # 1:00:00 with heater active and 1:00:00 with heater in standby.
+        if t.time_heater_active > 0 or t.time_heater_standby > 0:
+            result += "\n%s with heater active" % (
                 seconds_to_human_string(t.time_heater_active))
         
-        if t.time_heater_standby > 0:
-            result += ", %s with standby heater" % (
-                seconds_to_human_string(t.time_heater_standby))
-        result += "."
+            if t.time_heater_standby > 0:
+                result += "and %s with heater in standby" % (
+                    seconds_to_human_string(t.time_heater_standby))
+            result += "."
         
-        result += "\n------------\n"
         return result
         
-    def _increase_tool_time_diff(self, tool_id: str, final_time_key: str, changer_time_key: str = None):
-        try:
-            start_time_attr = getattr(self.tool_stats[tool_id],
-                                      "start_" + final_time_key, 0)
-            if start_time_attr == 0:
-                return None
-            
-            time_spent = start_time_attr - time.time()
-            prev_final_time = getattr(self.tool_stats[tool_id], final_time_key, 0)
-            
-            if time_spent < 0:
-                time_spent = 0
-                
-            setattr(
-                self.tool_stats[tool_id], final_time_key, 
-                prev_final_time + time_spent)
-            start_time_attr = 0
-            # setattr(
-            #     self.tool_stats[tool_id], "start_" + final_time_key, 0)
-            
-            self.trace("_increase_tool_time_diff for Tool: %s: start_time_attr: %s, self.tool_stats[tool_id].start_time_attr: %s" % (
-                tool_id, start_time_attr, getattr(self.tool_stats[tool_id],
-                                      "start_" + final_time_key, "Not found")))
-            
-            if changer_time_key is not None:
-                prev_changer_time = getattr(self.total_stats, changer_time_key, 0)
-                setattr(
-                    self.total_stats, changer_time_key, 
-                    prev_changer_time + time_spent)
-                
-        except Exception as e:
-            # Handle any exceptions that occur during the process
-            print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
-
+### STATISTICS INCREMENTING FUNCTIONS FUNCTIONS
     def track_select_start(self, tool):
         self.tool_stats[tool.name].start_time_spent_selecting = time.time()
         self.tool_stats[tool.name].selects_started += 1
-        self.changer_stats[tool.toolchanger.name].selects_started += 1
         
-    def track_select_end(self, tool_id: str):
-        self.trace("track_select_end: Running for Tool: %s." % (tool_id))
-        self._increase_tool_time_diff(tool_id, "time_spent_selecting", "time_spent_selecting")
-        self.tool_stats[tool_id].selects_completed += 1
-        self.changer_stats[tool_id].selects += 1
+    def track_select_end(self, tool):
+        self._increase_tool_time_diff(tool, "time_spent_selecting", "time_spent_selecting")
+        self.tool_stats[tool.name].selects_completed += 1
         
+        # Old code, before using _increase_tool_time_diff
         # start_time = self.tool_stats[tool_id].start_time_spent_selecting
         # if start_time is not None and start_time != 0:
         #     time_spent = time.time() - start_time
@@ -541,6 +469,33 @@ class Ktc_Log:
     def track_standby_heater_end(self, tool_id):
         self._increase_tool_time_diff(tool_id, "time_standby")
         self._persist_statistics()
+
+    def _increase_tool_time_diff(self, tool, final_time_key):
+
+
+    def _increase_tool_time_diff(self, tool, final_time_key: str):
+        """Increase the time difference for a tools statistics."""
+        try:
+            start_time_attr = getattr(self.tool_stats[tool.name],
+                                      "start_" + final_time_key, 0)
+            if start_time_attr == 0:
+                return None
+            
+            time_spent = start_time_attr - time.time()
+            if time_spent < 0:
+                time_spent = 0
+                
+            final_time = getattr(self.tool_stats[tool.name], final_time_key, 0)
+            final_time += time_spent
+            start_time_attr = 0
+            
+            # TODO Delete when confirmed working
+            self.trace("_increase_tool_time_diff for Tool: %s: start_time_attr: %s, self.tool_stats[tool_id].start_time_attr: %s" % (
+                tool.name, start_time_attr, getattr(self.tool_stats[tool.name],
+                                      "start_" + final_time_key, "Not found")))
+        except Exception as e:
+            # Handle any exceptions that occur during the process
+            print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
 
 ### LOGGING AND STATISTICS FUNCTIONS GCODE FUNCTIONS
     # TODO: Remove this function after a while

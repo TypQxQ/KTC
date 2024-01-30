@@ -424,7 +424,7 @@ class KtcTool:
         else:
             self.log.always("T%d picked up." % (self.number))
 
-        self.log.track_select_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
+        self.log.track_select_end(self)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def Dropoff(self, force_virtual_unload = False):
         self.log.always("Dropoff: T%s - Running." % str(self.number))
@@ -484,7 +484,7 @@ class KtcTool:
         # Save current picked up tool and print on screen.
         self.ktc.active_tool = self
         self.log.trace("Virtual T%d Loaded" % (self.number))
-        self.log.track_select_end(self.name)             # Log number of toolchanges and the time it takes for tool mounting.
+        self.log.track_select_end(self)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def set_virtual_loaded(self, value = -1):
         self.virtual_loaded = value

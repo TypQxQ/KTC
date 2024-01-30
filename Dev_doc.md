@@ -36,7 +36,18 @@ ktc_tool.py is initialized for each tool.
 
 
 ToDo:
-    Lägg till stats för varje toolchanger.
+    track_select_end
+    _increase_tool_time_diff
+    track_deselect_start
+    track_deselect_end
+    track_selected_tool_start
+    track_selected_tool_end
+    track_active_heater_start
+    track_active_heater_end
+    track_standby_heater_end
+    total_stats
+
+    Check what happens when selecting TOOL_UNKNOWN and has no stats...
 
     ktc_persisting sparar innnan den hämtar nya. Både statistik och active_tool.
     KTC_SAVE_VARIABLES_FILENAME och KTC_SAVE_VARIABLES_DELAY borde laddas från config filen när de finns.
