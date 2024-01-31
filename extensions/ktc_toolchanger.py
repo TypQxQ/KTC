@@ -9,7 +9,6 @@
 import dataclasses
 from . import ktc as ktc, ktc_persisting, ktc_log, ktc_tool
 
-
 class KtcToolchanger:
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
@@ -49,7 +48,7 @@ class KtcToolchanger:
         # Initialize object variables.
         self.name: str = config.get_name().split(" ", 1)[1]
         self.params = ktc.get_params_dict_from_config(config)
-        self.status = STATUS.UNINITIALIZED
+        self.state = STATE.UNINITIALIZED
         self.tools: dict[str, ktc_tool.KtcTool] = {}  # All tools on this toolchanger.
         self.init_mode = INIT_MODE.MANUAL
         self.active_tool = (
@@ -99,7 +98,7 @@ class KtcToolchanger:
 
     def initialize(self):
         """Initialize the tool lock."""
-        if self.status > STATUS.UNINITIALIZED:
+        if self.state > STATE.UNINITIALIZED:
             self.log.always(
                 "ktc_toolchanger.initialize(): Toolchanger %s already initialized." % self.name
             )
@@ -164,7 +163,7 @@ class KtcToolchanger:
         Return: True if successful, False if not."""
         
         try:
-            if self.status < STATUS.READY:
+            if self.state < STATE.READY:
                 raise Exception(
                     "Toolchanger %s not ready." % self.name
                 )
@@ -208,8 +207,7 @@ class KtcToolchanger:
         return status
 
 
-# @dataclasses.dataclass
-class STATUS:
+class STATE:
     """Constants for the status of the toolchanger."""
     ERROR = -3
     UNINITIALIZED = -2

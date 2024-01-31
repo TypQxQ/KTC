@@ -309,7 +309,8 @@ class KtcTool:
 
         # Drop any tools already mounted if not virtual on same.
         if current_tool_id > ktc.TOOL_NONE_N:              # If there is a current tool already selected and it's a known tool.
-            self.log.track_selected_tool_end(current_tool_id) # Log that the current tool is to be unmounted.
+            # TODO: Change this to nicer code.
+            self.log.track_tool_selected_end(self.ktc.tools[current_tool_id]) # Log that the current tool is to be unmounted.
 
             current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
            
@@ -373,11 +374,11 @@ class KtcTool:
                 self.LoadVirtual()
 
         self.ktc.active_tool = self
-        self.log.track_selected_tool_start(self.name)
+        self.log.track_tool_selected_start(self)
 
 
     def Pickup(self):
-        self.log.track_select_start(self)                 # Log the time it takes for tool mount.
+        self.log.track_tool_selecting_start(self)                 # Log the time it takes for tool mount.
 
         # Check if homed
         if not self.ktc.printer_is_homed_for_toolchange():
@@ -424,12 +425,12 @@ class KtcTool:
         else:
             self.log.always("T%d picked up." % (self.number))
 
-        self.log.track_select_end(self)             # Log number of toolchanges and the time it takes for tool mounting.
+        self.log.track_tool_selecting_end(self)
 
     def Dropoff(self, force_virtual_unload = False):
         self.log.always("Dropoff: T%s - Running." % str(self.number))
 
-        self.log.track_selected_tool_end(self.name) # Log that the current tool is to be unmounted.
+        self.log.track_tool_selected_end(self) # Log that the current tool is to be unmounted.
 
         # Check if homed
         if not self.ktc.printer_is_homed_for_toolchange():
@@ -450,7 +451,7 @@ class KtcTool:
                 self.log.info("Dropoff: T" + str(self.number) + "- Virtual - Running UnloadVirtual")
                 self.UnloadVirtual()
 
-        self.log.track_deselect_start(self.name)                 # Log the time it takes for tool change.
+        self.log.track_tool_deselecting_start(self)                 # Log the time it takes for tool change.
         # Run the gcode for dropoff.
         try:
             context = self.dropoff_gcode_template.create_template_context()
@@ -461,12 +462,12 @@ class KtcTool:
             raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
 
         self.ktc.active_tool = ktc.TOOL_NONE                 # Dropoff successfull
-        self.log.track_deselect_end(self.name)                 # Log the time it takes for tool change.
+        self.log.track_tool_deselecting_end(self)                 # Log the time it takes for tool change.
 
 
     def LoadVirtual(self):
         self.log.info("Loading virtual tool: T%d." % self.number)
-        self.log.track_select_start(self)                 # Log the time it takes for tool mount.
+        self.log.track_tool_selecting_start(self)                 # Log the time it takes for tool mount.
 
         # Run the gcode for Virtual Load.
         try:
@@ -484,7 +485,7 @@ class KtcTool:
         # Save current picked up tool and print on screen.
         self.ktc.active_tool = self
         self.log.trace("Virtual T%d Loaded" % (self.number))
-        self.log.track_select_end(self)             # Log number of toolchanges and the time it takes for tool mounting.
+        self.log.track_tool_selecting_end(self)             # Log number of toolchanges and the time it takes for tool mounting.
 
     def set_virtual_loaded(self, value = -1):
         self.virtual_loaded = value
@@ -493,7 +494,7 @@ class KtcTool:
 
     def UnloadVirtual(self):
         self.log.info("Unloading virtual tool: T%d." % self.number)
-        self.log.track_deselect_start(self.name)                 # Log the time it takes for tool unload.
+        self.log.track_tool_deselecting_start(self)                 # Log the time it takes for tool unload.
 
         # Run the gcode for Virtual Unload.
         try:
@@ -511,7 +512,7 @@ class KtcTool:
         self.ktc.active_tool = self
         self.log.trace("Virtual T%d Unloaded" % (int(self.number)))
 
-        self.log.track_deselect_end(self.name)                 # Log the time it takes for tool unload. 
+        self.log.track_tool_deselecting_end(self)                 # Log the time it takes for tool unload. 
 
     def set_offset(self, **kwargs):
         for i in kwargs:
@@ -601,15 +602,15 @@ class KtcTool:
                 self.log.trace("set_heater: KTC Tool %s heater state now OFF." % self.name )
                 self.timer_idle_to_standby.set_timer(0, self.name)
                 self.timer_idle_to_powerdown.set_timer(0.1, self.name)
-                # self.log.track_standby_heater_end(self.name)                                                # Set the standby as finishes in statistics.
-                # self.log.track_active_heater_end(self.name)                                                # Set the active as finishes in statistics.
+                # self.log.track_heater_standby_end(self)                                                # Set the standby as finishes in statistics.
+                # self.log.track_heater_active_end(self)                                                # Set the active as finishes in statistics.
             elif chng_state == self.HEATER_STATE_ACTIVE:                                                                       # Else If Active
                 self.log.trace("set_heater: T%d heater state now ACTIVE." % self.name )
                 self.timer_idle_to_standby.set_timer(0, self.name)
                 self.timer_idle_to_powerdown.set_timer(0, self.name)
                 heater.set_temp(self.heater_active_temp)
-                self.log.track_standby_heater_end(tool_for_tracking_heater)                                                # Set the standby as finishes in statistics.
-                self.log.track_active_heater_start(tool_for_tracking_heater)                                               # Set the active as started in statistics.
+                self.log.track_heater_standby_end(self.ktc.tools[tool_for_tracking_heater])     # Set the standby as finishes in statistics.
+                self.log.track_heater_active_start(self.ktc.tools[tool_for_tracking_heater])    # Set the active as started in statistics.                                               # Set the active as started in statistics.
             elif chng_state == self.HEATER_STATE_STANDBY:                                                                       # Else If Standby
                 self.log.trace("set_heater: T%d heater state now STANDBY." % self.name )
                 if int(self.heater_state) == self.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):
@@ -707,8 +708,6 @@ class ktc_ToolStandbyTempTimer:
             else:
                 tool_for_tracking_heater = tool.name
 
-
-
             self.log.trace(
                 "_standby_tool_temp_timer_event: Running for T%s. temp_type:%s. %s" % 
                 (str(self.tool_id), 
@@ -719,17 +718,17 @@ class ktc_ToolStandbyTempTimer:
             temperature = 0
             heater = self.printer.lookup_object(tool.extruder).get_heater()
             if self.temp_type == self.TIMER_TO_STANDBY:
-                self.log.track_standby_heater_start(self.tool_id)                                                # Set the standby as started in statistics.
+                self.log.track_heater_standby_start(self.tool_id)                                                # Set the standby as started in statistics.
                 temperature = tool.get_status()["heater_standby_temp"]
                 heater.set_temp(temperature)
             else:
-                self.log.track_standby_heater_end(self.tool_id)                                                # Set the standby as finishes in statistics.
+                self.log.track_heater_standby_end(self)                                                # Set the standby as finishes in statistics.
 
                 tool.get_timer_to_standby().set_timer(0, self.last_virtual_tool_using_physical_timer)        # Stop Standby timer.
                 tool._set_state(KtcTool.HEATER_STATE_OFF)        # Set off state.
                 heater.set_temp(0)        # Set temperature to 0.
 
-            self.log.track_active_heater_end(self.tool_id)                                               # Set the active as finishes in statistics.
+            self.log.track_heater_active_end(self)                                               # Set the active as finishes in statistics.
 
         except Exception as e:
             raise Exception("Failed to set Standby temp for tool T%s: %s. %s" % (str(self.tool_id), 

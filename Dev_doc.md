@@ -21,7 +21,10 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
 
     engage :        Function to engage the tool lock. Locking the tool
     disengage :     Function to disengage the tool lock. Unlocking the tool.
-    engaged :       Bool to display state.
+    state :         ktc_toolchanger.STATE attr indicating current state.
+    init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
+    active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
+
     change :        Function to change the tool.
 
     
@@ -36,16 +39,6 @@ ktc_tool.py is initialized for each tool.
 
 
 ToDo:
-    track_select_end
-    _increase_tool_time_diff
-    track_deselect_start
-    track_deselect_end
-    track_selected_tool_start
-    track_selected_tool_end
-    track_active_heater_start
-    track_active_heater_end
-    track_standby_heater_end
-    total_stats
 
     Check what happens when selecting TOOL_UNKNOWN and has no stats...
 

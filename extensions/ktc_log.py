@@ -52,9 +52,6 @@ class Ktc_Log:
             self._ktc_logger = logging.getLogger('ktc')
             self._ktc_logger.setLevel(logging.INFO)
             self._ktc_logger.addHandler(queue_handler)
-
-            # TODO: Delete after use is migrated
-            self.total_stats = Swap_Statistics()
             
         # Statistics variables
         self.changer_stats: dict[str, Changer_Statistics] = {}
@@ -411,87 +408,78 @@ class Ktc_Log:
         
         return result
         
-### STATISTICS INCREMENTING FUNCTIONS FUNCTIONS
-    def track_select_start(self, tool):
+### STATISTICS INCREMENTING CHANGER FUNCTIONS FUNCTIONS
+    def track_changer_engage(self, changer: ktc_toolchanger.KtcToolchanger):
+        self.changer_stats[changer.name].engages += 1
+        self._persist_statistics()
+
+    def track_changer_disengage(self, changer: ktc_toolchanger.KtcToolchanger):
+        self.changer_stats[changer.name].disengages += 1
+        self._persist_statistics()
+
+### STATISTICS INCREMENTING TOOL FUNCTIONS FUNCTIONS
+# Having all here makes it easier to change how the statistics are tracked
+# at a later time. It also makes it easy to search for all places where
+# statistics are tracked for debugging.
+    def track_tool_selecting_start(self, tool: ktc_tool.KtcTool):
         self.tool_stats[tool.name].start_time_spent_selecting = time.time()
         self.tool_stats[tool.name].selects_started += 1
         
-    def track_select_end(self, tool):
-        self._increase_tool_time_diff(tool, "time_spent_selecting", "time_spent_selecting")
+    def track_tool_selecting_end(self, tool: ktc_tool.KtcTool):
+        self._increase_tool_time_diff(tool, "time_spent_selecting")
         self.tool_stats[tool.name].selects_completed += 1
-        
-        # Old code, before using _increase_tool_time_diff
-        # start_time = self.tool_stats[tool_id].start_time_spent_selecting
-        # if start_time is not None and start_time != 0:
-        #     time_spent = time.time() - start_time
-        #     self.tool_stats[tool_id].time_spent_selecting += time_spent
-        #     self.total_stats.time_spent_selecting += time_spent
-        #     self.tool_stats[tool_id].start_time_spent_selecting = 0
-        
         self._persist_statistics()
 
-    def track_deselect_start(self, tool_id: str):
-        self.tool_stats[tool_id].start_time_unmount = time.time()
-        self.tool_stats[tool_id].deselects_started += 1
+    def track_tool_deselecting_start(self, tool: ktc_tool.KtcTool):
+        self.tool_stats[tool.name].start_time_spent_deselecting = time.time()
+        self.tool_stats[tool.name].deselects_started += 1
 
-    def track_deselect_end(self, tool_id):
-        # self.trace("track_deselect_end: Running for Tool: %s." % (tool_id))
-        start_time = self.tool_stats[tool_id].start_time_unmount
-        if start_time is not None and start_time != 0:
-            # self.trace("track_deselect_end: start_time is not None for Tool: %s." % (tool_id))
-            time_spent = time.time() - start_time
-            self.tool_stats[tool_id].time_spent_deselecting += time_spent
-            self.total_stats.time_spent_deselecting += time_spent
-            self.tool_stats[tool_id].start_time_unmount = 0
-            self.tool_stats[tool_id].deselects_completed += 1
-            self.total_stats.deselects += 1
-            self._persist_statistics()
-
-    def track_selected_tool_start(self, tool_id):
-        self.tool_stats[str(tool_id)].start_time_selected = time.time()
-        self.tool_stats[str(tool_id)].selects_completed += 1
-        self.total_stats.selects += 1
-
-    def track_selected_tool_end(self, tool_id):
-        self._increase_tool_time_diff(tool_id, "time_selected")
+    def track_tool_deselecting_end(self, tool: ktc_tool.KtcTool):
+        self._increase_tool_time_diff(tool, "time_spent_deselecting")
+        self.tool_stats[tool.name].deselects_completed += 1
         self._persist_statistics()
 
-    def track_active_heater_start(self, tool_id):
-        self.tool_stats[str(tool_id)].start_time_active = time.time()
+    def track_tool_selected_start(self, tool: ktc_tool.KtcTool):
+        self.tool_stats[tool.name].start_time_selected = time.time()
+        self.tool_stats[tool.name].selects_completed += 1
 
-    def track_active_heater_end(self, tool_id):
-        self._increase_tool_time_diff(tool_id, "time_active")
+    def track_tool_selected_end(self, tool: ktc_tool.KtcTool):
+        self._increase_tool_time_diff(tool.name, "time_selected")
         self._persist_statistics()
 
-    def track_standby_heater_start(self, tool_id):
-        self.tool_stats[str(tool_id)].start_time_standby = time.time()
+    def track_heater_active_start(self, tool: ktc_tool.KtcTool):
+        self.tool_stats[tool.name].start_time_heater_active = time.time()
 
-    def track_standby_heater_end(self, tool_id):
-        self._increase_tool_time_diff(tool_id, "time_standby")
+    def track_heater_active_end(self, tool: ktc_tool.KtcTool):
+        self._increase_tool_time_diff(tool.name, "time_heater_active")
         self._persist_statistics()
 
-    def _increase_tool_time_diff(self, tool, final_time_key):
+    def track_heater_standby_start(self, tool: ktc_tool.KtcTool):
+        self.tool_stats[tool.name].start_time_heater_standby = time.time()
 
+    def track_heater_standby_end(self, tool: ktc_tool.KtcTool):
+        self._increase_tool_time_diff(tool.name, "time_heater_standby")
+        self._persist_statistics()
 
-    def _increase_tool_time_diff(self, tool, final_time_key: str):
+    def _increase_tool_time_diff(self, tool: ktc_tool.KtcTool, final_time_key: str):
         """Increase the time difference for a tools statistics."""
         try:
-            start_time_attr = getattr(self.tool_stats[tool.name],
+            start_time = getattr(self.tool_stats[tool.name],
                                       "start_" + final_time_key, 0)
-            if start_time_attr == 0:
+            if start_time == 0:
                 return None
             
-            time_spent = start_time_attr - time.time()
+            time_spent = start_time - time.time()
             if time_spent < 0:
                 time_spent = 0
                 
             final_time = getattr(self.tool_stats[tool.name], final_time_key, 0)
             final_time += time_spent
-            start_time_attr = 0
+            start_time = 0
             
             # TODO Delete when confirmed working
-            self.trace("_increase_tool_time_diff for Tool: %s: start_time_attr: %s, self.tool_stats[tool_id].start_time_attr: %s" % (
-                tool.name, start_time_attr, getattr(self.tool_stats[tool.name],
+            self.trace("_increase_tool_time_diff for Tool: %s: start_time: %s, self.tool_stats[tool.name].start_time: %s" % (
+                tool.name, start_time, getattr(self.tool_stats[tool.name],
                                       "start_" + final_time_key, "Not found")))
         except Exception as e:
             # Handle any exceptions that occur during the process
@@ -635,10 +623,10 @@ class Tool_Statistics:
     time_spent_selecting: int = 0
     time_spent_deselecting: int = 0
     start_time_selected: int = 0 #TRACKED_START_TIME_SELECTED
-    start_time_active: int = 0   # TRACKED_START_TIME_ACTIVE
-    start_time_standby: int = 0  # TRACKED_START_TIME_STANDBY
+    start_time_heater_active: int = 0   # TRACKED_START_TIME_ACTIVE
+    start_time_heater_standby: int = 0  # TRACKED_START_time_heater_standby
     start_time_spent_selecting: int = 0    # TRACKED_MOUNT_START_TIME
-    start_time_unmount: int = 0  # TRACKED_UNMOUNT_START_TIME
+    start_time_spent_deselecting: int = 0  # TRACKED_UNMOUNT_START_TIME
     def __add__(self, other):
         return _add_subtract_stat(self, other, operator.add)
     def __sub__(self, other):
