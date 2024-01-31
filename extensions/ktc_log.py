@@ -223,50 +223,74 @@ class Ktc_Log:
         If since_print_start is True, subtract the print stats from the total stats
         and only print the stats for the start of the print."""
 
+        LINE_SEPARATOR = "\n--------------------------------------------------------\n"
+        SECTION_SEPARATOR = "\n========================================================\n"
+        msg = ""
+        temp_msg = ""
         if not since_print_start:
-            msg = "KTC Total Statistics:"
+            msg_header = "KTC Total Statistics:"
         else:
-            msg = "KTC Statistics since start of print:\n"
+            msg_header = "KTC Statistics since start of print:\n"
 
+        ##############################  Total
         # If has only one changer then only print for that changer as total stats are the same
         if len(self.changer_stats.keys()) == 1:
             self._dump_statistics_for_changer()
-            msg += self._changer_stats_to_human_string(list(self.changer_stats.keys())[0], since_print_start)
+            temp_msg += self._changer_stats_to_human_string(list(self.changer_stats.keys())[0], since_print_start)
         else:
             # This will add the total stats for all changers as a sum and then print them
-            msg += self._changer_stats_to_human_string(None, since_print_start)            
-            msg += ("\n========================================================\n")
+            temp_msg += self._changer_stats_to_human_string(None, since_print_start)            
+            if temp_msg != "":
+             msg += temp_msg + SECTION_SEPARATOR
+             temp_msg = ""
 
+        ##############################  Changers
             # This will print the stats for each changer in a sorted order
             sorted_items = natural_keys_sorting(self.changer_stats.keys())
             for changer_name in sorted_items:
-                msg += self._changer_stats_to_human_string(changer_name, since_print_start)
-                if changer_name != sorted_items[-1]:
-                    msg += "\n----------------------------------------------------------\n"
-                
+                changer_temp_msg = self._changer_stats_to_human_string(changer_name, since_print_start)
+                if changer_temp_msg != "":
+                    temp_msg += changer_temp_msg + LINE_SEPARATOR
 
-        msg += ("\n========================================================\n")
+        if temp_msg != "" and temp_msg.endswith(LINE_SEPARATOR):
+            temp_msg = temp_msg[:-len(LINE_SEPARATOR)]
+            msg += temp_msg + (SECTION_SEPARATOR)
+            temp_msg = ""
+            
+        ##############################  Tools
+        # last_tool_was_empty = True
         sorted_items = natural_keys_sorting(self.tool_stats.keys())
-        for tol_name in sorted_items:
-            msg += self._tool_stats_to_human_string(tol_name, since_print_start)
-            if tol_name != sorted_items[-1]:
-                msg += "\n-----------------------------\n"
-            else:
-                msg += ("\n========================================================\n")
+        for tool_name in sorted_items:
+            # Get the stats for the tool
+            temp_tool_msg = self._tool_stats_to_human_string(tool_name, since_print_start)
+            if temp_tool_msg != "":
+                temp_msg += temp_tool_msg + LINE_SEPARATOR
+        
+        if temp_msg != "" and temp_msg.endswith(LINE_SEPARATOR):
+            temp_msg = temp_msg[:-len(LINE_SEPARATOR)]
+            msg += temp_msg + SECTION_SEPARATOR
+            temp_msg = ""
 
         # Dump the message to the console and to the log file if enabled
-        self.always(msg)
+        if msg != "":
+            self.always(msg_header + msg)
+        else:
+            self.always(msg_header + "No statistics recorded.")
                 
     def _changer_stats_to_human_string(self, changer_name: str = None, since_print_start = False) -> str:
+        """Return a human readable string with the statistics for a given changer
+        If changer_name is None, return the sum of all changers."""
         selects = None
         deselects = None
         time_spent_selecting = None
         time_spent_deselecting = None
+        result = ""
+        
         
         if changer_name is None:
-            result = ""
+            result_header = ""
         else:
-            result = ("Changer %s:" % changer_name)
+            result_header = ("Changer %s:" % changer_name)
 
         tool_stats_sum = self._sum_tool_stats_for_changer(changer_name, since_print_start)                
             
@@ -333,7 +357,8 @@ class Ktc_Log:
             result += "%d disengages completed" % changer_stats.disengages
 
         ############################## Final
-        # if changer_name is None:
+        if result != "":
+            result = result_header + result
         return result
 
     def _sum_tool_stats_for_changer(self, changer_name: str, since_print_start = False) -> Tool_Statistics:
@@ -359,41 +384,47 @@ class Ktc_Log:
             
         return result
 
-    def _tool_stats_to_human_string(self, tol_name: str, since_print_start = False) -> str:
+    def _tool_stats_to_human_string(self, tool_name: str, since_print_start = False) -> str:
         """Return a human readable string with the statistics for a given tool"""
-        t = self.tool_stats[tol_name]
-        result = "Tool %s:\n" % (tol_name)
+        t = self.tool_stats[tool_name]
+        if since_print_start:
+            t -= self.print_tool_stats[tool_name]
+        result = ""
+        result_header = "Tool %s:\n" % (tool_name)
 
         ##############################  Selected time
         # Selected 1:00:00.
-        result += "Selected %s." % seconds_to_human_string(t.time_selected)
+        if t.time_selected > 0:
+            result += "Selected %s." % seconds_to_human_string(t.time_selected)
         ##############################  Selects
         # 264 selects completed(100.0%) in 1:00:00, avg. 13.2s.
-        result += "\n%s selects completed(%.1f%%)" % (
-            bignumber_to_human_string(t.selects_completed),
-            (t.selects_completed / t.selects_started * 100)
-        )
-        result += " in %s." % (
-            seconds_to_human_string(t.time_spent_selecting)
-        )                
-        result += " Avg. %s." % (
-            seconds_to_human_string(division(
-                t.time_spent_selecting, t.selects_completed))
-        )
+        if t.selects_started > 0 or not since_print_start:
+            result += "\n%s selects completed(%.1f%%)" % (
+                bignumber_to_human_string(t.selects_completed),
+                (t.selects_completed / t.selects_started * 100)
+            )
+            result += " in %s." % (
+                seconds_to_human_string(t.time_spent_selecting)
+            )                
+            result += " Avg. %s." % (
+                seconds_to_human_string(division(
+                    t.time_spent_selecting, t.selects_completed))
+            )
         
         ##############################  Deselects
         # 264 deselects completed(100.0%) in 1:00:00, avg. 13.2s.
-        result += "\n%s deselects completed(%.1f%%)" % (
-            bignumber_to_human_string(t.deselects_completed),
-            (t.deselects_completed / t.deselects_started * 100)
-        )
-        result += " in %s." % (
-            seconds_to_human_string(t.time_spent_deselecting)
-        )                
-        result += " Avg. %s." % (
-            seconds_to_human_string(division(
-                t.time_spent_deselecting, t.deselects_completed))
-        )
+        if t.deselects_started > 0:
+            result += "\n%s deselects completed(%.1f%%)" % (
+                bignumber_to_human_string(t.deselects_completed),
+                (t.deselects_completed / t.deselects_started * 100)
+            )
+            result += " in %s." % (
+                seconds_to_human_string(t.time_spent_deselecting)
+            )                
+            result += " Avg. %s." % (
+                seconds_to_human_string(division(
+                    t.time_spent_deselecting, t.deselects_completed))
+            )
         
         ##############################  Active times
         # 1:00:00 with heater active and 1:00:00 with heater in standby.
@@ -406,6 +437,8 @@ class Ktc_Log:
                     seconds_to_human_string(t.time_heater_standby))
             result += "."
         
+        if result != "":
+            result = result_header + result
         return result
         
 ### STATISTICS INCREMENTING CHANGER FUNCTIONS FUNCTIONS
