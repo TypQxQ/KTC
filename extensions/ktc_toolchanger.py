@@ -32,6 +32,7 @@ class KtcToolchanger:
         Returns:
             _type_: _description_
         """
+        self.config = config
         # Initialize general class variables if not already initialized.
         if KtcToolchanger.printer is None:
             self.printer = config.get_printer()
@@ -50,6 +51,7 @@ class KtcToolchanger:
         self.params = ktc.get_params_dict_from_config(config)
         self.state = STATE.UNINITIALIZED
         self.tools: dict[str, ktc_tool.KtcTool] = {}  # All tools on this toolchanger.
+        self.parent_tool: ktc_tool.KtcTool = None  # The parent tool of this toolchanger.
         
         # Get initialization mode and check if valid.
         # init_mode = INIT_MODE.get_value_from_configuration(self.params.get("init_mode", INIT_MODE.MANUAL))
@@ -60,24 +62,17 @@ class KtcToolchanger:
                 "Invalid init_mode %s for ktc_toolchanger %s. Valid values are: %s"
             % (init_mode, self.name, INIT_MODE.list_valid_values()))
             
-
+        # Get the initialization order and check if valid.
+        init_order = config.get("init_order", INIT_ORDER.INDENPENDENT)
+        self.init_order = INIT_ORDER.get_value_from_configuration(init_order)
+        if self.init_order is None:
+            raise config.error(
+                "Invalid init_order %s for ktc_toolchanger %s. Valid values are: %s"
+            % (init_order, self.name, INIT_ORDER.list_valid_values()))
+        
         self.active_tool = (
             ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
         )
-
-        ######
-        # TODO: Move to ktc.
-        # self.saved_fan_speed = (
-            # 0  # Saved partcooling fan speed when deselecting a tool with a fan.
-        # )
-
-        # self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
-        # self.tool_map = {}
-        # self.last_endstop_query = {}
-        # self.changes_made_by_set_all_tool_heaters_off = {}
-        # self.saved_position = None
-        ######
-
 
         # G-Code macros
         gcode_macro = self.printer.load_object(config, "gcode_macro")
@@ -97,6 +92,9 @@ class KtcToolchanger:
                 config, "none", self.init_gcode_template
             )
             
+        # Get the parent tool if defined. This is set to the object 
+        # after connect, after all objects are initialized.
+        self.parent_tool = config.get("parent_tool", None)
 
         # Add itself to the list of toolchangers if not already added.
         # This can potentially happen if the toolchanger is named "default_toolchanger".
@@ -110,6 +108,28 @@ class KtcToolchanger:
 
         # Register handlers for events.
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        self.printer.register_event_handler("klippy:connect", self.handle_connect)
+
+        ######
+        # TODO: Move to ktc.
+        # self.saved_fan_speed = (
+            # 0  # Saved partcooling fan speed when deselecting a tool with a fan.
+        # )
+
+        # self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
+        # self.tool_map = {}
+        # self.last_endstop_query = {}
+        # self.changes_made_by_set_all_tool_heaters_off = {}
+        # self.saved_position = None
+        ######
+
+    def handle_connect(self):
+        if self.parent_tool is not None:
+            self.parent_tool = self.printer.lookup_object(self.parent_tool, None)
+            raise self.config.error(
+                "parent_tool %s not found for ktc_toolchanger %s."
+                % (self.parent_tool, self.name)
+            )
 
     def handle_ready(self):
         if self.init_mode == INIT_MODE.ON_START:
@@ -129,32 +149,55 @@ class KtcToolchanger:
 
     def initialize(self):
         """Initialize the tool lock."""
-        # TODO: Check if this is needed. Should be handled by other logic not to limit use.
-        # if self.state > STATE.UNINITIALIZED:
-        #     self.log.always(
-        #         "ktc_toolchanger.initialize(): Toolchanger %s already initialized." % self.name
-        #     )
-        #     return None
+        # Check if the toolchanger has a parent tool if the init_order is set to
+        # something else than independent.
+        if self.init_order != INIT_ORDER.INDENPENDENT AND self.parent_tool is not None:
+            raise Exception(
+                "Toolchanger %s has no parent tool defined but init_order is set to AFTER_PARENT." % self.name
+            )
+
+        # Check if the parent tool is initialized if the init_order is set to
+        # be after the parent tool is selected or initialized.
+        if (self.init_order == INIT_ORDER.AFTER_PARENT_SELECTED or
+            self.init_order == INIT_ORDER.AFTER_PARENT_INITIALIZATION):
+            # If the parent tool is not initialized, initialize it.
+            if self.parent_tool.toolchanger.state < STATE.INITIALIZED:
+                self.parent_tool.toolchanger.initialize()
+
+        # Check if the parent tool is ready if the init_order is set to
+        # be after the parent tool is selected.                
+        if self.init_order == INIT_ORDER.AFTER_PARENT_SELECTED:
+            # Parent toolchanger should be initialized now if possible.
+            if self.parent_tool.toolchanger.state < STATE.READY:
+                raise Exception(
+                    "Toolchanger %s has parent tool %s that resides on toolchanger %s " 
+                    % (self.name, self.parent_tool.name, self.parent_tool.toolchanger.name) +
+                    "that is not ready but init_order for this toolchanger is set to AFTER_PARENT_SELECTED."
+                )
+                
+            if (self.parent_tool.toolchanger.state < STATE.ENGAGED and
+                self.parent_tool.toolchanger.active_tool != self.parent_tool):
+                self.parent_tool.select()
+
+        # If not, set the state to INITIALIZING 
         
         # Get the active tool from the persistent variables.
-        active_tool_name = self.persistent_state.get(
-            "active_tool", ktc.TOOL_NONE.name
-        )
+        active_tool_name = str.lower(self.persistent_state.get(
+            "active_tool", ktc.TOOL_UNKNOWN.name
+        ))
 
         # Set the active tool to the tool with the name from the persistent variables.
-        self.active_tool = self.printer.lookup_object(active_tool_name)
-        if self.active_tool is None or not isinstance(self.active_tool, ktc_tool.KtcTool):
+        # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
+        for tool_name, tool in self.tools.items():
+            self.log.trace("ktc_toolchanger.initialize(): Tool %s found." % tool_name)
+            
+        self.active_tool = self.tools.get(active_tool_name, None)
+        if self.active_tool is None:
+            self.active_tool = ktc.TOOL_UNKNOWN
             self.log.always(
                 "ktc_toolchanger.initialize(): Active tool %s not found for ktc_toolchanger %s. Using tool %s."
-                % (active_tool_name, self.name, ktc.TOOL_UNKNOWN.name)
+                % (active_tool_name, self.name, self.active_tool.name)
             )
-            self.active_tool = ktc.TOOL_UNKNOWN
-        if self.active_tool not in self.tools:
-            self.log.always(
-                "ktc_toolchanger.initialize(): Active tool %s not found in tools for ktc_toolchanger %s. Using tool %s."
-                % (active_tool_name, self.name, ktc.TOOL_UNKNOWN.name)
-            )
-            self.active_tool = ktc.TOOL_UNKNOWN
         
         self.log.trace("ktc_toolchanger.initialize(): Loaded persisted active tool: %s." % self.active_tool.name)
 
@@ -169,12 +212,16 @@ class KtcToolchanger:
         else:
             self.state = STATE.INITIALIZED
             
-        self.log.trace("ktc_toolchanger.initialize(): Ran init gcode template.")
+        self.log.trace("ktc_toolchanger.initialize(): Complete.")
         self.log.trace("Active tool: %s." % self.active_tool.name)
         self.log.trace("State is now: %s." % self.state)
         
-
-
+        if self.ktc.default_toolchanger == self:
+            self.ktc.active_tool = self.active_tool
+            self.log.trace("ktc.active_tool set to: %s." % self.ktc.active_tool.name)
+           
+        
+    
         # if self.active_tool == ktc.TOOL_NONE:
         #     self.disengage()
         # else:
@@ -242,11 +289,11 @@ class KtcToolchanger:
         status = {
             # "global_offset": self.global_offset,
             "name": self.name,
-            "active_tool": self.active_tool.name
+            "active_tool": self.active_tool.name,
             # "active_tool_n": self.active_tool.number,
             "state": self.state,
             "init_mode": self.init_mode,
-            "tools": self.tools.keys(),
+            "tools": list(self.tools.keys()),
             # "saved_fan_speed": self.saved_fan_speed,
             # "purge_on_toolchange": self.purge_on_toolchange,
             # "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
@@ -285,8 +332,19 @@ class INIT_MODE:
         return _list_valid_values_of_dataclass(INIT_MODE)
     def get_value_from_configuration(configured_value):
         return _get_value_from_configuration_for_dataclass(INIT_MODE, configured_value)
-    # def get_name(status):
-    #     return _get_attr_key_name_from_value(INIT_MODE, status)
+
+@dataclasses.dataclass
+class INIT_ORDER:
+    """Constants for the initialization order of the toolchanger."""
+    INDENPENDENT : str = "independent"
+    # BEFORE_PARENT_SELECTED : str = "before_parent_selected"
+    AFTER_PARENT_SELECTED : str = "after_parent_selected"
+    # BEFORE_PARENT_INITIALIZATION : str = "before_parent_initialization"
+    AFTER_PARENT_INITIALIZATION : str = "after_parent_initialization"
+    def list_valid_values():
+        return _list_valid_values_of_dataclass(INIT_ORDER)
+    def get_value_from_configuration(configured_value):
+        return _get_value_from_configuration_for_dataclass(INIT_ORDER, configured_value)
 
 def _get_value_from_configuration_for_dataclass(c: dataclasses.dataclass, configured_value: str):
     return [field.default for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)][0]

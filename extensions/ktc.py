@@ -48,6 +48,8 @@ class Ktc:
         self.tools_by_number: dict[int, ktc_tool.KtcTool] = {}  # List of all tools by number.
         self.toolchangers: dict[str, ktc_toolchanger.KtcToolchanger] = {}  # List of all toolchangers.
 
+        # Gets the name here and connects to a toolchanger object later
+        # when all objects are loaded.
         self.default_toolchanger: ktc_toolchanger.KtcToolchanger = config.get(
             "default_toolchanger", None
         )
@@ -162,11 +164,21 @@ class Ktc:
                     "default_toolchanger in section [ktc] is not a valid"
                     + " toolchanger."
                 )
+            if self.default_toolchanger.parent_tool is not None:
+                raise self.config.error(
+                    "The default toolchanger %s can't have a parent tool."
+                    % self.default_toolchanger.name
+                )
         else:
             # Check if the printer has a toolchanger. If only one then set it as default.
             if len(self.toolchangers) == 1 and self.default_toolchanger is None:
                 self.log.trace("Only one toolchanger defined. Setting it as default.")
                 self.default_toolchanger = list(self.toolchangers.values())[0]
+                
+                # Check if the now default toolchanger has a parent tool. If so raise error.
+                if self.default_toolchanger.parent_tool is not None:
+                    raise self.config.error(
+                        "Only toolchanger can't have a parent tool.")
             elif len(self.toolchangers) > 1 and self.default_toolchanger is None:
                 raise self.config.error(
                     "More than one toolchanger defined but no default toolchanger set."
@@ -183,8 +195,12 @@ class Ktc:
             self.default_toolchanger.tools[tool.name] = tool
 
     def _config_tools(self):
-        self.tools[TOOL_NONE.name] = TOOL_NONE
-        self.tools[TOOL_UNKNOWN.name] = TOOL_UNKNOWN
+        # Add TOOL_NONE and TOOL_UNKNOWN to the list of tools for ktc and all toolchangers.
+        self.tools[TOOL_NONE.name.lower()] = TOOL_NONE
+        self.tools[TOOL_UNKNOWN.name.lower()] = TOOL_UNKNOWN
+        for tc in self.toolchangers.values():
+            tc.tools[TOOL_NONE.name.lower()] = TOOL_NONE
+            tc.tools[TOOL_UNKNOWN.name.lower()] = TOOL_UNKNOWN
         
         # All tools that are not TOOL_NONE or TOOL_UNKNOWN should have a toolchanger.
         # Default toolchanger is set in _config_default_toolchanger.
@@ -928,7 +944,9 @@ class Ktc:
             "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
             "saved_position": self.saved_position,
             "last_endstop_query": self.last_endstop_query,
-            "tools": self.tools.keys(),
+            "tools": list(self.tools.keys()),
+            "TOOL_NONE": TOOL_NONE.name,
+            "TOOL_UNKNOWN": TOOL_UNKNOWN.name,
             **self.params,
         }
         return status

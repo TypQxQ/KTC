@@ -1,34 +1,66 @@
 ktc.py has all common functions that need only initialized once.
+    -constants
     TOOL_UNKNOWN :  Special tool indicating stateunknown.
     TOOL_NONE :     Special tool when known state is that a toolchanger has no tool engaged.
 
+    - configurable    
+    global_offset:  X,Y,Z.
     params_*:   Aditional personizable options that can be used by macros.
+    default_toolchanger:Toolchanger object 
+    params_*:           Aditional personizable options that can be used by macros.
+
+    -params
+    tools:              dict[tool_name:tool]
+    tools_by_number:    dict[int, ktc_tool.KtcTool]
+    self.toolchangers:  dict[str, ktc_toolchanger.KtcToolchanger]
+
+    -get_status
+    global_offset:      X,Y,Z
+    active_tool:
+?   active_tool_n:
+    saved_fan_speed:
+?   restore_axis_on_toolchange:
+?   saved_position
+?   last_endstop_query
+    tools:              list of tool names
+    TOOL_NONE:          TOOL_NONE.name
+    TOOL_UNKNOWN:       TOOL_UNKNOWN.name
+    **self.params
 
 
 ktc_log.py is is initialized once and used for logging, statistics and saving persistant settings like offsets.
 
 
 ktc_toolchanger.py is initialized for each toolchanger system and can have a parent_tool.
+    - configurable
     Name:       is case sensitive and can contain spaces
     params_*:           Aditional personizable options that can be used by macros.
     disengage_gcode:    G-Code run when disengaging 
     init_mode:          When to initialize the toolchanger: manual, on_start or on_first_use.
-                        Defaults to manula.
-
+    init_order:         Defaults to independent Required if not default, not usable on default.
+                        Defaults to manual.
+    parent_tool:    Required for changers other than the default.
     init_gcode:         G-code running on initialization. active_tool is loaded before running this
     engage_gcode:       G-code running when engaging tool-lock.
     disengage_gcode:    G-code running when disengaging tool-lock.
 
+    -params
+    tools:              dict[tool_name:tool]
+    persistent_state:   Get or Set the persistend state. ex. ['active_tool':'20']
     state :         ktc_toolchanger.STATE attr indicating current state.
     init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
     active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
+    init_order:     
     <!-- active_tool_n:  The toolnumber of the active_tool. -->
-    tools:          
+    tools:                
 
-    get_status:
-        tools:          list of tool.names in tools
-        active_tool:    active_tool.name
+    - get_status:
+    tools:          list of tool.names in tools
+    active_tool:    active_tool.name
+    init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
+    active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
 
+    - functions
     engage :        Function to engage the tool lock. Locking the tool
     disengage :     Function to disengage the tool lock. Unlocking the tool.
     change :        Function to change the tool.
@@ -43,7 +75,8 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
                                     ktc:    The ktc object.
                                     STATE:  Constants for setting and comparing myself.state
                                     INIT_MODE: Constants for setting and comparing myself.init_mode
-                                
+
+    - G-Code commands                                
 
     
 
