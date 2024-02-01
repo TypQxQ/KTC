@@ -99,6 +99,8 @@ class Ktc:
             "KTC_TOOLCHANGER_DISENGAGE",
             "KTC_SET_ALL_TOOL_HEATERS_OFF",
             "KTC_RESUME_ALL_TOOL_HEATERS",
+            "KTC_TOOLCHANGER_INITIALIZE",
+            "KTC_SET_TOOLCHANGER_STATE",
         ]
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)
@@ -260,15 +262,33 @@ class Ktc:
     def active_tool_n(self) -> int:
         return self.__active_tool.number
 
+    cmd_KTC_SET_TOOLCHANGER_STATE_help = ( "Set the state of the toolchanger."
+        + " [TOOLCHANGER: Default_ToolChanger]"
+        + " [STATE: STATE.ERROR]")
+    def cmd_KTC_SET_TOOLCHANGER_STATE(self, gcmd=None):
+        self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get_int("STATE", None)
+
     cmd_KTC_TOOLCHANGER_INITIALIZE_help = ( "Initialize the toolchanger before use."
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_INITIALIZE(self, gcmd=None):
         self.parse_gcmd_get_toolchanger(gcmd).initialize()
 
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
-        "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]" )
+        "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]"
+        + " [IGNORE_ENGAGED: False]")
     def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd=None):
-        self.parse_gcmd_get_toolchanger(gcmd).engage()
+        ignore_engaged = gcmd.get("IGNORE_ENGAGED", False)
+        if isinstance(ignore_engaged, str):
+            if ignore_engaged.lower() == "true":
+                ignore_engaged = True
+            else:
+                ignore_engaged = False
+        if isinstance(ignore_engaged, int):
+            if ignore_engaged > 0:
+                ignore_engaged = True
+            else:
+                ignore_engaged = False
+        self.parse_gcmd_get_toolchanger(gcmd).engage(ignore_engaged = ignore_engaged)
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )

@@ -67,7 +67,7 @@ class KtcPersisting:
 
     def save_variable(self, varname: str, value: str, section: str ="Variables", force_save: bool=False) -> None:
         try:
-            self.log.trace("save_variable  %s %s, value type %s" % (varname, value, type(value)))
+            self.log.trace("ktc_persisting.save_variable(Varname=%s, valus=%s, value type=%s)" % (varname, value, type(value)))
             value = ast.literal_eval(value)
         except ValueError as e:
             raise Exception("Unable to parse '%s' as a literal: %s" % (value, e))

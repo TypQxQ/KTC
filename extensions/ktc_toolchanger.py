@@ -15,14 +15,6 @@ class KtcToolchanger:
     A "default_toolchanger" will be initialized if no toolchanger
     is specified in the config."""
 
-    # Initialize general static class variables.
-    printer = None
-    reactor = None
-    gcode = None
-    ktc = None
-    log = None
-    ktc_persistent = None
-
     def __init__(self, config):
         """_summary_
 
@@ -33,18 +25,16 @@ class KtcToolchanger:
             _type_: _description_
         """
         self.config = config
-        # Initialize general class variables if not already initialized.
-        if KtcToolchanger.printer is None:
-            self.printer = config.get_printer()
-            self.reactor = self.printer.get_reactor()
-            self.gcode = self.printer.lookup_object("gcode")
-            self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
-            self.log: ktc_log.Ktc_Log = self.printer.load_object(
-                config, "ktc_log"
-            )  # Load the log object.
-            self.ktc_persistent: ktc_persisting.KtcPersisting = (
-                self.printer.load_object(config, "ktc_persisting")
-            )  # Load the ktc_persisting object.
+        self.printer = config.get_printer()
+        self.reactor = self.printer.get_reactor()
+        self.gcode = self.printer.lookup_object("gcode")
+        self.log: ktc_log.Ktc_Log = self.printer.load_object(
+            config, "ktc_log"
+        )  # Load the log object.
+        self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
+        self.ktc_persistent: ktc_persisting.KtcPersisting = (
+            self.printer.load_object(config, "ktc_persisting")
+        )  # Load the ktc_persisting object.
 
         # Initialize object variables.
         self.name: str = config.get_name().split(" ", 1)[1]
@@ -63,7 +53,7 @@ class KtcToolchanger:
             % (init_mode, self.name, INIT_MODE.list_valid_values()))
             
         # Get the initialization order and check if valid.
-        init_order = config.get("init_order", INIT_ORDER.INDENPENDENT)
+        init_order = config.get("init_order", INIT_ORDER.INDEPENDENT)
         self.init_order = INIT_ORDER.get_value_from_configuration(init_order)
         if self.init_order is None:
             raise config.error(
@@ -151,7 +141,7 @@ class KtcToolchanger:
         """Initialize the tool lock."""
         # Check if the toolchanger has a parent tool if the init_order is set to
         # something else than independent.
-        if self.init_order != INIT_ORDER.INDENPENDENT AND self.parent_tool is not None:
+        if self.init_order != INIT_ORDER.INDEPENDENT and self.parent_tool is not None:
             raise Exception(
                 "Toolchanger %s has no parent tool defined but init_order is set to AFTER_PARENT." % self.name
             )
@@ -188,9 +178,6 @@ class KtcToolchanger:
 
         # Set the active tool to the tool with the name from the persistent variables.
         # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
-        for tool_name, tool in self.tools.items():
-            self.log.trace("ktc_toolchanger.initialize(): Tool %s found." % tool_name)
-            
         self.active_tool = self.tools.get(active_tool_name, None)
         if self.active_tool is None:
             self.active_tool = ktc.TOOL_UNKNOWN
@@ -199,7 +186,8 @@ class KtcToolchanger:
                 % (active_tool_name, self.name, self.active_tool.name)
             )
         
-        self.log.trace("ktc_toolchanger.initialize(): Loaded persisted active tool: %s." % self.active_tool.name)
+        self.log.trace("ktc_toolchanger[%s].initialize(): Loaded persisted active tool: %s." 
+                       % (self.name, self.active_tool.name))
 
         # Run the init gcode template if it is defined.
         if self.init_gcode_template is not None:
@@ -212,9 +200,9 @@ class KtcToolchanger:
         else:
             self.state = STATE.INITIALIZED
             
-        self.log.trace("ktc_toolchanger.initialize(): Complete.")
-        self.log.trace("Active tool: %s." % self.active_tool.name)
-        self.log.trace("State is now: %s." % self.state)
+        self.log.trace("ktc_toolchanger[%s].initialize(): Complete." % self.name)
+        self.log.trace("ktc_toolchanger[%s].active_tool: %s." % (self.name, self.active_tool.name))
+        self.log.trace("ktc_toolchanger[%s].state: %s." % (self.name, STATE.value_to_key_string(self.state)))
         
         if self.ktc.default_toolchanger == self:
             self.ktc.active_tool = self.active_tool
@@ -232,31 +220,49 @@ class KtcToolchanger:
         # self.ktc.active_tool = self.active_tool
 
     def engage(self, ignore_engaged=False) -> bool:
-        if self.engage_gcode_template is None:
-            self.log.always(
-                "ktc_toolchanger.engage(): No tool lock gcode template"
-                + " defined for ktc_toolchanger %s." % self.name
-            )
-            return None
+        try:
+            if self.state < STATE.INITIALIZING:
+                raise Exception(
+                    "Status is: %s." % STATE.value_to_key_string(self.state)
+                )
 
-        self.log.trace("ktc_toolchanger.engage() running. ")
-        if not ignore_engaged and int(self.ktc.active_tool) != ktc.TOOL_NONE_N:
-            self.log.always(
-                "ktc_toolchanger %s is already locked with tool %s."
-                % (self.name, self.ktc.active_tool.name)
-            )
-        else:
-            self.engage_gcode_template.run_gcode_from_command()
-            self.ktc.active_tool = ktc.TOOL_UNKNOWN
-            self.log.trace("Tool Locked")
+            if self.engage_gcode_template is None:
+                raise Exception(
+                    "No tool lock gcode template defined."
+                )
+
+            if not ignore_engaged and self.state == STATE.ENGAGED:
+                self.log.always(
+                    "ktc_toolchanger %s is already engaged with tool %s."
+                    % (self.name, self.ktc.active_tool.name)
+                    + " IGNORE_ENGAGED is not set. No action taken."
+                )
+                return True
+
+            self.state = STATE.ENGAGING
+            context = self.init_gcode_template.create_template_context()
+            context['myself'] = self.get_status()
+            context['ktc'] = self.ktc.get_status()
+            context['STATE'] = STATE
+            context['INIT_MODE'] = INIT_MODE
+            self.log.trace("ktc_toolchanger.engage() running. ")
+            self.engage_gcode_template.run_gcode_from_command(context)
+            self.log.trace("Tool engaged successfully.")
+
             self.log.changer_stats[self.name].engages += 1
+            self.state = STATE.ENGAGED
+            return True
+        except Exception as e:
+            self.log.always("ktc_toolchanger.disengage(): failed for ktc_toolchanger %s with error: %s" % (self.name, e))
+            self.state = STATE.ERROR
+            return False
 
     def disengage(self) -> bool:
         """Disengage the lock on the tool so it can be removed.
         Return: True if successful, False if not."""
         
         try:
-            if self.state < STATE.READY:
+            if self.state < STATE.INITIALIZING:
                 raise Exception(
                     "Toolchanger %s not ready." % self.name
                 )
@@ -269,20 +275,24 @@ class KtcToolchanger:
                 return true
 
             # Run the disengage gcode template.
-            # TODO: Add context. Myself, ktc, etc.
-            self.disengage_gcode_template.run_gcode_from_command()
+            self.state = STATE.DISENGAGING
+            context = self.init_gcode_template.create_template_context()
+            context['myself'] = self.get_status()
+            context['ktc'] = self.ktc.get_status()
+            context['STATE'] = STATE
+            context['INIT_MODE'] = INIT_MODE
+            self.log.trace("ktc_toolchanger.disengage() running. ")
+            self.disengage_gcode_template.run_gcode_from_command(context)
+            self.log.trace("Tool disengaged successfully.")
 
-            # TODO: Check if this is apropiate.
-            self.ktc.active_tool = ktc.TOOL_NONE
-            
             # Add disengage to statistics.
-            self.log.trace("Adding disengage to statistics: %s" % (self.log.changer_stats[self.name].disengages))
             self.log.changer_stats[self.name].disengages += 1
-            self.log.trace("Added disengage to statistics: %s" % (self.log.changer_stats[self.name].disengages))
             
+            self.state = STATE.READY
             return True
         except Exception as e:
             self.log.always("ktc_toolchanger.disengage(): failed for ktc_toolchanger %s with error: %s" % (self.name, e))
+            self.state = STATE.ERROR
             return False
 
     def get_status(self, eventtime=None):
@@ -313,14 +323,19 @@ class STATE:
     READY: int = 1
     CHANGING: int = 2
     ENGAGING: int = 3
-    ENGAGED: int = 4
+    DISENGAGING: int = 4
+    ENGAGED: int = 5
     # Return the attr name of the status from the value.
-    # def get_name(self, status):
-    #     return _get_attr_key_name_from_value(self, status)
+    def value_to_key_string(status):
+        r = [field.name for field in dataclasses.fields(STATE) if field.default == int(status)]
+        if len(r) == 0:
+            return None
+        else:
+            return r[0]
     def list_valid_values(self):
         return _list_valid_values_of_dataclass(self)
     def get_value_from_configuration(configured_value):
-        return _get_value_from_configuration_for_dataclass(INIT_MODE, configured_value)
+        return _get_value_from_configuration_for_dataclass(STATE, configured_value)
     
 @dataclasses.dataclass
 class INIT_MODE:
@@ -336,7 +351,7 @@ class INIT_MODE:
 @dataclasses.dataclass
 class INIT_ORDER:
     """Constants for the initialization order of the toolchanger."""
-    INDENPENDENT : str = "independent"
+    INDEPENDENT : str = "independent"
     # BEFORE_PARENT_SELECTED : str = "before_parent_selected"
     AFTER_PARENT_SELECTED : str = "after_parent_selected"
     # BEFORE_PARENT_INITIALIZATION : str = "before_parent_initialization"
@@ -347,7 +362,11 @@ class INIT_ORDER:
         return _get_value_from_configuration_for_dataclass(INIT_ORDER, configured_value)
 
 def _get_value_from_configuration_for_dataclass(c: dataclasses.dataclass, configured_value: str):
-    return [field.default for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)][0]
+    r = [field.default for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)]
+    if len(r) == 0:
+        return None
+    else:
+        return r[0]
     # return next((field.value for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)), None)
 
 def _list_valid_values_of_dataclass(c):
