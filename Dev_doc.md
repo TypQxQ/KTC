@@ -15,17 +15,35 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
     init_mode:          When to initialize the toolchanger: manual, on_start or on_first_use.
                         Defaults to manula.
 
-    init_gcode:         G-code running on initialization.
+    init_gcode:         G-code running on initialization. active_tool is loaded before running this
     engage_gcode:       G-code running when engaging tool-lock.
     disengage_gcode:    G-code running when disengaging tool-lock.
 
-    engage :        Function to engage the tool lock. Locking the tool
-    disengage :     Function to disengage the tool lock. Unlocking the tool.
     state :         ktc_toolchanger.STATE attr indicating current state.
     init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
     active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
+    <!-- active_tool_n:  The toolnumber of the active_tool. -->
+    tools:          
 
+    get_status:
+        tools:          list of tool.names in tools
+        active_tool:    active_tool.name
+
+    engage :        Function to engage the tool lock. Locking the tool
+    disengage :     Function to disengage the tool lock. Unlocking the tool.
     change :        Function to change the tool.
+    init:           Function to init the changer. 
+                        Loads persisted active_tool.
+                        Then checks if a init_gcode has been specified.
+                            If no init_gcode is specified then it will set state to STATE.INITIALIZED.
+                            If init_gcode is specified, it will run it.
+                                Atleast myself.state should be set for example to STATE.INITIALIZED.
+                                Can access this context: 
+                                    myself: The ktc_toolchanger being initialized.
+                                    ktc:    The ktc object.
+                                    STATE:  Constants for setting and comparing myself.state
+                                    INIT_MODE: Constants for setting and comparing myself.init_mode
+                                
 
     
 
@@ -39,7 +57,7 @@ ktc_tool.py is initialized for each tool.
 
 
 ToDo:
-
+    
     Check what happens when selecting TOOL_UNKNOWN and has no stats...
 
     ktc_persisting sparar innnan den hämtar nya. Både statistik och active_tool.

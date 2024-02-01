@@ -928,6 +928,7 @@ class Ktc:
             "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
             "saved_position": self.saved_position,
             "last_endstop_query": self.last_endstop_query,
+            "tools": self.tools.keys(),
             **self.params,
         }
         return status
@@ -998,6 +999,7 @@ def ktc_parse_restore_type(restore_type: str, default: str = None) -> str:
 
 
 def get_params_dict_from_config(config):
+    """Get a dict of params from the config."""
     result = {}
 
     # If the section doesn't exist inside the config,
