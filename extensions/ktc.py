@@ -35,7 +35,7 @@ class Ktc:
         self.reactor = self.printer.get_reactor()
         self.gcode = self.printer.lookup_object("gcode")
         gcode_macro = self.printer.load_object(config, "gcode_macro")
-        self.log: ktc_log.Ktc_Log = self.printer.load_object(
+        self.log: ktc_log.KtcLog = self.printer.load_object(
             config, "ktc_log"
         )  # Load the log object.
 
@@ -58,6 +58,17 @@ class Ktc:
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
         self.params = get_params_dict_from_config(config)
+        self.log.trace("KTC: Params: %s." % str(self.params))
+
+        ######## Inheritable parameters
+        # If set to "X", "Y", "Z" or a combination of them, then the tool will require the axis to be homed before it can be selected. Defaults to "".
+        self.requires_axis_homed: str = config.get("requires_axis_homed", "")
+
+        # Tool Selection and Deselection G-Code macros
+        # This is overridden by the tool if it has a tool_select_gcode or tool_deselect_gcode defined.
+        self.tool_select_gcode = config.get("tool_select_gcode", "")
+        self.tool_deselect_gcode = config.get("tool_deselect_gcode", "")
+
 
         self.tool_map = {}
         self.last_endstop_query = {}
@@ -112,7 +123,7 @@ class Ktc:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
         # self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
 
-    # This function is called when all objects are loaded, initialized and configured.
+    # This method is called when all objects are loaded, initialized and configured.
     def handle_connect(self):
         ############################
         self._config_default_toolchanger()
@@ -124,18 +135,26 @@ class Ktc:
         self.ktc_persistent: ktc_persisting.KtcPersisting = self.printer.load_object(
             self.config, "ktc_persisting"
         )
+        
+        # Load inherited parameters for each tool.
+        for tool in self.tools.values():
+            
+            tool.configure_inherited_params()
 
-    # This function is called when the printer is ready to print.
+    # This method is called when the printer is ready to print.
+    # The toolchanger init could run at the same time
     def handle_ready(self):
-        # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
-        self.tool_map = self.log.ktc_persistent.content.get(VARS_KTC_TOOL_MAP, {})
-        self.tool_map = {}
+        return
 
-        try:
-            if len(self.tool_map) > 0:
-                self.log.always(self._tool_map_to_human_string())
-        except Exception as e:
-            self.log.always("Warning: Error booting up KTC: %s" % str(e))
+        # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
+        # self.tool_map = self.log.ktc_persistent.content.get(VARS_KTC_TOOL_MAP, {})
+        # self.tool_map = {}
+
+        # try:
+        #     if len(self.tool_map) > 0:
+        #         self.log.always(self._tool_map_to_human_string())
+        # except Exception as e:
+        #     self.log.always("Warning: Error booting up KTC: %s" % str(e))
 
     # Validate default_toolchanger and set it to all tools that don't have toolchanger specified.
     def _config_default_toolchanger(self):
@@ -997,8 +1016,7 @@ class Ktc:
         if tool_name:
             tool = self.printer.lookup_object(tool_name)
         elif tool_nr is not None:
-            # TODO: Implement this
-            tool = self.lookup_tool(tool_nr)
+            tool = self.tools_by_number[tool_nr]
             if not tool:
                 raise gcmd.error("SET_TOOL_TEMPERATURE: T%d not found" % (tool_nr))
         else:
@@ -1010,7 +1028,7 @@ class Ktc:
         return tool
 
     ###########################################
-    # Static Module functions
+    # Static Module methods
     ###########################################
 
     # parses legacy restore type into string of axis names.
@@ -1050,8 +1068,8 @@ def get_params_dict_from_config(config):
             result[option] = ast.literal_eval(config.get(option))
         except ValueError as e:
             raise config.error(
-                "Option '%s' in section '%s' is not a valid literal"
-                % (option, config.get_name())
+                "Option '%s' in section '%s' is not a valid literal: %s"
+                % (option, config.get_name(), e)
             )
     return result
 
@@ -1067,7 +1085,7 @@ class ktc_MeanLayerTime:
         # Have Tool have a min and max 2standby time.
         # If mean time for 3 layers is higher than max, then set min time.
         # Reset time if layer time is higher than max time. Pause or anything else that has happened.
-        # Function to reset layer times.
+        # Method to reset layer times.
         pass
 
 

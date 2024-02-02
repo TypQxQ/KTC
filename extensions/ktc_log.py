@@ -9,16 +9,16 @@
 #
 
 from __future__ import annotations  # To reference the class itself in type hints
-import logging, threading, queue, time, ast, dataclasses
+import logging
+import threading, queue, time, dataclasses
 import math, os.path, copy, re, operator
 from . import ktc_persisting, ktc_toolchanger, ktc_tool
 
-
-class Ktc_Log:
+class KtcLog:
     """Main Logging and statistics Class for KTC (Klipper Tool Changer)"""
 
     ####################################
-    # INITIALIZATION FUNCTIONS         #
+    # INITIALIZATION METHODS         #
     ####################################
     def __init__(self, config):
         # Initialize object variables
@@ -42,7 +42,7 @@ class Ktc_Log:
         if self.logfile_level >= 0:
             logfile_path = self.printer.start_args["log_file"]
             dirname = os.path.dirname(logfile_path)
-            if dirname == None:
+            if dirname is None:
                 ktc_log = os.path.expanduser("~/ktc.log")
             else:
                 ktc_log = dirname + "/ktc.log"
@@ -101,7 +101,7 @@ class Ktc_Log:
         self.ktc_persistent.disconnect()  # Close the persistent variables file
 
     ####################################
-    # LOGGING FUNCTIONS                #
+    # LOGGING METHODS                #
     ####################################
     def always(self, message):
         """Log a message to the console and to the log file if enabled."""
@@ -133,7 +133,7 @@ class Ktc_Log:
             self.gcode.respond_info(message)
 
     ####################################
-    # STATISTICS LOADING  FUNCTIONS    #
+    # STATISTICS LOADING  METHODS    #
     ####################################
     def _load_persisted_state(self):
         """Load the persisted state from the file"""
@@ -152,8 +152,8 @@ class Ktc_Log:
         )
 
     def _get_persisted_items(
-        self, section: str, item_type: str, Stat_Type
-    ) -> dict[str, Stat_Type]:
+        self, section: str, item_type: str, stat_type
+    ) -> dict[str, Changer_Statistics | Tool_Statistics]:
         """Load the persisted state from the file for a given section and item type
         For example, load all persisted ktc_toolchanger stats from the Statistics section.
         Return a dict with the loaded items."""
@@ -167,7 +167,7 @@ class Ktc_Log:
             try:
                 item_name = str(item[0]).split(" ", 1)[1]
 
-                items[item_name] = Stat_Type()
+                items[item_name] = stat_type()
                 item_dict = loaded_stats.get((item_type + "_" + item_name).lower(), {})
 
                 if item_dict == {}:
@@ -187,11 +187,11 @@ class Ktc_Log:
                 self.debug(
                     "Resetting section %s stats for item: %s" % (section, item_name)
                 )
-                items[item_name] = Stat_Type()
+                items[item_name] = stat_type()
         return items
 
     ####################################
-    # STATISTICS SAVING  FUNCTIONS     #
+    # STATISTICS SAVING  METHODS     #
     ####################################
     # This could be optimized to only save for the changed tool and not iterate over all tools but it's not a big deal
     def _persist_statistics(self):
@@ -240,7 +240,7 @@ class Ktc_Log:
             )
 
     ####################################
-    # STATISTICS RESET FUNCTIONS       #
+    # STATISTICS RESET METHODS       #
     ####################################
     def _reset_statistics(self):
         """Reset all the statistics to 0"""
@@ -263,7 +263,7 @@ class Ktc_Log:
         self.print_tool_stats = copy.deepcopy(self.tool_stats)
 
     ####################################
-    # STATISTICS PRESENTATION FUNCTIONS#
+    # STATISTICS PRESENTATION METHODS#
     ####################################
     def _dump_statistics(self, since_print_start=False):
         """Dump all the statistics to the console.
@@ -282,19 +282,14 @@ class Ktc_Log:
             msg_header = "KTC Statistics since start of print:\n"
 
         ##############################  Total
-        # If has only one changer then only print for that changer as total stats are the same
-        if len(self.changer_stats.keys()) == 1:
-            self._dump_statistics_for_changer()
-            temp_msg += self._changer_stats_to_human_string(
-                list(self.changer_stats.keys())[0], since_print_start
-            )
-        else:
-            # This will add the total stats for all changers as a sum and then print them
-            temp_msg += self._changer_stats_to_human_string(None, since_print_start)
-            if temp_msg != "":
-                msg += temp_msg + SECTION_SEPARATOR
-                temp_msg = ""
+        # This will add the total stats for all changers as a sum and then print them
+        temp_msg += self._changer_stats_to_human_string(None, since_print_start)
+        if temp_msg != "":
+            msg += temp_msg + SECTION_SEPARATOR
+            temp_msg = ""
 
+        # If has more than one changer, print the stats for each changer
+        if len(self.changer_stats.keys()) > 1:
             ##############################  Changers
             # This will print the stats for each changer in a sorted order
             sorted_items = natural_keys_sorting(self.changer_stats.keys())
@@ -305,6 +300,8 @@ class Ktc_Log:
                 if changer_temp_msg != "":
                     temp_msg += changer_temp_msg + LINE_SEPARATOR
 
+        # If got stats for at least one changer, add them to the message
+        # and replace the last line separator with a section separator
         if temp_msg != "" and temp_msg.endswith(LINE_SEPARATOR):
             temp_msg = temp_msg[: -len(LINE_SEPARATOR)]
             msg += temp_msg + (SECTION_SEPARATOR)
@@ -337,10 +334,6 @@ class Ktc_Log:
     ) -> str:
         """Return a human readable string with the statistics for a given 
         changer. If changer_name is None, return the sum of all changers."""
-        selects = None
-        deselects = None
-        time_spent_selecting = None
-        time_spent_deselecting = None
         result = ""
 
         if changer_name is None:
@@ -527,7 +520,7 @@ class Ktc_Log:
             result = result_header + result
         return result
 
-    ### STATISTICS INCREMENTING CHANGER FUNCTIONS FUNCTIONS
+    ### STATISTICS INCREMENTING CHANGER METHODS
     def track_changer_engage(self, changer: ktc_toolchanger.KtcToolchanger):
         self.changer_stats[changer.name].engages += 1
         self._persist_statistics()
@@ -536,7 +529,7 @@ class Ktc_Log:
         self.changer_stats[changer.name].disengages += 1
         self._persist_statistics()
 
-    ### STATISTICS INCREMENTING TOOL FUNCTIONS FUNCTIONS
+    ### STATISTICS INCREMENTING TOOL METHODS
     # Having all here makes it easier to change how the statistics are tracked
     # at a later time. It also makes it easy to search for all places where
     # statistics are tracked for debugging.
@@ -614,8 +607,8 @@ class Ktc_Log:
             # Handle any exceptions that occur during the process
             print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
 
-    ### LOGGING AND STATISTICS FUNCTIONS GCODE FUNCTIONS
-    # TODO: Remove this function after a while
+    ### LOGGING AND STATISTICS METHODS GCODE
+    # TODO: Remove this method after a while
     cmd_KTC_SAVE_STATS_help = "Save the KTC statistics"
 
     def cmd_KTC_SAVE_STATS(self, gcmd):
@@ -694,9 +687,9 @@ class Ktc_Log:
 ####################################
 # Forward all messages through a queue (polled by background thread)
 class KtcQueueHandler(logging.Handler):
-    def __init__(self, queue):
+    def __init__(self, myqueue):
         logging.Handler.__init__(self)
-        self.queue = queue
+        self.queue = myqueue
 
     def emit(self, record):
         try:
@@ -864,11 +857,6 @@ def division(dividend, divisor):
 def natural_keys_sorting(list_to_sort):
     return sorted(list_to_sort, key=natural_sorting)
 
-
-def natural_keys_sorting(list_to_sort):
-    return sorted(list_to_sort, key=natural_sorting)
-
-
 def natural_sorting(text):
     """
     alist.sort(key=natural_keys) sorts in human order
@@ -884,4 +872,4 @@ def __atoi(text):
 
 ####################################
 def load_config(config):
-    return Ktc_Log(config)
+    return KtcLog(config)

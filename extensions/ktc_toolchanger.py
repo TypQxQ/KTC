@@ -7,7 +7,7 @@
 #
 
 import dataclasses
-from . import ktc as ktc, ktc_persisting, ktc_log, ktc_tool
+from . import ktc, ktc_persisting, ktc_log, ktc_tool
 
 class KtcToolchanger:
     """Class initialized for each toolchanger.
@@ -16,19 +16,12 @@ class KtcToolchanger:
     is specified in the config."""
 
     def __init__(self, config):
-        """_summary_
-
-        Args:
-            config (Klipper configuration): required for initialization.
-
-        Returns:
-            _type_: _description_
-        """
-        self.config = config
+        """Initialize the toolchanger object."""
+        self.config = config                    # For later use. Used in ktc_tool objects too.
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
         self.gcode = self.printer.lookup_object("gcode")
-        self.log: ktc_log.Ktc_Log = self.printer.load_object(
+        self.log: ktc_log.KtcLog = self.printer.load_object(
             config, "ktc_log"
         )  # Load the log object.
         self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
@@ -44,7 +37,6 @@ class KtcToolchanger:
         self.parent_tool: ktc_tool.KtcTool = None  # The parent tool of this toolchanger.
         
         # Get initialization mode and check if valid.
-        # init_mode = INIT_MODE.get_value_from_configuration(self.params.get("init_mode", INIT_MODE.MANUAL))
         init_mode = config.get("init_mode", INIT_MODE.MANUAL)
         self.init_mode = INIT_MODE.get_value_from_configuration(init_mode)
         if self.init_mode is None:
@@ -96,9 +88,20 @@ class KtcToolchanger:
                 "ktc_toolchanger %s already registered." % self.name
             )
 
-        # Register handlers for events.
+        ###### Inherited parameters from ktc.
+        # If set to "X", "Y", "Z" or a combination of them, then the tool will require the axis to be homed before it can be selected. Defaults to "".
+        self.requires_axis_homed: str = config.get("requires_axis_homed", self.ktc.requires_axis_homed)
+        
+        # Tool Selection and Deselection G-Code macros
+        # This is overridden by the tool if it has a tool_select_gcode or tool_deselect_gcode defined.
+        self.tool_select_gcode = self.config.get("tool_select_gcode", self.ktc.tool_select_gcode)
+        self.tool_deselect_gcode = self.config.get("tool_deselect_gcode", self.ktc.tool_deselect_gcode)
+
+        ###### Register event handlers.
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
+        self.printer.register_event_handler("homing:home_rails_begin", self._handle_home_rails_begin)
+        self.printer.register_event_handler("homing:home_rails_end", self._handle_home_rails_end)
 
         ######
         # TODO: Move to ktc.
@@ -123,6 +126,14 @@ class KtcToolchanger:
 
     def handle_ready(self):
         if self.init_mode == INIT_MODE.ON_START:
+            self.initialize()
+
+    def _handle_home_rails_begin(self, homing_state, rails):
+        if self.init_mode == INIT_MODE.HOMING_START:
+            self.initialize()
+            
+    def _handle_home_rails_end(self, homing_state, rails):
+        if self.init_mode == INIT_MODE.HOMING_END:
             self.initialize()
 
     @property
@@ -272,7 +283,7 @@ class KtcToolchanger:
                     "ktc_toolchanger.disengage(): No tool unlock gcode template"
                     + " defined for ktc_toolchanger %s." % self.name
                 )
-                return true
+                return True
 
             # Run the disengage gcode template.
             self.state = STATE.DISENGAGING
@@ -309,6 +320,7 @@ class KtcToolchanger:
             # "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
             # "saved_position": self.saved_position,
             # "last_endstop_query": self.last_endstop_query
+            **self.params,
         }
         return status
 
@@ -326,6 +338,7 @@ class STATE:
     DISENGAGING: int = 4
     ENGAGED: int = 5
     # Return the attr name of the status from the value.
+    @staticmethod
     def value_to_key_string(status):
         r = [field.name for field in dataclasses.fields(STATE) if field.default == int(status)]
         if len(r) == 0:
@@ -334,6 +347,7 @@ class STATE:
             return r[0]
     def list_valid_values(self):
         return _list_valid_values_of_dataclass(self)
+    @staticmethod
     def get_value_from_configuration(configured_value):
         return _get_value_from_configuration_for_dataclass(STATE, configured_value)
     
@@ -343,8 +357,12 @@ class INIT_MODE:
     MANUAL: str = "manual"
     ON_START: str = "on_start"
     ON_FIRST_USE: str = "on_first_use"
+    HOMING_START: str = "homing_start"
+    HOMING_END: str = "homing_end"
+    @staticmethod
     def list_valid_values():
         return _list_valid_values_of_dataclass(INIT_MODE)
+    @staticmethod
     def get_value_from_configuration(configured_value):
         return _get_value_from_configuration_for_dataclass(INIT_MODE, configured_value)
 
@@ -356,10 +374,21 @@ class INIT_ORDER:
     AFTER_PARENT_SELECTED : str = "after_parent_selected"
     # BEFORE_PARENT_INITIALIZATION : str = "before_parent_initialization"
     AFTER_PARENT_INITIALIZATION : str = "after_parent_initialization"
+    @staticmethod
     def list_valid_values():
         return _list_valid_values_of_dataclass(INIT_ORDER)
+    @staticmethod
     def get_value_from_configuration(configured_value):
         return _get_value_from_configuration_for_dataclass(INIT_ORDER, configured_value)
+
+@dataclasses.dataclass
+class __KTCToolchanger_Parameters:
+    q=1
+    @staticmethod
+    def list_valid_values():
+        """Return a list of valid values for the parameters."""
+        return True
+        
 
 def _get_value_from_configuration_for_dataclass(c: dataclasses.dataclass, configured_value: str):
     r = [field.default for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)]
@@ -376,4 +405,6 @@ def _list_valid_values_of_dataclass(c):
 #     return next((key for key, value in dataclasses.asdict(c) if value == status), None)
 
 def load_config_prefix(config):
+    """Load the toolchanger object with the given config.
+    This is called by Klipper to initialize the toolchanger object."""
     return KtcToolchanger(config)

@@ -22,7 +22,7 @@ class KtcPersisting:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
-        self.log: ktc_log.Ktc_Log = self.printer.load_object(
+        self.log: ktc_log.KtcLog = self.printer.load_object(
             config, "ktc_log"
         )  # Load the log object.
 

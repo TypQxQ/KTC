@@ -5,29 +5,29 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-from . import ktc, ktc_toolchanger, ktc_log
+from . import ktc, ktc_log, ktc_toolchanger
+
 
 class KtcTool:
+    """Class for a single tool in the toolchanger."""
     HEATER_STATE_OFF = 0
     HEATER_STATE_STANDBY = 1
     HEATER_STATE_ACTIVE = 2
 
-    # Define static class variables.
-    printer = None
-    gcode = None
-    gcode_macro = None
-    ktc = None
-    log = None
+    def __init__(self, config = None, name = None, number = -3):
+        # Initialize all static variables before loading from config so we can declare constant tools in ktc.
+        self.config = config
+        self._toolchanger = None            # Internal Toolchanger object. Used for property setter.
 
-
-    def __init__(self, config = None, name = None, number = -2):
-        self.name: str = name
-        self.number: int = number           # Tool number to register this tool as. Default as ktc.TOOL_NONE_N (-2)
-        self.toolchanger: ktc_toolchanger.KtcToolchanger = None
-
+        self.name: str = name               # Name of the tool. 
+        self.number: int = number           # Tool number to register this tool as. Default as not defined, -3.
         self.extruder = None                # Name of extruder connected to this tool. Defaults to None.
+        self.params = {}
+        
+        # TODO: Change this to a list of fans.
         self.fan = None                     # Name of general fan configuration connected to this tool as a part fan. Defaults to "none".
-        self.meltzonelength = None          # Length of the meltzone for retracting and inserting filament on toolchange. 18mm for e3d Revo
+
+        self.requires_axis_homed: str = ""  # If set to "X", "Y", "Z" or a combination of them, then the tool will require the axis to be homed before it can be selected. Defaults to "".
         self.lazy_home_when_parking = None  # (default: 0 - disabled) - When set to 1, will home unhomed XY axes if needed and will not move any axis if already homed and parked. 2 Will also home Z if not homed.
                                             # Wipe. -1 = none, 1= Only load filament, 2= Wipe in front of carriage, 3= Pebble wiper, 4= First Silicone, then pebble. Defaults to None.
         self.zone = None                    # Position of the parking zone in the format X, Y  
@@ -35,78 +35,75 @@ class KtcTool:
 
         self.offset = None                  # Offset of the nozzle in the format X, Y, Z
 
+        #TODO: Removed from config. Need to be removed from code.
         self.is_virtual = False
         self.parentTool_id = ktc.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
         self.parentTool = None              # Initialize physical parent as a dummy object.
 
-        self.pickup_gcode = None            # The plain gcode string for pickup of the tool.
-        self.dropoff_gcode = None           # The plain gcode string for droppoff of the tool.
+
+        # self.pickup_gcode = None            # The plain gcode string for pickup of the tool.
+        # self.dropoff_gcode = None           # The plain gcode string for droppoff of the tool.
+
+        #TODO: Needs moving to regular gcode.
         self.virtual_toolload_gcode = None  # The plain gcode string is to load for virtual tool having this tool as parent. This is for loading the virtual tool.
         self.virtual_toolunload_gcode = None# The plain gcode string is to unload for virtual tool having this tool as parent. This is for unloading the virtual tool.
-
-        self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
-        self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
-
-        # This two are unused. Maybe delete? 13/01/2024
-        self.requires_pickup_for_virtual_load = None   # May be needed for a filament swap to prevent ooze but not for a pen.
-        self.requires_pickup_for_virtual_unload = None # May be needed for a filament swap to prevent ooze but not for a pen. Used when forcing unload.
 
         self.unload_virtual_at_dropoff = None          # If it takes long time to unload/load it may be faster to leave it loaded and force unload at end of print.
 
         self.virtual_loaded = -1            # The abstract tool loaded in the physical tool.
-        self.heater_state = 0               # 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
 
+
+
+        self.heater_state = 0               # 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
+        self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
+        self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
         self.heater_active_temp = 0         # Temperature to set when in active mode. Placeholder. Requred on Physical and virtual tool if any has extruder.
         self.heater_standby_temp = 0        # Temperature to set when in standby mode.  Placeholder. Requred on Physical and virtual tool if any has extruder.
         self.idle_to_standby_time = 0.1    # Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature. Requred on Physical tool
         self.idle_to_powerdown_time = 600   # Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
 
-        # Tool specific input shaper parameters. Initiated as Klipper standard.
-        self.shaper_freq_x = 0
-        self.shaper_freq_y = 0
-        self.shaper_type_x = "mzv"
-        self.shaper_type_y = "mzv"
-        self.shaper_damping_ratio_x = 0.1
-        self.shaper_damping_ratio_y = 0.1
-
-        self.config = config
-
-        # Under Consideration:
-        # HeatMultiplyerAtFullFanSpeed = 1    # Multiplier to be aplied to hotend temperature when fan is at maximum. Will be multiplied with fan speed. Ex. 1.1 at 205*C and fan speed of 40% will set temperature to 213*C
 
         # If called without config then just return a dummy object.
         if config is None:
             return
 
-        # Initialize static class variables if not already done.
-        if KtcTool.printer is None:
-            self.printer = config.get_printer()
-            self.gcode = self.printer.lookup_object('gcode')
-            self.gcode_macro = self.printer.load_object(config, 'gcode_macro')
-            self.ktc : ktc.Ktc = self.printer.load_object(config, 'ktc')
-            self.log : ktc_log.Ktc_Log = self.printer.load_object(config, 'ktc_log')
+        # Initialize object references.
+        self.printer = config.get_printer()
+        self.gcode = self.printer.lookup_object('gcode')
+        self.gcode_macro = self.printer.load_object(config, 'gcode_macro')
+        self.ktc : ktc.Ktc = self.printer.load_object(config, 'ktc')
+        self.log : ktc_log.KtcLog = self.printer.load_object(config, 'ktc_log')
 
         ##### Name #####
-        try:
-            self.name = config.get_name().split(" ", 1)[1]
-            if self.name == ktc.TOOL_NONE.name or self.name == ktc.TOOL_UNKNOWN.name:
-                raise config.error(
-                        "Name of section '%s' is not well formated. Name is reserved for internal use."
-                        % (config.get_name()))
-        except ValueError:
+        self.name = config.get_name().split(" ", 1)[1]
+        if self.name == ktc.TOOL_NONE.name or self.name == ktc.TOOL_UNKNOWN.name:
             raise config.error(
-                    "Name of section '%s' contains illegal characters. Use only integer tool number."
+                    "Name of section '%s' is not well formated. Name is reserved for internal use."
                     % (config.get_name()))
 
         ##### Tool Number #####
         # Will be added to the ktc.tools_by_number dict in ktc._config_tools()
         self.number = config.getint('tool_number', None)
         
+
+        ###### Inherited parameters from toolchanger #####
+        # Empty parameters are overriden after the toolchanger is loaded.
+        # Tool Selection and Deselection G-Code macros
+        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", "")
+        self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", "")
+        
+        ##### Inherited Parameters #####
+        # self.requires_axis_homed = self.config_get('requires_axis_homed')
+        _ = self.config.get('requires_axis_homed', "")
+
         ##### Toolchanger #####
         # If none, then the default toolchanger will be set in ktc._config_default_toolchanger()
         toolchanger_name = config.get('toolchanger', None)
         if toolchanger_name is not None:
-            self.toolchanger: ktc_toolchanger.KtcToolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
+            self.toolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
+
+        ##### Params #####
+        self.params = ktc.get_params_dict_from_config(config)
 
         ##### Physical Parent #####
         self.parentTool_id = config.getint('parent_tool', ktc.TOOL_NONE_N)
@@ -131,11 +128,8 @@ class KtcTool:
         ##### Fan #####
         self.fan = self._config_get('fan')
 
-        ##### Meltzone Length #####
-        self.meltzonelength = self._config_get('meltzonelength')
-
         ##### Lazy Home when parking #####
-        self.lazy_home_when_parking = self._config_getbool('lazy_home_when_parking', False)
+        self.lazy_home_when_parking = False # self._config_getbool('lazy_home_when_parking', False)
 
         ##### Coordinates #####
         try:
@@ -166,14 +160,6 @@ class KtcTool:
                     "Coordinates of section '%s' is not well formated: %s"
                     % (config.get_name(), str(e)))
 
-        # Tool specific input shaper parameters. Initiated with Klipper standard values where not specified.
-        self.shaper_freq_x = self._config_get('shaper_freq_x', 0)
-        self.shaper_freq_y = self._config_get('shaper_freq_y', 0)
-        self.shaper_type_x = self._config_get('shaper_type_x')
-        self.shaper_type_y = self._config_get('shaper_type_y')
-        self.shaper_damping_ratio_x = self._config_get('shaper_damping_ratio_x')
-        self.shaper_damping_ratio_y = self._config_get('shaper_damping_ratio_y')
-
         ##### Standby settings (if the tool has an extruder) #####
         if self.extruder is not None:
             self.idle_to_standby_time = self._config_getfloat("idle_to_standby_time", self.idle_to_standby_time)
@@ -193,30 +179,10 @@ class KtcTool:
                 self.timer_idle_to_standby = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_STANDBY)
                 self.timer_idle_to_powerdown = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN)
 
-        ##### G-Code ToolChange #####
-        self.pickup_gcode_template = self._get_gcode_template_with_inheritence('pickup_gcode')
-        self.dropoff_gcode_template = self._get_gcode_template_with_inheritence('dropoff_gcode')
-
         ##### G-Code VirtualToolChange #####
         if self.is_virtual:
             self.virtual_toolload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolload_gcode')
             self.virtual_toolunload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolunload_gcode')
-
-            ##### Parameters for VirtualToolChange #####
-            self.requires_pickup_for_virtual_load = self.config.getboolean(
-                "requires_pickup_for_virtual_load", self.parentTool.requires_pickup_for_virtual_load)
-            # if self.requires_pickup_for_virtual_load is None:
-            #     self.requires_pickup_for_virtual_load = self.toolgroup.requires_pickup_for_virtual_load
-
-            self.requires_pickup_for_virtual_unload = self.config.getboolean(
-                "requires_pickup_for_virtual_unload", self.parentTool.requires_pickup_for_virtual_unload)
-            # if self.requires_pickup_for_virtual_unload is None:
-            #     self.requires_pickup_for_virtual_unload = self.toolgroup.requires_pickup_for_virtual_unload
-
-            self.unload_virtual_at_dropoff = self.config.getboolean(
-                "unload_virtual_at_dropoff", self.parentTool.unload_virtual_at_dropoff)
-            # if self.unload_virtual_at_dropoff is None:
-            #     self.unload_virtual_at_dropoff = self.toolgroup.unload_virtual_at_dropoff
 
         ##### Register Tool select command #####
         if self.number is not None:
@@ -226,6 +192,29 @@ class KtcTool:
         self.ktc.tools[self.name] = self
         if self.toolchanger is not None:
             self.toolchanger.tools[self.name] = self
+            
+    @property
+    def toolchanger(self) -> ktc_toolchanger.KtcToolchanger:
+        return self._toolchanger
+    
+    @toolchanger.setter
+    def toolchanger(self, value):
+        if not isinstance(value, ktc_toolchanger.KtcToolchanger):
+            raise ValueError("Toolchanger must be a KtcToolchanger object.")
+        self._toolchanger = value
+        self.configure_inherited_params()
+        
+    def configure_inherited_params(self):
+        if self.config is None: return
+        ##### G-Code ToolChange #####
+        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", self.toolchanger.tool_select_gcode)
+        self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", self.toolchanger.tool_deselect_gcode)
+        
+        ##### Inherited Parameters #####
+        self.requires_axis_homed = self.config.get('requires_axis_homed', self.toolchanger.requires_axis_homed)
+        if self.requires_axis_homed != "": 
+            self.log.trace("KTC Tool %s requires_axis_homed: %s" % (self.name, self.requires_axis_homed))
+
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
@@ -358,7 +347,7 @@ class KtcTool:
                     if parentTool_virtual_loaded != self.number:
                         self.log.info("cmd_SelectTool: T" + str(parentTool_virtual_loaded) + "- Virtual - Running UnloadVirtual")
 
-                        uv : ktc_tool = self.printer.lookup_object('ktc_tool ' + str(parentTool_virtual_loaded))
+                        uv : KtcTool = self.printer.lookup_object('ktc_tool ' + str(parentTool_virtual_loaded))
                         if uv.extruder is not None:               # If the new tool to be selected has an extruder prepare warmup before actual tool change so all unload commands will be done while heating up.
                             curtime = self.printer.get_reactor().monotonic()
                             # heater = self.printer.lookup_object(self.extruder).get_heater()
@@ -383,7 +372,6 @@ class KtcTool:
         # Check if homed
         if not self.ktc.printer_is_homed_for_toolchange():
             raise self.printer.command_error("KtcTool.Pickup: Printer not homed and Lazy homing option for tool %s is: %s" % (self.name, str(self.lazy_home_when_parking)))
-            return None
 
         # If has an extruder then activate that extruder.
         if self.extruder is not None:
@@ -393,10 +381,10 @@ class KtcTool:
 
         # Run the gcode for pickup.
         try:
-            context = self.pickup_gcode_template.create_template_context()
+            context = self.tool_select_gcode_template.create_template_context()
             context['myself'] = self.get_status()
             context['ktc'] = self.ktc.get_status()
-            self.pickup_gcode_template.run_gcode_from_command(context)
+            self.tool_select_gcode_template.run_gcode_from_command(context)
         except Exception as e:
             raise Exception("Pickup gcode: Script running error: %s" % (str(e)))
 
@@ -404,19 +392,6 @@ class KtcTool:
         if self.fan is not None:
             self.gcode.run_script_from_command(
                 "SET_FAN_SPEED FAN=" + self.fan + " SPEED=" + str(self.ktc.get_status()['saved_fan_speed']))
-
-        # Set Tool specific input shaper. -- Deprecated --
-        if self.shaper_freq_x != 0 or self.shaper_freq_y != 0:
-            self.log.always("shaper_freq will be deprecated. Use SET_INPUT_SHAPER inside the pickup gcode instead.")
-            cmd = ("SET_INPUT_SHAPER" +
-                " SHAPER_FREQ_X=" + str(self.shaper_freq_x) +
-                " SHAPER_FREQ_Y=" + str(self.shaper_freq_y) +
-                " DAMPING_RATIO_X=" + str(self.shaper_damping_ratio_x) +
-                " DAMPING_RATIO_Y=" + str(self.shaper_damping_ratio_y) +
-                " SHAPER_TYPE_X=" + str(self.shaper_type_x) +
-                " SHAPER_TYPE_Y=" + str(self.shaper_type_y) )
-            self.log.trace("Pickup_inpshaper: " + cmd)
-            self.gcode.run_script_from_command(cmd)
 
         # Save current picked up tool and print on screen.
         self.ktc.active_tool = self
@@ -454,10 +429,10 @@ class KtcTool:
         self.log.track_tool_deselecting_start(self)                 # Log the time it takes for tool change.
         # Run the gcode for dropoff.
         try:
-            context = self.dropoff_gcode_template.create_template_context()
+            context = self.tool_deselect_gcode_template.create_template_context()
             context['myself'] = self.get_status()
             context['ktc'] = self.ktc.get_status()
-            self.dropoff_gcode_template.run_gcode_from_command(context)
+            self.tool_deselect_gcode_template.run_gcode_from_command(context)
         except Exception as e:
             raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
 
@@ -640,12 +615,10 @@ class KtcTool:
             "name": self.name,
             "number": self.number,
             "toolchanger": self.toolchanger.name,
-            "is_virtual": self.is_virtual,
             "parentTool_id": self.parentTool_id,
             "extruder": self.extruder,
             "fan": self.fan,
             "lazy_home_when_parking": self.lazy_home_when_parking,
-            "meltzonelength": self.meltzonelength,
             "zone": self.zone,
             "park": self.park,
             "offset": self.offset,
@@ -654,16 +627,9 @@ class KtcTool:
             "heater_standby_temp": self.heater_standby_temp,
             "idle_to_standby_time": self.idle_to_standby_time,
             "idle_to_powerdown_next_wake": self.idle_to_powerdown_time,
-            "shaper_freq_x": self.shaper_freq_x,
-            "shaper_freq_y": self.shaper_freq_y,
-            "shaper_type_x": self.shaper_type_x,
-            "shaper_type_y": self.shaper_type_y,
-            "shaper_damping_ratio_x": self.shaper_damping_ratio_x,
-            "shaper_damping_ratio_y": self.shaper_damping_ratio_y,
             "virtual_loaded": self.virtual_loaded,
-            "requires_pickup_for_virtual_load": self.requires_pickup_for_virtual_load,
-            "requires_pickup_for_virtual_unload": self.requires_pickup_for_virtual_unload,
-            "unload_virtual_at_dropoff": self.unload_virtual_at_dropoff
+            "unload_virtual_at_dropoff": self.unload_virtual_at_dropoff,
+            **self.params,
         }
         return status
 
@@ -766,8 +732,7 @@ class ktc_ToolStandbyTempTimer:
             "temp_type": self.temp_type,
             "duration": self.duration,
             "counting_down": self.counting_down,
-            "next_wake": self._time_left()
-
+            "next_wake": self._time_left(),
         }
         return status
 
@@ -777,6 +742,9 @@ class ktc_ToolStandbyTempTimer:
         else:
             return str( self.nextwake - self.reactor.monotonic() )
 
+    ###########################################
+    # Dataclassess for KtcTool
+    ###########################################
 
 
 

@@ -1,4 +1,4 @@
-ktc.py has all common functions that need only initialized once.
+ktc.py has all common methods that need only initialized once.
     -constants
     TOOL_UNKNOWN :  Special tool indicating stateunknown.
     TOOL_NONE :     Special tool when known state is that a toolchanger has no tool engaged.
@@ -36,7 +36,8 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
     Name:       is case sensitive and can contain spaces
     params_*:           Aditional personizable options that can be used by macros.
     disengage_gcode:    G-Code run when disengaging 
-    init_mode:          When to initialize the toolchanger: manual, on_start or on_first_use.
+    init_mode:          When to initialize the toolchanger: manual, on_start, on_first_use, homing_start, homing_end
+                        Can also be set to manual and called manualy inside the homing file for example.
     init_order:         Defaults to independent Required if not default, not usable on default.
                         Defaults to manual.
     parent_tool:    Required for changers other than the default.
@@ -60,11 +61,11 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
     init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
     active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
 
-    - functions
-    engage :        Function to engage the tool lock. Locking the tool
-    disengage :     Function to disengage the tool lock. Unlocking the tool.
-    change :        Function to change the tool.
-    init:           Function to init the changer. 
+    - methods
+    engage :        method to engage the tool lock. Locking the tool
+    disengage :     method to disengage the tool lock. Unlocking the tool.
+    change :        method to change the tool.
+    init:           Method to init the changer. 
                         Loads persisted active_tool.
                         Then checks if a init_gcode has been specified.
                             If no init_gcode is specified then it will set state to STATE.INITIALIZED.
@@ -87,6 +88,9 @@ ktc_tool.py is initialized for each tool.
     
     Offset is overwritten to persistant variable.
 
+
+Inheritance:
+ tool <- inheriting_tool <- toolchanger <- tool <-  inheriting_tool <- toolchanger <- ktc
 
 
 ToDo:
@@ -115,7 +119,7 @@ ToDo:
 
     Prova att sätta ktc_persistent i egen fil och ladda med ktc_persistent.
 
-    Maybe change "printer_is_homed_for_toolchange" function name to toolchanger_ready.
+    Maybe change "printer_is_homed_for_toolchange" method name to toolchanger_ready.
     lazy_home_when_parking to reflect what axis can be used when not homed for each tool?
 
     Check ktc.handle_ready if can be moved to connect after tools are refactored.
