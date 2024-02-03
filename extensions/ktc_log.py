@@ -9,7 +9,7 @@
 #
 
 from __future__ import annotations  # To reference the class itself in type hints
-import logging
+import logging, re
 import threading, queue, time, dataclasses
 import math, os.path, copy, operator
 from typing import TYPE_CHECKING, Optional, Union, Dict, Any, cast as type_cast, Mapping
@@ -194,6 +194,7 @@ class KtcLog:
 
         items = {}
         for item in self.printer.lookup_objects(item_type):
+            item_name = ""
             try:
                 item_name = str(item[0]).split(" ", 1)[1]
 
@@ -241,7 +242,7 @@ class KtcLog:
         self,
         section: str,
         item_type: str,
-        items: dict[str, ToolStatisticsClass | ChangerStatisticsClass],
+        items: Mapping[str, ToolStatisticsClass | ChangerStatisticsClass],
     ):
         """Save the statistics to the file for a given section and item type"""
         try:
@@ -416,7 +417,7 @@ class KtcLog:
         ############################## Engages/Disengages
         # 264 engages and 264 disengages completed.
         # Check if total or specific changer
-        if changer_name is None:
+        if changer_name is None or changer_name == "":
             changer_stats = ChangerStatisticsClass()
             # Add up all the stats for all changers
             for item in self.printer.lookup_objects("ktc_tool_changer"):
@@ -468,13 +469,13 @@ class KtcLog:
 
         result = ToolStatisticsClass()
 
-        if changer_name is None:
+        if changer_name is None or changer_name == "":
             # Get all tools for all changers
             tools_to_sum = self.printer.lookup_object("ktc").tools.items()
         else:
             # Get all tools for the specified changer
             tools_to_sum = self.printer.lookup_object(
-                "ktc_toolchanger %s" % changer_name
+                "ktc_toolchanger " + changer_name
             ).tools.items()
 
         for tool_name, _ in tools_to_sum:
