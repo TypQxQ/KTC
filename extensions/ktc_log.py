@@ -21,10 +21,21 @@ class KtcLog:
     # INITIALIZATION METHODS         #
     ####################################
     def __init__(self, config):
+        """
+        Initialize the KtcLog object.
+
+        Parameters:
+        - config: The configuration object.
+
+        Returns:
+        None
+        """
         # Initialize object variables
         self.config = config
         self.printer = config.get_printer()
         self.gcode = self.printer.lookup_object("gcode")
+
+        self.ktc_persistent: ktc_persisting.KtcPersisting = None
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -64,7 +75,7 @@ class KtcLog:
     def handle_connect(self):
         """Handle the connect event. This is called when the printer connects to Klipper."""
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent: ktc_persisting.KtcPersisting = self.printer.load_object(
+        self.ktc_persistent = self.printer.load_object(
             self.config, "ktc_persisting"
         )
 
