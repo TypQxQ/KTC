@@ -15,12 +15,12 @@ if TYPE_CHECKING:
     from . import ktc_log, ktc_toolchanger
 
 
-class KtcTool(ktc.KtcBaseToolClass):
+class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
     """Class for a single tool in the toolchanger."""
     HEATER_STATE_OFF = 0
     HEATER_STATE_STANDBY = 1
     HEATER_STATE_ACTIVE = 2
-
+    
     def __init__(self, config = None, name: str = "", number: int = -3):
         # Initialize all static variables before loading from config so we can declare constant tools in ktc.
         self.config = config
@@ -83,22 +83,21 @@ class KtcTool(ktc.KtcBaseToolClass):
 
         ##### Name #####
         self.name = config.get_name().split(" ", 1)[1]
-        if self.name == self.ktc.TOOL_NONE.name or self.name == self.ktc.TOOL_UNKNOWN.name:
+        if self.name == self.TOOL_NONE.name or self.name == self.TOOL_UNKNOWN.name:
             raise config.error(
                     "Name of section '%s' is not well formated. Name is reserved for internal use."
                     % (config.get_name()))
 
         ##### Tool Number #####
         # Will be added to the ktc.tools_by_number dict in ktc._config_tools()
-        self.number = config.getint('tool_number', None)
-        
+        self.number = config.getint('tool_number', None) # type: ignore
 
         ###### Inherited parameters from toolchanger #####
         # Empty parameters are overriden after the toolchanger is loaded.
         # Tool Selection and Deselection G-Code macros
         self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", "")
         self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", "")
-        
+
         ##### Inherited Parameters #####
         # self.requires_axis_homed = self.config_get('requires_axis_homed')
         _ = self.config.get('requires_axis_homed', "")
@@ -110,10 +109,10 @@ class KtcTool(ktc.KtcBaseToolClass):
             self.toolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
 
         ##### Params #####
-        self.params = self.ktc.get_params_dict_from_config(config)
+        self.params = self.get_params_dict_from_config(config)
 
         ##### Physical Parent #####
-        self.parentTool_id = config.getint('parent_tool', self.ktc.TOOL_NONE_N)
+        self.parentTool_id = config.getint('parent_tool', self.TOOL_NONE_N)
 
         # TODO: Change this to use the ktc_toolchanger instead of parentTool.
         self.parentTool = KtcTool()     # Initialize physical parent as a dummy object.
@@ -126,7 +125,7 @@ class KtcTool(ktc.KtcBaseToolClass):
                     % (config.get_name(), str(e)))
 
         ##### Is Virtual #####     # Might be deprecated in future.
-        if self.parentTool_id != self.ktc.TOOL_NONE_N:
+        if self.parentTool_id != self.TOOL_NONE_N:
             self.is_virtual = True
        
         ##### Extruder #####
@@ -177,7 +176,7 @@ class KtcTool(ktc.KtcBaseToolClass):
 
             # TODO: Change this to use the ktc_toolchanger instead of parentTool.
             # If this tool has a diffrent parent than itself and it's extruder is diffrent
-            if self.parentTool_id > self.ktc.TOOL_NONE_N and self.parentTool_id != int(self.number) and self.extruder != self.parentTool.extruder:
+            if self.parentTool_id > self.TOOL_NONE_N and self.parentTool_id != int(self.number) and self.extruder != self.parentTool.extruder:
                 # Use parent's timer for the child tool.
                 self.timer_idle_to_standby = self.parentTool.get_timer_to_standby()
                 self.timer_idle_to_powerdown = self.parentTool.get_timer_to_powerdown()

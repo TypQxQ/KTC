@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     import gcode
     from . import ktc_persisting, ktc_log, ktc_tool
     
-class KtcToolchanger(ktc.KtcBaseClass):
+class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
     A "default_toolchanger" will be initialized if no toolchanger
@@ -38,7 +38,7 @@ class KtcToolchanger(ktc.KtcBaseClass):
 
         # Initialize object variables.
         self.name: str = config.get_name().split(" ", 1)[1]
-        self.params = self.ktc.get_params_dict_from_config(config)
+        self.params = self.get_params_dict_from_config(config)
         self.state = STATE.UNINITIALIZED
         self.tools: dict[str, 'ktc_tool.KtcTool'] = {}  # All tools on this toolchanger.
         self.parent_tool: 'ktc_tool.KtcTool' = None  # The parent tool of this toolchanger.

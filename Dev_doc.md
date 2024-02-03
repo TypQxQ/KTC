@@ -17,7 +17,7 @@
 >   - self.gcode:
 >   - self.reactor:
 
-> ### KtcBaseChanger(KtcBaseClass)
+> ### KtcBaseChangerClass(KtcBaseClass)
 > The base all Ktc_Toolchanger inherits.
 > - functions:
 >   - __init__: config required.
@@ -39,7 +39,7 @@
 
 
 
-> ### KtcConstants:
+> ### KtcConstantsClass:
 > Class to include CONSTANTS. This are instances of KtcBaseToolClass so they must be inherited paralel.
 > - CONSTANTS:
 >   - TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N

@@ -8,7 +8,7 @@
 import ast
 import re
 from typing import Optional, TYPE_CHECKING, Union
-from . import ktc_tool
+# from . import ktc_tool
 
 # Only import these modules for type checking in development.
 # Need to add path to Klipper to the Type Checker in VSCode settings.
@@ -53,8 +53,29 @@ class KtcBaseClass:
 
     def configure_inherited_params(self):
         '''Load inherited parameters from instances that this instance inherits from.'''
+
+    @staticmethod
+    def get_params_dict_from_config(config):
+        """Get a dict of atributes starting with params_ from the config."""
+        result = {}
+
+        # If the section doesn't exist inside the config,
+        # don't try to set any params or it will throw an error.
+        if not config.has_section(config.get_name()):
+            return result
+        
+        for option in config.get_prefix_options("params_"):
+            try:
+                result[option] = ast.literal_eval(config.get(option))
+            except ValueError as e:
+                raise config.error(
+                    "Option '%s' in section '%s' is not a valid literal: %s"
+                    % (option, config.get_name(), e)
+                )
+        return result
+
     
-class KtcBaseChanger(KtcBaseClass):
+class KtcBaseChangerClass(KtcBaseClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
@@ -70,7 +91,7 @@ class KtcBaseToolClass(KtcBaseClass):
         self.name = name        # Override the name in case it is supplied.
         self.number = number    # Override the number in case it is supplied.
 
-        self.toolchanger: Optional[KtcBaseChanger] = None
+        self.toolchanger: Optional[KtcBaseChangerClass] = None
 
         self.fan = None
 
@@ -91,7 +112,7 @@ class KtcBaseToolClass(KtcBaseClass):
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
         
-class KtcConstants:
+class KtcConstantsClass:
     '''Constants for KTC. These are to be inherited by other classes.'''
     # Value of Unknown and None tools are set in module scope.
     TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
@@ -101,7 +122,7 @@ class KtcConstants:
     TOOL_NONE = KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N)
     # Special tool objects for unknown and none tools.
         
-class Ktc(KtcBaseClass, KtcConstants):
+class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def __init__(self, config: Optional['configfile.ConfigWrapper']):
         super().__init__(config)
@@ -114,9 +135,9 @@ class Ktc(KtcBaseClass, KtcConstants):
             0  # Saved partcooling fan speed when deselecting a tool with a fan.
         )
 
-        self.tools: dict[str, 'ktc_tool.KtcTool'] = {}  # List of all tools.
-        self.tools_by_number: dict[int, 'ktc_tool.KtcTool'] = {}  # List of all tools by number.
-        self.toolchangers: dict[str, 'ktc_toolchanger.KtcToolchanger'] = {}  # List of all toolchangers.
+        self.tools: dict[str, KtcBaseToolClass] = {}  # List of all tools.
+        self.tools_by_number: dict[int, KtcBaseToolClass] = {}  # List of all tools by number.
+        self.toolchangers: dict[str, KtcBaseChangerClass] = {}  # List of all toolchangers.
 
         
         # TOOL_UNKNOWN = ktc_tool.KtcTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
@@ -133,7 +154,7 @@ class Ktc(KtcBaseClass, KtcConstants):
         self.log.trace("KTC: Default toolchanger: %s." % str(self.default_toolchanger))
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
-        self.params = Ktc.get_params_dict_from_config(config)
+        self.params = self.get_params_dict_from_config(config)
         self.log.trace("KTC: Params: %s." % str(self.params))
 
         ######## Inheritable parameters
@@ -315,23 +336,23 @@ class Ktc(KtcBaseClass, KtcConstants):
     # Logic to check if a tool is valid when set.
     # Takes either a KtcTool object, the name of the tool or the number of the tool.
     @property
-    def active_tool(self) -> 'ktc_tool.KtcTool':
+    def active_tool(self) -> KtcBaseToolClass:
         return self.__active_tool
 
     @active_tool.setter
-    def active_tool(self, value: Union[str, 'ktc_tool.KtcTool']):
+    def active_tool(self, value: Union[str, KtcBaseToolClass]):
         if isinstance(value, KtcBaseClass):
             tool = value
         elif isinstance(value, str):
             tool = self.tools.get(value, None)
-            if tool == None:
+            if tool is None:
                 raise ValueError(
                     "active_tool: tool name not found: %s." % str(value)
                 )
                 
         elif isinstance(value, int):  # If value is an int for backwayds compatibility.
             tool = self.tools_by_number.get(value, None)
-            if tool == None:
+            if tool is None:
                 raise ValueError(
                     "active_tool: tool number not found: %s." % str(value)
                 )
@@ -1126,26 +1147,6 @@ class Ktc(KtcBaseClass, KtcConstants):
             if c not in XYZ_TO_INDEX:
                 raise Exception("Invalid RESTORE_POSITION_TYPE")
         return restore_type
-
-    @staticmethod
-    def get_params_dict_from_config(config):
-        """Get a dict of atributes starting with params_ from the config."""
-        result = {}
-
-        # If the section doesn't exist inside the config,
-        # don't try to set any params or it will throw an error.
-        if not config.has_section(config.get_name()):
-            return result
-        
-        for option in config.get_prefix_options("params_"):
-            try:
-                result[option] = ast.literal_eval(config.get(option))
-            except ValueError as e:
-                raise config.error(
-                    "Option '%s' in section '%s' is not a valid literal: %s"
-                    % (option, config.get_name(), e)
-                )
-        return result
 
     # Todo:
     # Inspired by https://github.com/jschuh/klipper-macros/blob/main/layers.cfg

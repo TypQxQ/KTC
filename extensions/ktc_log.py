@@ -53,8 +53,8 @@ class KtcLog:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
         # Read and load configuration
-        self.log_level = config.getint("log_level", 1, minval=0, maxval=3)
-        self.logfile_level = config.getint("logfile_level", 3, minval=-1, maxval=4)
+        self.log_level = config.getint("log_level", 1, minval=0, maxval=3)          #type: ignore # Klippy is not type checked.
+        self.logfile_level = config.getint("logfile_level", 3, minval=-1, maxval=4) #type: ignore # Klippy is not type checked.
 
         # Initialize Logger variable
         self._ktc_logger = None
