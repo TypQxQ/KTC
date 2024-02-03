@@ -12,7 +12,7 @@ from __future__ import annotations  # To reference the class itself in type hint
 import logging
 import threading, queue, time, dataclasses
 import math, os.path, copy, operator
-from typing import TYPE_CHECKING, Optional, Union #, Any
+from typing import TYPE_CHECKING, Optional, Union, Dict, Any, cast as type_cast, Mapping
 
 if TYPE_CHECKING:
     from . import ktc_toolchanger, ktc_tool, ktc_persisting#, ktc
@@ -43,9 +43,9 @@ class KtcLog:
         # Initialize object variables
         self.config = config
         self.printer : 'klippy.Printer' = config.get_printer()
-        self.gcode : 'gcode.GCodeDispatch' = self.printer.lookup_object("gcode")    # type: ignore # Klippy is not type checked.
+        self.gcode = type_cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
 
-        self.ktc_persistent: Optional['ktc_persisting.KtcPersisting'] = None
+        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = None      #type: ignore # Klippy is not type checked.
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -53,8 +53,9 @@ class KtcLog:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
         # Read and load configuration
-        self.log_level = config.getint("log_level", 1, minval=0, maxval=3)          #type: ignore # Klippy is not type checked.
-        self.logfile_level = config.getint("logfile_level", 3, minval=-1, maxval=4) #type: ignore # Klippy is not type checked.
+        self.log_level = config.getint("log_level", default=1, minval=0, maxval=3)      #type: ignore # Klippy is not type checked.
+        self.logfile_level = config.getint("logfile_level", default=3,                  #type: ignore # Klippy is not type checked.
+                                           minval=-1, maxval=4)
 
         # Initialize Logger variable
         self._ktc_logger = None
@@ -77,20 +78,20 @@ class KtcLog:
             self._ktc_logger.addHandler(queue_handler)
 
         # Statistics variables
-        self.changer_stats: dict[str, Changer_Statistics] = {}
-        self.tool_stats: dict[str, Tool_Statistics] = {}
-        self.print_changer_stats: dict[str, Changer_Statistics] = {}
-        self.print_tool_stats: dict[str, Tool_Statistics] = {}
+        self.changer_stats: Dict[str, ChangerStatisticsClass] = {}
+        self.tool_stats: Mapping[str, ToolStatisticsClass] = {}
+        self.print_changer_stats: dict[str, ChangerStatisticsClass] = {}
+        self.print_tool_stats: dict[str, ToolStatisticsClass] = {}
 
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
         # Load objects from Klipper after the printer has connected so we don't get circular dependencies
-        self.gcode : 'gcode.GCodeDispatch' = self.printer.lookup_object("gcode")
+        self.gcode : 'gcode.GCodeDispatch' | Any = self.printer.lookup_object("gcode")
 
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent = self.printer.load_object(         # type: ignore # Klipper is not type checked.
+        self.ktc_persistent = type_cast('ktc_persisting.KtcPersisting', self.printer.load_object(
             self.config, "ktc_persisting"
-        )
+        ))
 
         # Register G-code commands
         handlers = [
@@ -164,20 +165,20 @@ class KtcLog:
         self.trace("Loading persisted state.")
 
         # Load general statistics
-        loaded_stats: dict = self.ktc_persistent.content.get("Statistics", {})
+        loaded_stats: Dict = self.ktc_persistent.content.get("Statistics", {})
         if loaded_stats == {}:
             self.debug("Did not find any saved statistics. Initialized empty.")
 
         self.changer_stats = self._get_persisted_items(
-            "Statistics", "ktc_toolchanger", Changer_Statistics
+            "Statistics", "ktc_toolchanger", ChangerStatisticsClass
         )
         self.tool_stats = self._get_persisted_items(
-            "Statistics", "ktc_tool", Tool_Statistics
+            "Statistics", "ktc_tool", ToolStatisticsClass
         )
 
     def _get_persisted_items(
-        self, section: str, item_type: str, stat_type
-    ) -> dict[str, Changer_Statistics | Tool_Statistics]:
+        self, section: str, item_type: str, stat_type : type[ToolStatisticsClass | ChangerStatisticsClass]
+    ) -> Mapping[str, Any]:
         """Load the persisted state from the file for a given section and item type
         For example, load all persisted ktc_toolchanger stats from the Statistics section.
         Return a dict with the loaded items."""
@@ -235,7 +236,7 @@ class KtcLog:
         self,
         section: str,
         item_type: str,
-        items: dict[str, Tool_Statistics | Changer_Statistics],
+        items: dict[str, ToolStatisticsClass | ChangerStatisticsClass],
     ):
         """Save the statistics to the file for a given section and item type"""
         try:
@@ -270,13 +271,13 @@ class KtcLog:
         """Reset all the statistics to 0"""
         self.always("Reseting KTC statistics.")
 
-        self.changer_stats: dict[str, Changer_Statistics] = {}
+        self.changer_stats: dict[str, ChangerStatisticsClass] = {}
         for changer in self.printer.lookup_objects("ktc_tool_changer"):
-            self.changer_stats[str(changer[0]).split(" ", 1)[1]] = Changer_Statistics()
+            self.changer_stats[str(changer[0]).split(" ", 1)[1]] = ChangerStatisticsClass()
 
-        self.tool_stats: dict[str, Tool_Statistics] = {}
+        self.tool_stats: Mapping[str, ToolStatisticsClass] = {}
         for tool in self.printer.lookup_objects("ktc_tool"):
-            self.tool_stats[str(tool[0]).split(" ", 1)[1]] = Tool_Statistics()
+            self.tool_stats[str(tool[0]).split(" ", 1)[1]] = ToolStatisticsClass()
 
     def _reset_print_statistics(self):
         """Reset all the print statistics to same as regular statistics.
@@ -415,7 +416,7 @@ class KtcLog:
         # 264 engages and 264 disengages completed.
         # Check if total or specific changer
         if changer_name is None:
-            changer_stats = Changer_Statistics()
+            changer_stats = ChangerStatisticsClass()
             # Add up all the stats for all changers
             for item in self.printer.lookup_objects("ktc_tool_changer"):
                 item_name = str(item[0]).split(" ", 1)[1]
@@ -460,11 +461,11 @@ class KtcLog:
 
     def _sum_tool_stats_for_changer(
         self, changer_name: str, since_print_start=False
-    ) -> Tool_Statistics:
+    ) -> ToolStatisticsClass:
         """Add up all tool stats for a changer and return a dict with the sum.
         If since_print_start is True, subtract the print stats from the total stats"""
 
-        result = Tool_Statistics()
+        result = ToolStatisticsClass()
 
         if changer_name is None:
             # Get all tools for all changers
@@ -809,9 +810,12 @@ class Swap_Statistics:
     def __sub__(self, other):
         return _add_subtract_stat(self, other, operator.sub)
 
+@dataclasses.dataclass
+class StatisticsBaseClass:
+    '''Used for type hinting.'''
 
 @dataclasses.dataclass
-class Changer_Statistics:
+class ChangerStatisticsClass(StatisticsBaseClass):
     """Statistics for a tool changer"""
 
     engages: int = 0
@@ -825,7 +829,7 @@ class Changer_Statistics:
 
 
 @dataclasses.dataclass
-class Tool_Statistics:
+class ToolStatisticsClass(StatisticsBaseClass):
     """Statistics for a tool"""
 
     selects_completed: int = 0
@@ -851,8 +855,8 @@ class Tool_Statistics:
 
 
 def _add_subtract_stat(
-    a: Changer_Statistics | Tool_Statistics,
-    b: Changer_Statistics | Tool_Statistics,
+    a: ChangerStatisticsClass | ToolStatisticsClass,
+    b: ChangerStatisticsClass | ToolStatisticsClass,
     op: operator,
 ):
     """Add or subtract two statistics objects and return the result"""

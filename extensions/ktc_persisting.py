@@ -60,9 +60,9 @@ class KtcPersisting:
                 sections[section] = {}
                 for name, val in varfile.items(section):
                     sections[section][name] = ast.literal_eval(val)
-        except:
+        except Exception as e:
             msg = "Unable to parse existing KTC variable file: %s" % (self.filename,)
-            raise msg
+            raise Exception(msg) from e
         self.content = sections
 
     def save_variable(self, varname: str, value: str, section: str ="Variables", force_save: bool=False) -> None:
@@ -70,7 +70,7 @@ class KtcPersisting:
             self.log.trace("ktc_persisting.save_variable(Varname=%s, valus=%s, value type=%s)" % (varname, value, type(value)))
             value = ast.literal_eval(value)
         except ValueError as e:
-            raise Exception("Unable to parse '%s' as a literal: %s" % (value, e))
+            raise Exception("Unable to parse '%s' as a literal: %s" % (value, e)) from e
 
         if not section in self.content:
             self.log.trace("Creating section %s" % (section,))

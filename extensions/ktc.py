@@ -5,9 +5,8 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast
-import re
-from typing import Optional, TYPE_CHECKING, Union
+import ast, re
+from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast
 # from . import ktc_tool
 
 # Only import these modules for type checking in development.
@@ -49,7 +48,7 @@ class KtcBaseClass:
 
         self.printer : 'klippy.Printer' = config.get_printer()
         self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
-        self.gcode : 'gcode.GCodeDispatch' = self.printer.lookup_object("gcode")    # type: ignore # Klippy is not type checked.
+        self.gcode = typing_cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
 
     def configure_inherited_params(self):
         '''Load inherited parameters from instances that this instance inherits from.'''
@@ -127,9 +126,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def __init__(self, config: Optional['configfile.ConfigWrapper']):
         super().__init__(config)
 
-        self.log: 'ktc_log.KtcLog' = self.printer.load_object(                # type: ignore # Klippy is not type checked.
+        self.log = typing_cast('ktc_log.KtcLog', self.printer.load_object(
             config, "ktc_log"
-        )                               
+        ))
 
         self.saved_fan_speed = (
             0  # Saved partcooling fan speed when deselecting a tool with a fan.
