@@ -11,8 +11,8 @@
 from __future__ import annotations  # To reference the class itself in type hints
 import logging
 import threading, queue, time, dataclasses
-import math, os.path, copy, re, operator
-from . import ktc_persisting, ktc_toolchanger, ktc_tool
+import math, os.path, copy, operator
+from . import ktc_persisting, ktc_toolchanger, ktc_tool, ktc
 
 class KtcLog:
     """Main Logging and statistics Class for KTC (Klipper Tool Changer)"""
@@ -292,7 +292,7 @@ class KtcLog:
         if len(self.changer_stats.keys()) > 1:
             ##############################  Changers
             # This will print the stats for each changer in a sorted order
-            sorted_items = natural_keys_sorting(self.changer_stats.keys())
+            sorted_items = ktc.natural_keys_sorting(self.changer_stats.keys())
             for changer_name in sorted_items:
                 changer_temp_msg = self._changer_stats_to_human_string(
                     changer_name, since_print_start
@@ -309,7 +309,7 @@ class KtcLog:
 
         ##############################  Tools
         # last_tool_was_empty = True
-        sorted_items = natural_keys_sorting(self.tool_stats.keys())
+        sorted_items = ktc.natural_keys_sorting(self.tool_stats.keys())
         for tool_name in sorted_items:
             # Get the stats for the tool
             temp_tool_msg = self._tool_stats_to_human_string(
@@ -357,7 +357,7 @@ class KtcLog:
                 ),
                 seconds_to_human_string(tool_stats_sum.time_spent_selecting),
                 seconds_to_human_string(
-                    division(
+                    ktc.safe_division(
                         tool_stats_sum.time_spent_selecting,
                         tool_stats_sum.selects_completed,
                     )
@@ -380,7 +380,7 @@ class KtcLog:
             )
             result += " Avg. %s." % (
                 seconds_to_human_string(
-                    division(
+                    ktc.safe_division(
                         tool_stats_sum.time_spent_deselecting,
                         tool_stats_sum.deselects_completed,
                     )
@@ -485,7 +485,7 @@ class KtcLog:
             result += " in %s." % (seconds_to_human_string(t.time_spent_selecting))
             result += " Avg. %s." % (
                 seconds_to_human_string(
-                    division(t.time_spent_selecting, t.selects_completed)
+                    ktc.safe_division(t.time_spent_selecting, t.selects_completed)
                 )
             )
 
@@ -499,7 +499,7 @@ class KtcLog:
             result += " in %s." % (seconds_to_human_string(t.time_spent_deselecting))
             result += " Avg. %s." % (
                 seconds_to_human_string(
-                    division(t.time_spent_deselecting, t.deselects_completed)
+                    ktc.safe_division(t.time_spent_deselecting, t.deselects_completed)
                 )
             )
 
@@ -844,30 +844,6 @@ def bignumber_to_human_string(number):
         return "%.1fK" % (number / 1000)
     return "%d" % number
 
-
-# Function to avoid division by zero
-def division(dividend, divisor):
-    return dividend / divisor if divisor else 0
-
-
-####################################
-# HELPER FUNCTIONS: Natural Sorting#
-####################################
-# https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
-def natural_keys_sorting(list_to_sort):
-    return sorted(list_to_sort, key=natural_sorting)
-
-def natural_sorting(text):
-    """
-    alist.sort(key=natural_keys) sorts in human order
-    http://nedbatchelder.com/blog/200712/human_sorting.html
-    (See Toothy's implementation in the comments)
-    """
-    return [__atoi(c) for c in re.split(r"(\d+)", text)]
-
-
-def __atoi(text):
-    return int(text) if text.isdigit() else text
 
 
 ####################################

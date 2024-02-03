@@ -5,7 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast
+import ast, re
 from . import ktc_persisting, ktc_tool, ktc_log, ktc_toolchanger
 
 # TODO: Add config option to save variables to a different file.
@@ -1076,6 +1076,28 @@ def get_params_dict_from_config(config):
     # Todo:
     # Inspired by https://github.com/jschuh/klipper-macros/blob/main/layers.cfg
 
+####################################
+# HELPER FUNCTIONS: Natural Sorting#
+####################################
+# https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
+def natural_keys_sorting(list_to_sort):
+    return sorted(list_to_sort, key=natural_sorting)
+
+def natural_sorting(text):
+    """
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    """
+    return [__atoi(c) for c in re.split(r"(\d+)", text)]
+
+def __atoi(text):
+    return int(text) if text.isdigit() else text
+
+
+# Function to avoid division by zero
+def safe_division(dividend, divisor):
+    return dividend / divisor if divisor else 0
 
 class ktc_MeanLayerTime:
     def __init__(self, printer):

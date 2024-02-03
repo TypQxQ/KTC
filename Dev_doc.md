@@ -89,51 +89,13 @@ ktc_tool.py is initialized for each tool.
     Offset is overwritten to persistant variable.
 
 
-Inheritance:
- tool <- inheriting_tool <- toolchanger <- tool <-  inheriting_tool <- toolchanger <- ktc
 
 
-ToDo:
-    
-    Check what happens when selecting TOOL_UNKNOWN and has no stats...
-
-    ktc_persisting sparar innnan den hämtar nya. Både statistik och active_tool.
-    KTC_SAVE_VARIABLES_FILENAME och KTC_SAVE_VARIABLES_DELAY borde laddas från config filen när de finns.
-
-    initialize_tool_lock to use ktc_persistent
-    Add option to save instantly (when for example current tool is changed.)
-
-    cmd_KTC_DROPOFF should itterate trough toolchangers recursevly reverse from current_tool.
-
-    initialize_tool_lock move from tool_changer to ktc and do recusevly.
-
-    refactor tool_id to be string and posibly more than one word, check tool_statistics[tool_id] where it asumes a number.
-
-    Move all config initializations that need loaded components from init to _after_loaded.
-    Inherits: to tool.
-        Add variable _initialized to all configurable.
-    parent_tool move to ktc_toolchanger.
-    Move shaper to variable array
-    Change init_printer_to_last_tool to moment when it should be initialized.
-    Remove purge_on_toolchange.
-
-    Prova att sätta ktc_persistent i egen fil och ladda med ktc_persistent.
-
-    Maybe change "printer_is_homed_for_toolchange" method name to toolchanger_ready.
-    lazy_home_when_parking to reflect what axis can be used when not homed for each tool?
-
-    Check ktc.handle_ready if can be moved to connect after tools are refactored.
-
-    A tool can have multiple partcooling fans.
-
-    current_tool_id change to active_tool_n?
-
-    Add logic to compare ktc_tool < > on number. None allways being smallest.
 
 # To try to keep terms apart:
+Inheritance: tool <- inheriting_tool <- toolchanger <- tool <-  inheriting_tool <- toolchanger <- ktc
+
 Each tool has a id (name) (ktc_tool name) and a nr.
-
-
 
 # Select: Tool is selected and loaded for use, be it a physical or a virtual on physical.
     When a child tool is selected it will be active on it's toolchanger and on ktc while the parent only on it's toolchanger.
