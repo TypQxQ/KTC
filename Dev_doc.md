@@ -27,7 +27,7 @@
 >   - self.tools{}:         List of all tools on the toolchanger.
 >   - self.active_tool:     Selected Tool.
 
-> ### KtcBaseTool(KtcBaseClass)
+> ### KtcBaseToolClass(KtcBaseClass)
 > The base all Ktc_Toolchanger inherits.
 > - functions:
 >   - __init__: config required.
@@ -40,13 +40,13 @@
 
 
 > ### KtcConstants:
-> Class to include CONSTANTS. This are instances of KtcBaseTool so they must be inherited paralel.
+> Class to include CONSTANTS. This are instances of KtcBaseToolClass so they must be inherited paralel.
 > - CONSTANTS:
 >   - TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
 >   - TOOL_NONE_N: -1
 >   - TOOL_UNKNOWN_N: -2
->   - TOOL_UNKNOWN: Instance KtcBaseTool: name="KTC_Unknown", number=TOOL_UNKNOWN_N
->   - TOOL_NONE = Instance KtcBaseTool:name="KTC_None", number=TOOL_NONE_N
+>   - TOOL_UNKNOWN: Instance KtcBaseToolClass: name="KTC_Unknown", number=TOOL_UNKNOWN_N
+>   - TOOL_NONE = Instance KtcBaseToolClass:name="KTC_None", number=TOOL_NONE_N
 
 
 ## Python files:

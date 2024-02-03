@@ -59,10 +59,10 @@ class KtcBaseChanger(KtcBaseClass):
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
         self.parent_tool = None # The parent tool of the toolchanger if it is not default changer.
-        self.tools : dict[str, KtcBaseTool] = {}  # List of all tools on the toolchanger.
+        self.tools : dict[str, KtcBaseToolClass] = {}  # List of all tools on the toolchanger.
         self.active_tool = None
 
-class KtcBaseTool(KtcBaseClass):
+class KtcBaseToolClass(KtcBaseClass):
     '''Base class for tools. Contains common methods and properties.'''
     def __init__(self, config: Optional['configfile.ConfigWrapper'] = None, name: str = "", number: int = TOOL_NUMBERLESS_N):
         super().__init__(config)
@@ -97,8 +97,8 @@ class KtcConstants:
     TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
     TOOL_UNKNOWN_N = TOOL_UNKNOWN_N
     TOOL_NONE_N = TOOL_NONE_N
-    TOOL_UNKNOWN = KtcBaseTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
-    TOOL_NONE = KtcBaseTool(name="KTC_None", number=TOOL_NONE_N)
+    TOOL_UNKNOWN = KtcBaseToolClass(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
+    TOOL_NONE = KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N)
     # Special tool objects for unknown and none tools.
         
 class Ktc(KtcBaseClass, KtcConstants):

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from . import ktc_log, ktc_toolchanger
 
 
-class KtcTool(ktc.KtcBaseClass):
+class KtcTool(ktc.KtcBaseToolClass):
     """Class for a single tool in the toolchanger."""
     HEATER_STATE_OFF = 0
     HEATER_STATE_STANDBY = 1
