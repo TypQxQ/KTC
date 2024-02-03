@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 class KtcBase3Class:
     pass
 
+LINE_SEPARATOR = "\n--------------------------------------------------------\n"
+SECTION_SEPARATOR = (
+    "\n========================================================\n"
+)
+
 class KtcLog:
     """Main Logging and statistics Class for KTC (Klipper Tool Changer)"""
 
@@ -81,7 +86,7 @@ class KtcLog:
         self.changer_stats: Dict[str, ChangerStatisticsClass] = {}
         self.tool_stats: Mapping[str, ToolStatisticsClass] = {}
         self.print_changer_stats: dict[str, ChangerStatisticsClass] = {}
-        self.print_tool_stats: dict[str, ToolStatisticsClass] = {}
+        self.print_tool_stats: Mapping[str, ToolStatisticsClass] = {}
 
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
@@ -295,10 +300,6 @@ class KtcLog:
         If since_print_start is True, subtract the print stats from the total stats
         and only print the stats for the start of the print."""
 
-        LINE_SEPARATOR = "\n--------------------------------------------------------\n"
-        SECTION_SEPARATOR = (
-            "\n========================================================\n"
-        )
         msg = ""
         temp_msg = ""
         if not since_print_start:
@@ -308,7 +309,7 @@ class KtcLog:
 
         ##############################  Total
         # This will add the total stats for all changers as a sum and then print them
-        temp_msg += self._changer_stats_to_human_string(None, since_print_start)
+        temp_msg += self._changer_stats_to_human_string("", since_print_start)
         if temp_msg != "":
             msg += temp_msg + SECTION_SEPARATOR
             temp_msg = ""
@@ -355,13 +356,13 @@ class KtcLog:
             self.always(msg_header + "No statistics recorded.")
 
     def _changer_stats_to_human_string(
-        self, changer_name: str = None, since_print_start=False
+        self, changer_name: str = "", since_print_start=False
     ) -> str:
         """Return a human readable string with the statistics for a given 
         changer. If changer_name is None, return the sum of all changers."""
         result = ""
 
-        if changer_name is None:
+        if changer_name is None or changer_name == "":
             result_header = ""
         else:
             result_header = "Changer %s:" % changer_name
