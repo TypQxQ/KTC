@@ -1,3 +1,56 @@
+# Development doc for KTC
+
+> Using inherited classes from Ktc code can use the BaseClass for typechecks and not cross import.
+> This minimizes risk for circular imports.
+
+## Base clases defined in ktc.py
+
+> ### KtcBaseClass:
+> The base all Ktc Classes inherits.
+> - functions:
+>   - __init__:   Optional config. If config is not None, Load self.config, self.printer and self.gcode reference.
+>   - configure_inherited_params:     Loads inherited parameters from instances that this instance inherits from.
+> - variables:
+>   - self.config:
+>   - self.name:
+>   - self.printer:
+>   - self.gcode:
+>   - self.reactor:
+
+> ### KtcBaseChanger(KtcBaseClass)
+> The base all Ktc_Toolchanger inherits.
+> - functions:
+>   - __init__: config required.
+>   - configure_inherited_params:     Loads inherited parameters from instances that this instance inherits from.
+> - variables:
+>   - self.parent_tool:     None if main toolchanger. Otherwise the tool this tool uses
+>   - self.tools{}:         List of all tools on the toolchanger.
+>   - self.active_tool:     Selected Tool.
+
+> ### KtcBaseTool(KtcBaseClass)
+> The base all Ktc_Toolchanger inherits.
+> - functions:
+>   - __init__: config required.
+>   - configure_inherited_params:     Loads inherited parameters from instances that this instance inherits from.
+> - variables:
+>   - self.parent_tool:     None if main toolchanger. Otherwise the tool this tool uses
+>   - self.tools{}:         List of all tools on the toolchanger.
+>   - self.active_tool:     Selected Tool.
+
+
+
+> ### KtcConstants:
+> Class to include CONSTANTS. This are instances of KtcBaseTool so they must be inherited paralel.
+> - CONSTANTS:
+>   - TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
+>   - TOOL_NONE_N: -1
+>   - TOOL_UNKNOWN_N: -2
+>   - TOOL_UNKNOWN: Instance KtcBaseTool: name="KTC_Unknown", number=TOOL_UNKNOWN_N
+>   - TOOL_NONE = Instance KtcBaseTool:name="KTC_None", number=TOOL_NONE_N
+
+
+## Python files:
+
 ktc.py has all common methods that need only initialized once.
     -constants
     TOOL_UNKNOWN :  Special tool indicating stateunknown.

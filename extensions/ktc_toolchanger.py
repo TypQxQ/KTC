@@ -7,34 +7,41 @@
 #
 
 import dataclasses
-from . import ktc, ktc_persisting, ktc_log, ktc_tool
+from typing import Optional, TYPE_CHECKING
 
-class KtcToolchanger:
+from . import ktc
+
+if TYPE_CHECKING:
+    import configfile
+    import klippy
+    import gcode
+    from . import ktc_persisting, ktc_log, ktc_tool
+    
+class KtcToolchanger(ktc.KtcBaseClass):
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
     A "default_toolchanger" will be initialized if no toolchanger
     is specified in the config."""
 
-    def __init__(self, config):
+    def __init__(self, config: Optional['configfile.ConfigWrapper']):
         """Initialize the toolchanger object."""
         self.config = config                    # For later use. Used in ktc_tool objects too.
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
         self.gcode = self.printer.lookup_object("gcode")
-        self.log: ktc_log.KtcLog = self.printer.load_object(
+        self.log: 'ktc_log.KtcLog' = self.printer.load_object(
             config, "ktc_log"
         )  # Load the log object.
+        # super().__init__(config)
         self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
-        self.ktc_persistent: ktc_persisting.KtcPersisting = (
-            self.printer.load_object(config, "ktc_persisting")
-        )  # Load the ktc_persisting object.
+        self.ktc_persistent = None              # Load the ktc_persisting object.
 
         # Initialize object variables.
         self.name: str = config.get_name().split(" ", 1)[1]
-        self.params = ktc.get_params_dict_from_config(config)
+        self.params = self.ktc.get_params_dict_from_config(config)
         self.state = STATE.UNINITIALIZED
-        self.tools: dict[str, ktc_tool.KtcTool] = {}  # All tools on this toolchanger.
-        self.parent_tool: ktc_tool.KtcTool = None  # The parent tool of this toolchanger.
+        self.tools: dict[str, 'ktc_tool.KtcTool'] = {}  # All tools on this toolchanger.
+        self.parent_tool: 'ktc_tool.KtcTool' = None  # The parent tool of this toolchanger.
         
         # Get initialization mode and check if valid.
         init_mode = config.get("init_mode", INIT_MODE.MANUAL)
@@ -53,7 +60,7 @@ class KtcToolchanger:
             % (init_order, self.name, INIT_ORDER.list_valid_values()))
         
         self.active_tool = (
-            ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
+            self.ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
         )
 
         # G-Code macros
@@ -117,6 +124,10 @@ class KtcToolchanger:
         ######
 
     def handle_connect(self):
+        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = ( # type: ignore
+            self.printer.load_object(self.config, "ktc_persisting")
+        )  # Load the ktc_persisting object.
+
         if self.parent_tool is not None:
             self.parent_tool = self.printer.lookup_object(self.parent_tool, None)
             raise self.config.error(
@@ -138,6 +149,9 @@ class KtcToolchanger:
 
     @property
     def persistent_state(self) -> dict:
+        '''Return the persistent state from file.
+        This is not to be used before the printer is in ready state
+        Is initialized inside handle_connect.'''
         return self.ktc_persistent.content.get(
                 "State", {}
             ).get("ktc_toolchanger_" + self.name.lower(), {})
@@ -180,18 +194,16 @@ class KtcToolchanger:
                 self.parent_tool.toolchanger.active_tool != self.parent_tool):
                 self.parent_tool.select()
 
-        # If not, set the state to INITIALIZING 
-        
         # Get the active tool from the persistent variables.
         active_tool_name = str.lower(self.persistent_state.get(
-            "active_tool", ktc.TOOL_UNKNOWN.name
+            "active_tool", self.ktc.TOOL_UNKNOWN.name
         ))
 
         # Set the active tool to the tool with the name from the persistent variables.
         # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
         self.active_tool = self.tools.get(active_tool_name, None)
         if self.active_tool is None:
-            self.active_tool = ktc.TOOL_UNKNOWN
+            self.active_tool = self.ktc.TOOL_UNKNOWN
             self.log.always(
                 "ktc_toolchanger.initialize(): Active tool %s not found for ktc_toolchanger %s. Using tool %s."
                 % (active_tool_name, self.name, self.active_tool.name)
@@ -221,7 +233,7 @@ class KtcToolchanger:
            
         
     
-        # if self.active_tool == ktc.TOOL_NONE:
+        # if self.active_tool == self.ktc.TOOL_NONE:
         #     self.disengage()
         # else:
         #     self.engage(True)

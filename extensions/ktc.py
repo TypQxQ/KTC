@@ -5,14 +5,24 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast, re
-from . import ktc_persisting, ktc_tool, ktc_log, ktc_toolchanger
+import ast
+import re
+from typing import Optional, TYPE_CHECKING, Union
+from . import ktc_tool
+
+# Only import these modules for type checking in development.
+# Need to add path to Klipper to the Type Checker in VSCode settings.
+if TYPE_CHECKING:
+    import configfile
+    import klippy
+    import gcode
+    from . import ktc_log, ktc_persisting, ktc_toolchanger
 
 # TODO: Add config option to save variables to a different file.
 KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
 KTC_SAVE_VARIABLES_DELAY = 10
 
-# TODO: Move to own file.
+# TODO: Remove this after migration
 VARS_KTC_TOOL_MAP = "ktc_state_tool_remap"
 
 # Constants for the restore_axis_on_toolchange variable.
@@ -20,44 +30,110 @@ XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
 INDEX_TO_XYZ = ["X", "Y", "Z"]
 
 # Value of Unknown and None tools. Do not change.
+TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
 
-# Special tool objects for unknown and none tools.
-TOOL_UNKNOWN = ktc_tool.KtcTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
-TOOL_NONE = ktc_tool.KtcTool(name="KTC_None", number=TOOL_NONE_N)
-
-
-class Ktc:
-    def __init__(self, config):
+class KtcBaseClass:
+    """Base class for KTC. Contains common methods and properties."""
+    def __init__(self, config: Optional['configfile.ConfigWrapper'] = None):
         self.config = config
-        self.printer = config.get_printer()
-        self.reactor = self.printer.get_reactor()
-        self.gcode = self.printer.lookup_object("gcode")
-        gcode_macro = self.printer.load_object(config, "gcode_macro")
-        self.log: ktc_log.KtcLog = self.printer.load_object(
+        self.name = ""
+        
+        self.printer = None # type: ignore # We are loading it later.
+        self.gcode = None # type: ignore # We are loading it later.
+
+        # If this is a empty object then don't load the config.
+        if config is None:
+            return
+
+        self.printer : 'klippy.Printer' = config.get_printer()
+        self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
+        self.gcode : 'gcode.GCodeDispatch' = self.printer.lookup_object("gcode")    # type: ignore # Klippy is not type checked.
+
+    def configure_inherited_params(self):
+        '''Load inherited parameters from instances that this instance inherits from.'''
+    
+class KtcBaseChanger(KtcBaseClass):
+    '''Base class for toolchangers. Contains common methods and properties.'''
+    def __init__(self, config: 'configfile.ConfigWrapper'):
+        super().__init__(config)
+        self.parent_tool = None # The parent tool of the toolchanger if it is not default changer.
+        self.tools : dict[str, KtcBaseTool] = {}  # List of all tools on the toolchanger.
+        self.active_tool = None
+
+class KtcBaseTool(KtcBaseClass):
+    '''Base class for tools. Contains common methods and properties.'''
+    def __init__(self, config: Optional['configfile.ConfigWrapper'] = None, name: str = "", number: int = TOOL_NUMBERLESS_N):
+        super().__init__(config)
+
+        self.name = name        # Override the name in case it is supplied.
+        self.number = number    # Override the number in case it is supplied.
+
+        self.toolchanger: Optional[KtcBaseChanger] = None
+
+        self.fan = None
+
+        self.extruder = None
+
+        self.heater = None
+        self.heater_state = None
+        self.heater_standby_temp = None
+        self.heater_active_temp = None
+
+        self.idle_to_standby_time = None
+        self.idle_to_powerdown_time = None
+        self.timer_idle_to_standby = None
+        self.timer_idle_to_powerdown = None
+
+        self.offset = [0, 0, 0]
+
+    def set_offset(self, **kwargs):
+        '''Set the offset of the tool.'''
+        
+class KtcConstants:
+    '''Constants for KTC. These are to be inherited by other classes.'''
+    # Value of Unknown and None tools are set in module scope.
+    TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
+    TOOL_UNKNOWN_N = TOOL_UNKNOWN_N
+    TOOL_NONE_N = TOOL_NONE_N
+    TOOL_UNKNOWN = KtcBaseTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
+    TOOL_NONE = KtcBaseTool(name="KTC_None", number=TOOL_NONE_N)
+    # Special tool objects for unknown and none tools.
+        
+class Ktc(KtcBaseClass, KtcConstants):
+
+    def __init__(self, config: Optional['configfile.ConfigWrapper']):
+        super().__init__(config)
+
+        self.log: 'ktc_log.KtcLog' = self.printer.load_object(                # type: ignore # Klippy is not type checked.
             config, "ktc_log"
-        )  # Load the log object.
+        )                               
 
         self.saved_fan_speed = (
             0  # Saved partcooling fan speed when deselecting a tool with a fan.
         )
-        self.__active_tool = TOOL_UNKNOWN  # The currently active tool.
 
-        self.tools: dict[str, ktc_tool.KtcTool] = {}  # List of all tools.
-        self.tools_by_number: dict[int, ktc_tool.KtcTool] = {}  # List of all tools by number.
-        self.toolchangers: dict[str, ktc_toolchanger.KtcToolchanger] = {}  # List of all toolchangers.
+        self.tools: dict[str, 'ktc_tool.KtcTool'] = {}  # List of all tools.
+        self.tools_by_number: dict[int, 'ktc_tool.KtcTool'] = {}  # List of all tools by number.
+        self.toolchangers: dict[str, 'ktc_toolchanger.KtcToolchanger'] = {}  # List of all toolchangers.
+
+        
+        # TOOL_UNKNOWN = ktc_tool.KtcTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
+        # TOOL_NONE = ktc_tool.KtcTool(name="KTC_None", number=TOOL_NONE_N)
+
+        self.__active_tool = self.TOOL_UNKNOWN  # The currently active tool.
 
         # Gets the name here and connects to a toolchanger object later
         # when all objects are loaded.
-        self.default_toolchanger: ktc_toolchanger.KtcToolchanger = config.get(
+        self.default_toolchanger: 'ktc_toolchanger.KtcToolchanger' = config.get(
             "default_toolchanger", None
         )
 
         self.log.trace("KTC: Default toolchanger: %s." % str(self.default_toolchanger))
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
-        self.params = get_params_dict_from_config(config)
+        self.params = Ktc.get_params_dict_from_config(config)
         self.log.trace("KTC: Params: %s." % str(self.params))
 
         ######## Inheritable parameters
@@ -132,7 +208,7 @@ class Ktc:
 
         ############################
         # Load the persistent variables object
-        self.ktc_persistent: ktc_persisting.KtcPersisting = self.printer.load_object(
+        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = self.printer.load_object(
             self.config, "ktc_persisting"
         )
         
@@ -217,11 +293,11 @@ class Ktc:
 
     def _config_tools(self):
         # Add TOOL_NONE and TOOL_UNKNOWN to the list of tools for ktc and all toolchangers.
-        self.tools[TOOL_NONE.name.lower()] = TOOL_NONE
-        self.tools[TOOL_UNKNOWN.name.lower()] = TOOL_UNKNOWN
+        self.tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
+        self.tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
         for tc in self.toolchangers.values():
-            tc.tools[TOOL_NONE.name.lower()] = TOOL_NONE
-            tc.tools[TOOL_UNKNOWN.name.lower()] = TOOL_UNKNOWN
+            tc.tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
+            tc.tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
         
         # All tools that are not TOOL_NONE or TOOL_UNKNOWN should have a toolchanger.
         # Default toolchanger is set in _config_default_toolchanger.
@@ -239,12 +315,12 @@ class Ktc:
     # Logic to check if a tool is valid when set.
     # Takes either a KtcTool object, the name of the tool or the number of the tool.
     @property
-    def active_tool(self) -> ktc_tool.KtcTool:
+    def active_tool(self) -> 'ktc_tool.KtcTool':
         return self.__active_tool
 
     @active_tool.setter
-    def active_tool(self, value: str or ktc_tool.KtcTool):
-        if isinstance(value, ktc_tool.KtcTool):
+    def active_tool(self, value: Union[str, 'ktc_tool.KtcTool']):
+        if isinstance(value, KtcBaseClass):
             tool = value
         elif isinstance(value, str):
             tool = self.tools.get(value, None)
@@ -321,7 +397,7 @@ class Ktc:
         if tc_name is None:
             tc = self.default_toolchanger
         else:
-            tc: ktc_toolchanger.KtcToolchanger = self.printer.lookup_object(
+            tc: 'ktc_toolchanger.KtcToolchanger' = self.printer.lookup_object(
                 "ktc_toolchanger " + tc_name, None
             )
             
@@ -336,7 +412,7 @@ class Ktc:
 
         if tool_id is None:
             tool_id = self.active_tool_n
-        if not int(tool_id) > TOOL_NONE_N:
+        if not int(tool_id) > self.TOOL_NONE_N:
             self.log.always(
                 "parse_gcmd_get_tooln: Tool " + str(tool_id) + " is not valid."
             )
@@ -344,7 +420,7 @@ class Ktc:
         else:
             # Check if the requested tool has been remaped to another one.
             tool_is_remaped = self.tool_is_remaped(int(tool_id))
-            if tool_is_remaped > TOOL_NONE_N:
+            if tool_is_remaped > self.TOOL_NONE_N:
                 tool_id = tool_is_remaped
         return tool_id
 
@@ -354,11 +430,11 @@ class Ktc:
         self.log.trace(
             "KTC_TOOL_DROPOFF_ALL running. "
         )  # + gcmd.get_raw_command_parameters())
-        if self.active_tool == TOOL_UNKNOWN:
+        if self.active_tool == self.TOOL_UNKNOWN:
             raise self.printer.command_error(
                 "cmd_KTC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool."
             )
-        if self.active_tool != TOOL_NONE:
+        if self.active_tool != self.TOOL_NONE:
             self.active_tool.Dropoff(force_virtual_unload=True)
 
         try:
@@ -369,7 +445,7 @@ class Ktc:
                 all_checked_once = True  # If no breaks in next For loop then we can exit the While loop.
                 for tool_name, tool in all_tools.items():
                     # If there is a virtual tool loaded:
-                    if tool.get_status()["virtual_loaded"] > TOOL_NONE.number:
+                    if tool.get_status()["virtual_loaded"] > self.TOOL_NONE.number:
                         # Pickup and then unload and drop the tool.
                         self.log.trace(
                             "cmd_KTC_TOOL_DROPOFF_ALL: Picking up and dropping forced: %s."
@@ -464,7 +540,7 @@ class Ktc:
             return None
         elif tool_id is None and heater_id is None:
             tool_id = self.active_tool_n
-            if int(self.active_tool_n) > TOOL_NONE_N:
+            if int(self.active_tool_n) > self.TOOL_NONE_N:
                 heater_name = self.active_tool.extruder
             # wait for bed
             self._Temperature_wait_with_tolerance(curtime, "heater_bed", tolerance)
@@ -771,7 +847,7 @@ class Ktc:
 
     def cmd_KTC_SAVE_CURRENT_POSITION(self, gcmd):
         # Save optional RESTORE_POSITION_TYPE parameter to restore_position_on_toolchange_type variable.
-        restore_axis = ktc_parse_restore_type(gcmd.get("RESTORE_POSITION_TYPE", None))
+        restore_axis = self.ktc_parse_restore_type(gcmd.get("RESTORE_POSITION_TYPE", None))
         self.SaveCurrentPosition(restore_axis)
 
     def SaveCurrentPosition(self, restore_axis=None):
@@ -790,7 +866,7 @@ class Ktc:
     #    2: Restore XYZ
     #    XYZ: Restore specified axis
     def cmd_KTC_RESTORE_POSITION(self, gcmd):
-        self.restore_axis_on_toolchange = ktc_parse_restore_type(
+        self.restore_axis_on_toolchange = self.ktc_parse_restore_type(
             gcmd.get("RESTORE_POSITION_TYPE", None),
             default=self.restore_axis_on_toolchange,
         )
@@ -831,7 +907,7 @@ class Ktc:
     def cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL(self, gcmd):
         self.log.trace("Setting offsets to those of ktc_tool %s." % self.active_tool.name)
 
-        if self.active_tool == TOOL_UNKNOWN or self.active_tool == TOOL_NONE:
+        if self.active_tool == self.TOOL_UNKNOWN or self.active_tool == self.TOOL_NONE:
             msg = "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL: Unknown tool mounted. Can't set offsets."
             raise gcmd.error(msg)
         else:
@@ -984,8 +1060,8 @@ class Ktc:
             "saved_position": self.saved_position,
             "last_endstop_query": self.last_endstop_query,
             "tools": list(self.tools.keys()),
-            "TOOL_NONE": TOOL_NONE.name,
-            "TOOL_UNKNOWN": TOOL_UNKNOWN.name,
+            "TOOL_NONE": self.TOOL_NONE.name,
+            "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
             **self.params,
         }
         return status
@@ -1034,44 +1110,42 @@ class Ktc:
     # parses legacy restore type into string of axis names.
     # Raises gcode error on fail
 
+    @staticmethod
+    def ktc_parse_restore_type(restore_type: str, default: str = None) -> str:
+        # restore_type = gcmd.get(arg_name, None)
+        if restore_type is None:
+            return default
+        elif restore_type == "0":
+            return ""
+        elif restore_type == "1":
+            return "XY"
+        elif restore_type == "2":
+            return "XYZ"
+        # Validate this is XYZ
+        for c in restore_type:
+            if c not in XYZ_TO_INDEX:
+                raise Exception("Invalid RESTORE_POSITION_TYPE")
+        return restore_type
 
-def ktc_parse_restore_type(restore_type: str, default: str = None) -> str:
-    # restore_type = gcmd.get(arg_name, None)
-    if restore_type is None:
-        return default
-    elif restore_type == "0":
-        return ""
-    elif restore_type == "1":
-        return "XY"
-    elif restore_type == "2":
-        return "XYZ"
-    # Validate this is XYZ
-    for c in restore_type:
-        if c not in XYZ_TO_INDEX:
-            raise Exception("Invalid RESTORE_POSITION_TYPE")
-    return restore_type
+    @staticmethod
+    def get_params_dict_from_config(config):
+        """Get a dict of atributes starting with params_ from the config."""
+        result = {}
 
-    # Parses a string into a list of floats.
-
-
-def get_params_dict_from_config(config):
-    """Get a dict of params from the config."""
-    result = {}
-
-    # If the section doesn't exist inside the config,
-    # don't try to set any params or it will throw an error.
-    if not config.has_section(config.get_name()):
+        # If the section doesn't exist inside the config,
+        # don't try to set any params or it will throw an error.
+        if not config.has_section(config.get_name()):
+            return result
+        
+        for option in config.get_prefix_options("params_"):
+            try:
+                result[option] = ast.literal_eval(config.get(option))
+            except ValueError as e:
+                raise config.error(
+                    "Option '%s' in section '%s' is not a valid literal: %s"
+                    % (option, config.get_name(), e)
+                )
         return result
-    
-    for option in config.get_prefix_options("params_"):
-        try:
-            result[option] = ast.literal_eval(config.get(option))
-        except ValueError as e:
-            raise config.error(
-                "Option '%s' in section '%s' is not a valid literal: %s"
-                % (option, config.get_name(), e)
-            )
-    return result
 
     # Todo:
     # Inspired by https://github.com/jschuh/klipper-macros/blob/main/layers.cfg

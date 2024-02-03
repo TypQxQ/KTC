@@ -6,6 +6,13 @@
         "--disable=C0209",
         "--disable=C0115",
         "--disable=C0116",
-        "--disable=W0718"
+        "--disable=W0718",
+        "--disable=C0114",
+        "--disable=C0112"
+    ],
+    "python.analysis.typeCheckingMode": "standard",
+    "python.analysis.extraPaths": [
+        "../klipper/klippy/"
     ]
+    
 }

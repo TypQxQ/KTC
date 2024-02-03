@@ -12,7 +12,17 @@ from __future__ import annotations  # To reference the class itself in type hint
 import logging
 import threading, queue, time, dataclasses
 import math, os.path, copy, operator
-from . import ktc_persisting, ktc_toolchanger, ktc_tool, ktc
+from typing import TYPE_CHECKING, Optional, Union #, Any
+
+if TYPE_CHECKING:
+    from . import ktc_toolchanger, ktc_tool, ktc_persisting#, ktc
+    import configfile
+    import klippy
+    import gcode
+
+
+class KtcBase3Class:
+    pass
 
 class KtcLog:
     """Main Logging and statistics Class for KTC (Klipper Tool Changer)"""
@@ -20,7 +30,7 @@ class KtcLog:
     ####################################
     # INITIALIZATION METHODS         #
     ####################################
-    def __init__(self, config):
+    def __init__(self, config: 'configfile.ConfigWrapper'):
         """
         Initialize the KtcLog object.
 
@@ -32,10 +42,10 @@ class KtcLog:
         """
         # Initialize object variables
         self.config = config
-        self.printer = config.get_printer()
-        self.gcode = self.printer.lookup_object("gcode")
+        self.printer : 'klippy.Printer' = config.get_printer()
+        self.gcode : 'gcode.GCodeDispatch' = self.printer.lookup_object("gcode")    # type: ignore # Klippy is not type checked.
 
-        self.ktc_persistent: ktc_persisting.KtcPersisting = None
+        self.ktc_persistent: Optional['ktc_persisting.KtcPersisting'] = None
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -73,9 +83,12 @@ class KtcLog:
         self.print_tool_stats: dict[str, Tool_Statistics] = {}
 
     def handle_connect(self):
-        """Handle the connect event. This is called when the printer connects to Klipper."""
+        '''Handle the connect event. This is called when the printer connects to Klipper.'''
+        # Load objects from Klipper after the printer has connected so we don't get circular dependencies
+        self.gcode : 'gcode.GCodeDispatch' = self.printer.lookup_object("gcode")
+
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent = self.printer.load_object(
+        self.ktc_persistent = self.printer.load_object(         # type: ignore # Klipper is not type checked.
             self.config, "ktc_persisting"
         )
 
@@ -303,7 +316,7 @@ class KtcLog:
         if len(self.changer_stats.keys()) > 1:
             ##############################  Changers
             # This will print the stats for each changer in a sorted order
-            sorted_items = ktc.natural_keys_sorting(self.changer_stats.keys())
+            sorted_items = natural_keys_sorting(self.changer_stats.keys())
             for changer_name in sorted_items:
                 changer_temp_msg = self._changer_stats_to_human_string(
                     changer_name, since_print_start
@@ -320,7 +333,7 @@ class KtcLog:
 
         ##############################  Tools
         # last_tool_was_empty = True
-        sorted_items = ktc.natural_keys_sorting(self.tool_stats.keys())
+        sorted_items = natural_keys_sorting(self.tool_stats.keys())
         for tool_name in sorted_items:
             # Get the stats for the tool
             temp_tool_msg = self._tool_stats_to_human_string(
@@ -360,15 +373,15 @@ class KtcLog:
         # 264 selects completed(100.0%) in 1:00:00, avg. 13.2s.
         if tool_stats_sum.selects_started > 0:
             result += "\n%s selects completed(%.1f%%) in %s. Avg. %s." % (
-                bignumber_to_human_string(tool_stats_sum.selects_completed),
+                KtcLog.bignumber_to_human_string(tool_stats_sum.selects_completed),
                 (
                     tool_stats_sum.selects_completed
                     / tool_stats_sum.selects_started
                     * 100
                 ),
-                seconds_to_human_string(tool_stats_sum.time_spent_selecting),
-                seconds_to_human_string(
-                    ktc.safe_division(
+                KtcLog.seconds_to_human_string(tool_stats_sum.time_spent_selecting),
+                KtcLog.seconds_to_human_string(
+                    safe_division(
                         tool_stats_sum.time_spent_selecting,
                         tool_stats_sum.selects_completed,
                     )
@@ -379,7 +392,7 @@ class KtcLog:
         # 264 deselects completed(100.0%) in 1:00:00, avg. 13.2s.
         if tool_stats_sum.deselects_started > 0:
             result += "\n%s deselects completed(%.1f%%)" % (
-                bignumber_to_human_string(tool_stats_sum.deselects_completed),
+                KtcLog.bignumber_to_human_string(tool_stats_sum.deselects_completed),
                 (
                     tool_stats_sum.deselects_completed
                     / tool_stats_sum.deselects_started
@@ -387,11 +400,11 @@ class KtcLog:
                 ),
             )
             result += " in %s." % (
-                seconds_to_human_string(tool_stats_sum.time_spent_deselecting)
+                KtcLog.seconds_to_human_string(tool_stats_sum.time_spent_deselecting)
             )
             result += " Avg. %s." % (
-                seconds_to_human_string(
-                    ktc.safe_division(
+                KtcLog.seconds_to_human_string(
+                    safe_division(
                         tool_stats_sum.time_spent_deselecting,
                         tool_stats_sum.deselects_completed,
                     )
@@ -426,7 +439,7 @@ class KtcLog:
 
         # When there are engages, print them
         if changer_stats.engages > 0:
-            result += "\n%s engages " % bignumber_to_human_string(changer_stats.engages)
+            result += "\n%s engages " % KtcLog.bignumber_to_human_string(changer_stats.engages)
 
         # Middle of the sentence logic.
         if changer_stats.engages > 0 and changer_stats.disengages > 0:
@@ -485,18 +498,18 @@ class KtcLog:
         ##############################  Selected time
         # Selected 1:00:00.
         if t.time_selected > 0:
-            result += "Selected %s." % seconds_to_human_string(t.time_selected)
+            result += "Selected %s." % KtcLog.seconds_to_human_string(t.time_selected)
         ##############################  Selects
         # 264 selects completed(100.0%) in 1:00:00, avg. 13.2s.
         if t.selects_started > 0 or not since_print_start:
             result += "\n%s selects completed(%.1f%%)" % (
-                bignumber_to_human_string(t.selects_completed),
+                KtcLog.bignumber_to_human_string(t.selects_completed),
                 (t.selects_completed / t.selects_started * 100),
             )
-            result += " in %s." % (seconds_to_human_string(t.time_spent_selecting))
+            result += " in %s." % (KtcLog.seconds_to_human_string(t.time_spent_selecting))
             result += " Avg. %s." % (
-                seconds_to_human_string(
-                    ktc.safe_division(t.time_spent_selecting, t.selects_completed)
+                KtcLog.seconds_to_human_string(
+                    safe_division(t.time_spent_selecting, t.selects_completed)
                 )
             )
 
@@ -504,13 +517,13 @@ class KtcLog:
         # 264 deselects completed(100.0%) in 1:00:00, avg. 13.2s.
         if t.deselects_started > 0:
             result += "\n%s deselects completed(%.1f%%)" % (
-                bignumber_to_human_string(t.deselects_completed),
+                KtcLog.bignumber_to_human_string(t.deselects_completed),
                 (t.deselects_completed / t.deselects_started * 100),
             )
-            result += " in %s." % (seconds_to_human_string(t.time_spent_deselecting))
+            result += " in %s." % (KtcLog.seconds_to_human_string(t.time_spent_deselecting))
             result += " Avg. %s." % (
-                seconds_to_human_string(
-                    ktc.safe_division(t.time_spent_deselecting, t.deselects_completed)
+                KtcLog.seconds_to_human_string(
+                    safe_division(t.time_spent_deselecting, t.deselects_completed)
                 )
             )
 
@@ -518,12 +531,12 @@ class KtcLog:
         # 1:00:00 with heater active and 1:00:00 with heater in standby.
         if t.time_heater_active > 0 or t.time_heater_standby > 0:
             result += "\n%s with heater active" % (
-                seconds_to_human_string(t.time_heater_active)
+                KtcLog.seconds_to_human_string(t.time_heater_active)
             )
 
             if t.time_heater_standby > 0:
                 result += "and %s with heater in standby" % (
-                    seconds_to_human_string(t.time_heater_standby)
+                    KtcLog.seconds_to_human_string(t.time_heater_standby)
                 )
             result += "."
 
@@ -532,11 +545,11 @@ class KtcLog:
         return result
 
     ### STATISTICS INCREMENTING CHANGER METHODS
-    def track_changer_engage(self, changer: ktc_toolchanger.KtcToolchanger):
+    def track_changer_engage(self, changer: 'ktc_toolchanger.KtcToolchanger'):
         self.changer_stats[changer.name].engages += 1
         self._persist_statistics()
 
-    def track_changer_disengage(self, changer: ktc_toolchanger.KtcToolchanger):
+    def track_changer_disengage(self, changer: 'ktc_toolchanger.KtcToolchanger'):
         self.changer_stats[changer.name].disengages += 1
         self._persist_statistics()
 
@@ -544,47 +557,47 @@ class KtcLog:
     # Having all here makes it easier to change how the statistics are tracked
     # at a later time. It also makes it easy to search for all places where
     # statistics are tracked for debugging.
-    def track_tool_selecting_start(self, tool: ktc_tool.KtcTool):
+    def track_tool_selecting_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_spent_selecting = time.time()
         self.tool_stats[tool.name].selects_started += 1
 
-    def track_tool_selecting_end(self, tool: ktc_tool.KtcTool):
+    def track_tool_selecting_end(self, tool: 'ktc_tool.KtcTool'):
         self._increase_tool_time_diff(tool, "time_spent_selecting")
         self.tool_stats[tool.name].selects_completed += 1
         self._persist_statistics()
 
-    def track_tool_deselecting_start(self, tool: ktc_tool.KtcTool):
+    def track_tool_deselecting_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_spent_deselecting = time.time()
         self.tool_stats[tool.name].deselects_started += 1
 
-    def track_tool_deselecting_end(self, tool: ktc_tool.KtcTool):
+    def track_tool_deselecting_end(self, tool: 'ktc_tool.KtcTool'):
         self._increase_tool_time_diff(tool, "time_spent_deselecting")
         self.tool_stats[tool.name].deselects_completed += 1
         self._persist_statistics()
 
-    def track_tool_selected_start(self, tool: ktc_tool.KtcTool):
+    def track_tool_selected_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_selected = time.time()
         self.tool_stats[tool.name].selects_completed += 1
 
-    def track_tool_selected_end(self, tool: ktc_tool.KtcTool):
+    def track_tool_selected_end(self, tool: 'ktc_tool.KtcTool'):
         self._increase_tool_time_diff(tool.name, "time_selected")
         self._persist_statistics()
 
-    def track_heater_active_start(self, tool: ktc_tool.KtcTool):
+    def track_heater_active_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_heater_active = time.time()
 
-    def track_heater_active_end(self, tool: ktc_tool.KtcTool):
+    def track_heater_active_end(self, tool: 'ktc_tool.KtcTool'):
         self._increase_tool_time_diff(tool.name, "time_heater_active")
         self._persist_statistics()
 
-    def track_heater_standby_start(self, tool: ktc_tool.KtcTool):
+    def track_heater_standby_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_heater_standby = time.time()
 
-    def track_heater_standby_end(self, tool: ktc_tool.KtcTool):
+    def track_heater_standby_end(self, tool: 'ktc_tool.KtcTool'):
         self._increase_tool_time_diff(tool.name, "time_heater_standby")
         self._persist_statistics()
 
-    def _increase_tool_time_diff(self, tool: ktc_tool.KtcTool, final_time_key: str):
+    def _increase_tool_time_diff(self, tool: 'ktc_tool.KtcTool', final_time_key: str):
         """Increase the time difference for a tools statistics."""
         try:
             start_time = getattr(
@@ -617,6 +630,46 @@ class KtcLog:
         except Exception as e:
             # Handle any exceptions that occur during the process
             print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
+
+    ####################################
+    # STATIC METHODS: data to string   #
+    ####################################
+    @staticmethod
+    def seconds_to_human_string(seconds, long_format=False):
+        """Convert a number of seconds to a human readable string in the format 1h 2m 3s
+        or 1 hours 2 minutes 3 seconds if long_format is True."""
+        result = ""
+        hours = int(math.floor(seconds / 3600.0))
+        if long_format:
+            if hours >= 1:
+                result += "%d hours " % hours
+            minutes = int(math.floor(seconds / 60.0) % 60)
+            if hours >= 1 or minutes >= 1:
+                result += "%d minutes " % minutes
+            result += "%d seconds" % int((math.floor(seconds) % 60))
+        else:
+            if hours >= 1:
+                result += "%dh " % hours
+            minutes = int(math.floor(seconds / 60.0) % 60)
+            if hours >= 1 or minutes >= 1:
+                result += "%dm " % minutes
+            result += "%ds" % int((math.floor(seconds) % 60))
+        return result
+
+    @staticmethod
+    def bignumber_to_human_string(number):
+        """Convert a number to a human readable string in the format 1.2K, 2.3M, 3.4B etc."""
+        if number >= 1000000000:
+            return "%.1fB" % (number / 1000000000)
+        if number >= 1000000:
+            return "%.1fM" % (number / 1000000)
+        if number >= 1000:
+            return "%.1fK" % (number / 1000)
+        return "%d" % number
+
+    ####################################
+    # HELPER FUNCTIONS: data to string #
+    ####################################
 
     ### LOGGING AND STATISTICS METHODS GCODE
     # TODO: Remove this method after a while
@@ -819,42 +872,28 @@ class KtcMultiLineFormatter(logging.Formatter):
         lines = super(KtcMultiLineFormatter, self).format(record)
         return lines.replace("\n", "\n" + indent)
 
-
 ####################################
-# HELPER FUNCTIONS: data to string #
+# HELPER FUNCTIONS: Natural Sorting#
 ####################################
-def seconds_to_human_string(seconds, long_format=False):
-    """Convert a number of seconds to a human readable string in the format 1h 2m 3s
-    or 1 hours 2 minutes 3 seconds if long_format is True."""
-    result = ""
-    hours = int(math.floor(seconds / 3600.0))
-    if long_format:
-        if hours >= 1:
-            result += "%d hours " % hours
-        minutes = int(math.floor(seconds / 60.0) % 60)
-        if hours >= 1 or minutes >= 1:
-            result += "%d minutes " % minutes
-        result += "%d seconds" % int((math.floor(seconds) % 60))
-    else:
-        if hours >= 1:
-            result += "%dh " % hours
-        minutes = int(math.floor(seconds / 60.0) % 60)
-        if hours >= 1 or minutes >= 1:
-            result += "%dm " % minutes
-        result += "%ds" % int((math.floor(seconds) % 60))
-    return result
+# https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
+def natural_keys_sorting(list_to_sort):
+    return sorted(list_to_sort, key=natural_sorting)
+
+def natural_sorting(text):
+    """
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    """
+    return [__atoi(c) for c in re.split(r"(\d+)", text)]
+
+def __atoi(text):
+    return int(text) if text.isdigit() else text
 
 
-def bignumber_to_human_string(number):
-    """Convert a number to a human readable string in the format 1.2K, 2.3M, 3.4B etc."""
-    if number >= 1000000000:
-        return "%.1fB" % (number / 1000000000)
-    if number >= 1000000:
-        return "%.1fM" % (number / 1000000)
-    if number >= 1000:
-        return "%.1fK" % (number / 1000)
-    return "%d" % number
-
+# Function to avoid division by zero
+def safe_division(dividend, divisor):
+    return dividend / divisor if divisor else 0
 
 
 ####################################
