@@ -65,8 +65,8 @@ class KtcPersisting:
             raise Exception(msg) from e
         self.content = sections
 
-    def save_variable(self, varname: str, value: str, section: str ="Variables",
-                      force_save: bool=False) -> None:
+    def save_variable(self, varname: str, value: str, section: str = "Variables",
+                      force_save: bool = False) -> None:
         try:
             self.log.trace("ktc_persisting.save_variable(Varname=%s, valus=%s, value type=%s)" %
                            (varname, value, type(value)))
@@ -74,7 +74,7 @@ class KtcPersisting:
         except ValueError as e:
             raise Exception("Unable to parse '%s' as a literal: %s" % (value, e)) from e
 
-        if not section in self.content:
+        if section not in self.content:
             self.log.trace("Creating section %s" % (section,))
             self.content[section] = {}
 
