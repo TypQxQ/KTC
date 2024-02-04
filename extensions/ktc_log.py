@@ -9,16 +9,17 @@
 #
 
 from __future__ import annotations  # To reference the class itself in type hints
-import logging, re
+import logging, logging.handlers, re
 import threading, queue, time, dataclasses
 import math, os.path, copy, operator
-from typing import TYPE_CHECKING, Optional, Union, Dict, Any, cast as type_cast, Mapping
+from typing import TYPE_CHECKING, Dict, Any, cast as type_cast, MutableMapping
 
 if TYPE_CHECKING:
     from . import ktc_toolchanger, ktc_tool, ktc_persisting#, ktc
     import configfile
     import klippy
     import gcode
+    import ktc
 
 
 class KtcBase3Class:
@@ -84,13 +85,12 @@ class KtcLog:
 
         # Statistics variables
         self.changer_stats: Dict[str, ChangerStatisticsClass] = {}
-        self.tool_stats: Mapping[str, ToolStatisticsClass] = {}
-        self.print_changer_stats: dict[str, ChangerStatisticsClass] = {}
-        self.print_tool_stats: Mapping[str, ToolStatisticsClass] = {}
+        self.tool_stats: Dict[str, ToolStatisticsClass] = {}
+        self.print_changer_stats: Dict[str, ChangerStatisticsClass] = {}
+        self.print_tool_stats: Dict[str, ToolStatisticsClass] = {}
 
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
-        # Load objects from Klipper after the printer has connected so we don't get circular dependencies
         self.gcode : 'gcode.GCodeDispatch' | Any = self.printer.lookup_object("gcode")
 
         # Load the persistent variables object here to avoid circular dependencies
@@ -131,7 +131,7 @@ class KtcLog:
         self.ktc_persistent.disconnect()  # Close the persistent variables file
 
     ####################################
-    # LOGGING METHODS                #
+    # LOGGING METHODS                  #
     ####################################
     def always(self, message):
         """Log a message to the console and to the log file if enabled."""
@@ -140,14 +140,16 @@ class KtcLog:
         self.gcode.respond_info(message)
 
     def info(self, message):
-        """Log an info message to the console and to the log file if enabled and log_level is 1 or higher."""
+        """Log an info message to the console and to the log file if enabled and 
+        log_level is 1 or higher."""
         if self._ktc_logger and self.logfile_level > 0:
             self._ktc_logger.info(message)
         if self.log_level > 0:
             self.gcode.respond_info(message)
 
     def debug(self, message):
-        """Log a debug message to the console and to the log file if enabled and log_level is 2 or higher."""
+        """Log a debug message to the console and to the log file if enabled and 
+        log_level is 2 or higher."""
         message = "- DEBUG: %s" % message
         if self._ktc_logger and self.logfile_level > 1:
             self._ktc_logger.info(message)
@@ -155,7 +157,8 @@ class KtcLog:
             self.gcode.respond_info(message)
 
     def trace(self, message):
-        """Log a trace message to the console and to the log file if enabled and log_level is 3 or higher."""
+        """Log a trace message to the console and to the log file if enabled and 
+        log_level is 3 or higher."""
         message = "- - TRACE: %s" % message
         if self._ktc_logger and self.logfile_level > 2:
             self._ktc_logger.info(message)
@@ -182,8 +185,8 @@ class KtcLog:
         )
 
     def _get_persisted_items(
-        self, section: str, item_type: str, stat_type : type[ToolStatisticsClass | ChangerStatisticsClass]
-    ) -> Mapping[str, Any]:
+        self, section: str, module_name: str, stat_type : type[Any]
+    ):
         """Load the persisted state from the file for a given section and item type
         For example, load all persisted ktc_toolchanger stats from the Statistics section.
         Return a dict with the loaded items."""
@@ -192,14 +195,14 @@ class KtcLog:
         if loaded_stats == {}:
             self.debug("Did not find a saved %s section. Initialized empty." % section)
 
-        items = {}
-        for item in self.printer.lookup_objects(item_type):
+        items: Dict[str, stat_type] = {}
+        for item in self.printer.lookup_objects(module_name):
             item_name = ""
             try:
                 item_name = str(item[0]).split(" ", 1)[1]
 
                 items[item_name] = stat_type()
-                item_dict = loaded_stats.get((item_type + "_" + item_name).lower(), {})
+                item_dict = loaded_stats.get((module_name + "_" + item_name).lower(), {})
 
                 if item_dict == {}:
                     raise Exception(
@@ -224,7 +227,6 @@ class KtcLog:
     ####################################
     # STATISTICS SAVING  METHODS     #
     ####################################
-    # This could be optimized to only save for the changed tool and not iterate over all tools but it's not a big deal
     def _persist_statistics(self):
         """Save all the statistics to the file"""
         try:
@@ -241,8 +243,8 @@ class KtcLog:
     def _set_persisted_items(
         self,
         section: str,
-        item_type: str,
-        items: Mapping[str, ToolStatisticsClass | ChangerStatisticsClass],
+        module_name: str,
+        items: MutableMapping[str, Any],
     ):
         """Save the statistics to the file for a given section and item type"""
         try:
@@ -262,12 +264,12 @@ class KtcLog:
 
                 # Save the tool statistics to file
                 self.ktc_persistent.save_variable(
-                    item_type + "_" + item_name, str(item_dict), section=section
+                    module_name + "_" + item_name, str(item_dict), section=section
                 )
         except Exception as e:
             self.debug(
                 "Unexpected error whiles saving %s in %s: %s. Not saved."
-                % (item_type, section, e)
+                % (module_name, section, e)
             )
 
     ####################################
@@ -277,19 +279,19 @@ class KtcLog:
         """Reset all the statistics to 0"""
         self.always("Reseting KTC statistics.")
 
-        self.changer_stats: dict[str, ChangerStatisticsClass] = {}
+        self.changer_stats = {}
         for changer in self.printer.lookup_objects("ktc_tool_changer"):
             self.changer_stats[str(changer[0]).split(" ", 1)[1]] = ChangerStatisticsClass()
 
-        self.tool_stats: Mapping[str, ToolStatisticsClass] = {}
+        self.tool_stats = {}
         for tool in self.printer.lookup_objects("ktc_tool"):
             self.tool_stats[str(tool[0]).split(" ", 1)[1]] = ToolStatisticsClass()
 
     def _reset_print_statistics(self):
         """Reset all the print statistics to same as regular statistics.
         This is called at the start of each print to reset the print statistics.
-        The print statistics are subtracted from the regular statistics to get the statistics for the print.
-        """
+        The print statistics are subtracted from the regular statistics to get 
+        the statistics for the print."""
         self.print_changer_stats = copy.deepcopy(self.changer_stats)
         self.print_tool_stats = copy.deepcopy(self.tool_stats)
 
@@ -417,8 +419,8 @@ class KtcLog:
         ############################## Engages/Disengages
         # 264 engages and 264 disengages completed.
         # Check if total or specific changer
+        changer_stats = ChangerStatisticsClass()
         if changer_name is None or changer_name == "":
-            changer_stats = ChangerStatisticsClass()
             # Add up all the stats for all changers
             for item in self.printer.lookup_objects("ktc_tool_changer"):
                 item_name = str(item[0]).split(" ", 1)[1]
@@ -471,12 +473,12 @@ class KtcLog:
 
         if changer_name is None or changer_name == "":
             # Get all tools for all changers
-            tools_to_sum = self.printer.lookup_object("ktc").tools.items()
+            tools_to_sum = type_cast('ktc.Ktc', self.printer.lookup_object("ktc")).tools.items()
         else:
             # Get all tools for the specified changer
-            tools_to_sum = self.printer.lookup_object(
+            tools_to_sum = type_cast('ktc_toolchanger.KtcToolchanger', self.printer.lookup_object(
                 "ktc_toolchanger " + changer_name
-            ).tools.items()
+            )).tools.items()
 
         for tool_name, _ in tools_to_sum:
             # Check if the tool_name has stats (None and Unknown has no stats now).
@@ -561,7 +563,7 @@ class KtcLog:
     # at a later time. It also makes it easy to search for all places where
     # statistics are tracked for debugging.
     def track_tool_selecting_start(self, tool: 'ktc_tool.KtcTool'):
-        self.tool_stats[tool.name].start_time_spent_selecting = time.time()
+        self.tool_stats[tool.name].start_time_spent_selecting = int(time.time())
         self.tool_stats[tool.name].selects_started += 1
 
     def track_tool_selecting_end(self, tool: 'ktc_tool.KtcTool'):
@@ -570,7 +572,7 @@ class KtcLog:
         self._persist_statistics()
 
     def track_tool_deselecting_start(self, tool: 'ktc_tool.KtcTool'):
-        self.tool_stats[tool.name].start_time_spent_deselecting = time.time()
+        self.tool_stats[tool.name].start_time_spent_deselecting = int(time.time())
         self.tool_stats[tool.name].deselects_started += 1
 
     def track_tool_deselecting_end(self, tool: 'ktc_tool.KtcTool'):
@@ -579,25 +581,25 @@ class KtcLog:
         self._persist_statistics()
 
     def track_tool_selected_start(self, tool: 'ktc_tool.KtcTool'):
-        self.tool_stats[tool.name].start_time_selected = time.time()
+        self.tool_stats[tool.name].start_time_selected = int(time.time())
         self.tool_stats[tool.name].selects_completed += 1
 
     def track_tool_selected_end(self, tool: 'ktc_tool.KtcTool'):
-        self._increase_tool_time_diff(tool.name, "time_selected")
+        self._increase_tool_time_diff(tool, "time_selected")
         self._persist_statistics()
 
     def track_heater_active_start(self, tool: 'ktc_tool.KtcTool'):
-        self.tool_stats[tool.name].start_time_heater_active = time.time()
+        self.tool_stats[tool.name].start_time_heater_active = int(time.time())
 
     def track_heater_active_end(self, tool: 'ktc_tool.KtcTool'):
-        self._increase_tool_time_diff(tool.name, "time_heater_active")
+        self._increase_tool_time_diff(tool, "time_heater_active")
         self._persist_statistics()
 
     def track_heater_standby_start(self, tool: 'ktc_tool.KtcTool'):
-        self.tool_stats[tool.name].start_time_heater_standby = time.time()
+        self.tool_stats[tool.name].start_time_heater_standby = int(time.time())
 
     def track_heater_standby_end(self, tool: 'ktc_tool.KtcTool'):
-        self._increase_tool_time_diff(tool.name, "time_heater_standby")
+        self._increase_tool_time_diff(tool, "time_heater_standby")
         self._persist_statistics()
 
     def _increase_tool_time_diff(self, tool: 'ktc_tool.KtcTool', final_time_key: str):
@@ -675,14 +677,7 @@ class KtcLog:
     ####################################
 
     ### LOGGING AND STATISTICS METHODS GCODE
-    # TODO: Remove this method after a while
-    cmd_KTC_SAVE_STATS_help = "Save the KTC statistics"
-
-    def cmd_KTC_SAVE_STATS(self, gcmd):
-        self._persist_statistics()
-
     cmd_KTC_RESET_STATS_help = "Reset the KTC statistics"
-
     def cmd_KTC_RESET_STATS(self, gcmd):
         param = gcmd.get("SURE", "no")
         if param.lower() == "yes":
@@ -698,26 +693,22 @@ class KtcLog:
             self.gcode.respond_info(message)
 
     cmd_KTC_DUMP_STATS_help = "Dump the KTC statistics"
-
-    def cmd_KTC_DUMP_STATS(self, gcmd):
+    def cmd_KTC_DUMP_STATS(self, gcmd): # pylint: disable=unused-argument
         self._dump_statistics()
 
     cmd_KTC_INIT_PRINT_STATS_help = (
         "Run at start of a print to initialize the KTC print statistics"
     )
-
-    def cmd_KTC_INIT_PRINT_STATS(self, gcmd):
+    def cmd_KTC_INIT_PRINT_STATS(self, gcmd):   # pylint: disable=unused-argument
         self._reset_print_statistics()
 
     cmd_KTC_DUMP_PRINT_STATS_help = (
         "Run at end of a print to list statistics since last print reset."
     )
-
-    def cmd_KTC_DUMP_PRINT_STATS(self, gcmd):
+    def cmd_KTC_DUMP_PRINT_STATS(self, gcmd):   # pylint: disable=unused-argument
         self._dump_statistics(since_print_start=True)
 
     cmd_KTC_SET_LOG_LEVEL_help = "Set the log level for the KTC"
-
     def cmd_KTC_SET_LOG_LEVEL(self, gcmd):
         self.log_level = gcmd.get_int("LEVEL", self.log_level, minval=0, maxval=4)
         self.logfile_level = gcmd.get_int(
@@ -725,25 +716,21 @@ class KtcLog:
         )
 
     cmd_KTC_LOG_ALWAYS_help = "Log allways MSG"
-
     def cmd_KTC_LOG_ALWAYS(self, gcmd):
         msg = gcmd.get("MSG")
         self.always(msg)
 
     cmd_KTC_LOG_INFO_help = "Log info MSG"
-
     def cmd_KTC_LOG_INFO(self, gcmd):
         msg = gcmd.get("MSG")
         self.info(msg)
 
     cmd_KTC_LOG_DEBUG_help = "Log debug MSG"
-
     def cmd_KTC_LOG_DEBUG(self, gcmd):
         msg = gcmd.get("MSG")
         self.debug(msg)
 
     cmd_KTC_LOG_TRACE_help = "Log trace MSG"
-
     def cmd_KTC_LOG_TRACE(self, gcmd):
         msg = gcmd.get("MSG")
         self.trace(msg)
@@ -794,27 +781,22 @@ class KtcQueueListener(logging.handlers.TimedRotatingFileHandler):
 ####################################
 # Statistics Data Classes          #
 ####################################
-# TODO: Remove after removing use
-@dataclasses.dataclass
-class Swap_Statistics:
-    """Old statistics for all tool changers"""
-
-    time_spent_selecting: int = 0
-    time_spent_deselecting: int = 0
-    engages: int = 0
-    disengages: int = 0
-    selects: int = 0
-    deselects: int = 0
-
-    def __add__(self, other):
-        return _add_subtract_stat(self, other, operator.add)
-
-    def __sub__(self, other):
-        return _add_subtract_stat(self, other, operator.sub)
-
 @dataclasses.dataclass
 class StatisticsBaseClass:
     '''Used for type hinting.'''
+    def __add__(self, other):
+        return self._add_subtract_stat(self, other, operator.add)
+
+    def __sub__(self, other):
+        return self._add_subtract_stat(self, other, operator.sub)
+
+    @staticmethod
+    def _add_subtract_stat(a, b, op):
+        """Add or subtract two statistics objects and return the result"""
+        result = copy.deepcopy(a)
+        for f in dataclasses.fields(result):
+            setattr(result, f.name, op(getattr(a, f.name), getattr(b, f.name)))
+        return result
 
 @dataclasses.dataclass
 class ChangerStatisticsClass(StatisticsBaseClass):
@@ -822,13 +804,6 @@ class ChangerStatisticsClass(StatisticsBaseClass):
 
     engages: int = 0
     disengages: int = 0
-
-    def __add__(self, other):
-        return _add_subtract_stat(self, other, operator.add)
-
-    def __sub__(self, other):
-        return _add_subtract_stat(self, other, operator.sub)
-
 
 @dataclasses.dataclass
 class ToolStatisticsClass(StatisticsBaseClass):
@@ -849,23 +824,6 @@ class ToolStatisticsClass(StatisticsBaseClass):
     start_time_spent_selecting: int = 0  # TRACKED_MOUNT_START_TIME
     start_time_spent_deselecting: int = 0  # TRACKED_UNMOUNT_START_TIME
 
-    def __add__(self, other):
-        return _add_subtract_stat(self, other, operator.add)
-
-    def __sub__(self, other):
-        return _add_subtract_stat(self, other, operator.sub)
-
-
-def _add_subtract_stat(
-    a: ChangerStatisticsClass | ToolStatisticsClass,
-    b: ChangerStatisticsClass | ToolStatisticsClass,
-    op: operator,
-):
-    """Add or subtract two statistics objects and return the result"""
-    result = copy.deepcopy(a)
-    for f in dataclasses.fields(result):
-        setattr(result, f.name, op(getattr(a, f.name), getattr(b, f.name)))
-    return result
 
 
 ####################################

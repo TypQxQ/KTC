@@ -1070,7 +1070,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         self.last_endstop_query[endstop_name] = is_triggered
 
-    def get_status(self, eventtime=None):
+    def get_status(self, eventtime=None):   # pylint: disable=unused-argument
         status = {
             "global_offset": self.global_offset,
             "active_tool": self.active_tool.name,  # Active tool name for GCode compatibility.
@@ -1172,18 +1172,6 @@ def __atoi(text):
 # Function to avoid division by zero
 def safe_division(dividend, divisor):
     return dividend / divisor if divisor else 0
-
-class ktc_MeanLayerTime:
-    def __init__(self, printer):
-        # Run before toolchange to set time like in StandbyToolTimer.
-        # Save time for last 5 (except for first) layers
-        # Provide a mean layer time.
-        # Have Tool have a min and max 2standby time.
-        # If mean time for 3 layers is higher than max, then set min time.
-        # Reset time if layer time is higher than max time. Pause or anything else that has happened.
-        # Method to reset layer times.
-        pass
-
 
 def load_config(config):
     return Ktc(config)

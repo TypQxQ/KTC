@@ -318,7 +318,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
             self.state = STATE.ERROR
             return False
 
-    def get_status(self, eventtime=None):
+    def get_status(self, eventtime=None):   # pylint: disable=unused-argument
         status = {
             # "global_offset": self.global_offset,
             "name": self.name,

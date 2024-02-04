@@ -617,7 +617,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
     def get_timer_to_powerdown(self):
         return self.timer_idle_to_powerdown
 
-    def get_status(self, eventtime= None):
+    def get_status(self, eventtime= None):  # pylint: disable=unused-argument
         status = {
             "name": self.name,
             "number": self.number,
@@ -734,7 +734,7 @@ class ktc_ToolStandbyTempTimer:
             self.reactor.update_timer(self.timer_handler, waketime)
             self.counting_down = True
 
-    def get_status(self, eventtime= None):
+    def get_status(self, eventtime= None):  # pylint: disable=unused-argument
         status = {
             "temp_type": self.temp_type,
             "duration": self.duration,

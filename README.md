@@ -57,7 +57,7 @@ This is still under development and not functional.
 **[Important Concepts and Features](#---important-concepts-and-features)**<br>
 \- [1. How to handle errors](#1-how-to-handle-errors)<br>
 \- [2. State and Persistence](#2-state-and-persistence)<br>
-\- [3. Tool to Gate Mapping](#3-tool-to-gate-ttg-mapping)<br>
+\- [3. Tool to Gate MutableMapping](#3-tool-to-gate-ttg-mapping)<br>
 \- [4. Synchronized Gear/Extruder](#4-synchronized-gearextruder-motors)<br>
 \- [5. Clog, Runout, EndlessSpool, Flowrate](#5-clogrunout-detection-endlessspool-and-flowrate-monitoring)<br>
 \- [6. Logging me](#6-logging)<br>

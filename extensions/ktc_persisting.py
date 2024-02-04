@@ -6,13 +6,13 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-# This is based on the Klipper save_variables.py to be able to 
+# This is based on the Klipper save_variables.py to be able to
 # save variables from KTC inddependent of other plugins.
-# Using the default save_variables.py will cause conflicts when 
+# Using the default save_variables.py will cause conflicts when
 # other plugins such as HappyHare tries to reference the file again.
 # This will use a different filename to avoid this incompatibility.
-# 
-# This plugin will also only save the variables when needed and no more.
+#
+# This module will also only save the variables when needed and no more.
 # This is to avoid excessive writes to the SD card and overhaed on the system.
 
 import os.path, ast, configparser
@@ -41,7 +41,7 @@ class KtcPersisting:
 
         try:
             if not os.path.exists(self.filename):
-                open(self.filename, "w").close()
+                open(self.filename, "w", encoding="utf-8").close()
             self.load_content()
         except Exception as e:
             raise e.with_traceback(e.__traceback__)
@@ -65,9 +65,11 @@ class KtcPersisting:
             raise Exception(msg) from e
         self.content = sections
 
-    def save_variable(self, varname: str, value: str, section: str ="Variables", force_save: bool=False) -> None:
+    def save_variable(self, varname: str, value: str, section: str ="Variables",
+                      force_save: bool=False) -> None:
         try:
-            self.log.trace("ktc_persisting.save_variable(Varname=%s, valus=%s, value type=%s)" % (varname, value, type(value)))
+            self.log.trace("ktc_persisting.save_variable(Varname=%s, valus=%s, value type=%s)" %
+                           (varname, value, type(value)))
             value = ast.literal_eval(value)
         except ValueError as e:
             raise Exception("Unable to parse '%s' as a literal: %s" % (value, e)) from e
@@ -91,13 +93,13 @@ class KtcPersisting:
 
                 # Write file
                 varfile = configparser.ConfigParser()
-                for section, vars in sorted(self.content.items()):
+                for section, variables in sorted(self.content.items()):
                     self.log.trace("Saving section %s" % (section,))
                     varfile.add_section(section)
-                    for name, val in sorted(vars.items()):
+                    for name, val in sorted(variables.items()):
                         varfile.set(section, name, repr(val))
 
-                f = open(self.filename, "w")
+                f = open(self.filename, "w", encoding="utf-8")
                 varfile.write(f)
                 f.close()
         except Exception as e:
@@ -106,7 +108,7 @@ class KtcPersisting:
         nextwake = eventtime + ktc.KTC_SAVE_VARIABLES_DELAY
         return nextwake
 
-    def get_status(self, eventtime=None):
+    def get_status(self, eventtime=None):   # pylint: disable=unused-argument
         status = {
             "content": self.content,
         }

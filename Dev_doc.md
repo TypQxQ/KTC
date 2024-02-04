@@ -160,3 +160,16 @@ Each tool has a id (name) (ktc_tool name) and a nr.
 Maybe delete?
 # ToolLock: Tool is locked in place.
 # ToolUnLock: Toollock is disengaged and tool is free.
+
+
+
+class ktc_MeanLayerTime:
+    def __init__(self, printer):
+        # Run before toolchange to set time like in StandbyToolTimer.
+        # Save time for last 5 (except for first) layers
+        # Provide a mean layer time.
+        # Have Tool have a min and max 2standby time.
+        # If mean time for 3 layers is higher than max, then set min time.
+        # Reset time if layer time is higher than max time. Pause or anything else that has happened.
+        # Method to reset layer times.
+        pass
