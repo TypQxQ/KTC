@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 import ast, re, dataclasses
-from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast
+from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast, Any
 # from . import ktc_tool
 
 # Only import these modules for type checking in development.
@@ -33,12 +33,18 @@ class KtcBaseClass:
     """Base class for KTC. Contains common methods and properties."""
     def __init__(self, config: Optional['configfile.ConfigWrapper'] = None):
         self.config = config
-        self.name = ""
-        self.ktc_persistent = None              # Load the ktc_persisting object.
-        self.log: 'ktc_log.KtcLog'              # Load the ktc_log object.
-        self.ktc: Ktc                           # Load the ktc object.
+        self.name: str = ""
+
+        # If set to "X", "Y", "Z" or a combination of them, then the tool will 
+        # require the axis to be homed before it can be selected. Defaults to "".
+        self.requires_axis_homed: str = ""
+
+        # self.ktc_persistent = None              # Load the ktc_persisting object.
+        # self.log: 'ktc_log.KtcLog' = None       # Load the ktc_log object.
+        # self.ktc: Ktc                           # Load the ktc object.
 
         self.printer = None # type: ignore # We are loading it later.
+        self.reactor = None # type: ignore # We are loading it later.
         self.gcode = None # type: ignore # We are loading it later.
 
         # If this is a empty object then don't load the config.
@@ -114,20 +120,6 @@ class KtcConstantsClass:
     TOOL_UNKNOWN = KtcBaseToolClass(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
     TOOL_NONE = KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N)
 
-class KtcSettingsBaseDataClass:
-    @staticmethod
-    def _get_value_from_configuration_for_dataclass(c: dataclasses.dataclass, configured_value: str):
-        r = [field.default for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)]
-        if len(r) == 0:
-            return None
-        else:
-            return r[0]
-
-    @staticmethod
-    def _list_valid_values_of_dataclass(c):
-        return [field.name for field in dataclasses.fields(c)]
-    
-    
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def __init__(self, config: Optional['configfile.ConfigWrapper']):
@@ -164,7 +156,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         ######## Inheritable parameters
         # If set to "X", "Y", "Z" or a combination of them, then the tool will require the axis to be homed before it can be selected. Defaults to "".
-        self.requires_axis_homed: str = config.get("requires_axis_homed", "")
+        self.requires_axis_homed = config.get("requires_axis_homed", "") # type: ignore
 
         # Tool Selection and Deselection G-Code macros
         # This is overridden by the tool if it has a tool_select_gcode or tool_deselect_gcode defined.
@@ -368,13 +360,13 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
 
         self.__active_tool = tool
-        
+
         # Set the active tool in the toolchanger if not TOOL_NONE or TOOL_UNKNOWN.
         if self.__active_tool.toolchanger is not None:
             self.__active_tool.toolchanger.active_tool = tool
 
         self.log.trace("ktc.active_tool set to: " + tool.name)
-        
+
         self.ktc_persistent.save_variable(
             "current_tool", str("'" + tool.name + "'"), section="State", force_save=True
         )
@@ -387,7 +379,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         + " [TOOLCHANGER: Default_ToolChanger]"
         + " [STATE: STATE.ERROR]")
     def cmd_KTC_SET_TOOLCHANGER_STATE(self, gcmd=None):
-        self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get_int("STATE", None)
+        try:
+            self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get("STATE", None)
+        except Exception as e:
+            raise gcmd.error("Error setting toolchanger state: %s" % str(e)) from e
 
     cmd_KTC_TOOLCHANGER_INITIALIZE_help = ( "Initialize the toolchanger before use."
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
@@ -414,7 +409,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd=None):
-        self.parse_gcmd_get_toolchanger(gcmd).disengage()
+        try:
+            self.parse_gcmd_get_toolchanger(gcmd).disengage()
+        except Exception as e:
+            raise self.printer.command_error("Error disengaging toolchanger: %s" % str(e)) from e
 
     # Returns the toolchanger object specified in the gcode command or the default toolchanger.
     def parse_gcmd_get_toolchanger(self, gcmd):
@@ -1087,8 +1085,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "saved_position": self.saved_position,
             "last_endstop_query": self.last_endstop_query,
             "tools": list(self.tools.keys()),
-            "TOOL_NONE": self.TOOL_NONE.name,
-            "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
+            # "TOOL_NONE": self.TOOL_NONE.name,
+            # "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
             **self.params,
         }
         return status

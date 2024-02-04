@@ -34,7 +34,6 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         # TODO: Change this to a list of fans.
         self.fan = None                     # Name of general fan configuration connected to this tool as a part fan. Defaults to "none".
 
-        self.requires_axis_homed: str = ""  # If set to "X", "Y", "Z" or a combination of them, then the tool will require the axis to be homed before it can be selected. Defaults to "".
         self.lazy_home_when_parking = None  # (default: 0 - disabled) - When set to 1, will home unhomed XY axes if needed and will not move any axis if already homed and parked. 2 Will also home Z if not homed.
                                             # Wipe. -1 = none, 1= Only load filament, 2= Wipe in front of carriage, 3= Pebble wiper, 4= First Silicone, then pebble. Defaults to None.
         self.zone = None                    # Position of the parking zone in the format X, Y, Z. Defaults to None.
@@ -219,9 +218,6 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         
         ##### Inherited Parameters #####
         self.requires_axis_homed = self.config.get('requires_axis_homed', self.toolchanger.requires_axis_homed)
-        if self.requires_axis_homed != "": 
-            self.log.trace("KTC Tool %s requires_axis_homed: %s" % (self.name, self.requires_axis_homed))
-
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value

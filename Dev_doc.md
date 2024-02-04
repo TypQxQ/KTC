@@ -2,6 +2,10 @@
 
 > Using inherited classes from Ktc code can use the BaseClass for typechecks and not cross import.
 > This minimizes risk for circular imports.
+>
+> Each class can import ktc and ktc can not import them inside the init().
+> The classes should not import or load eachother inside the init()
+
 
 ## Base clases defined in ktc.py
 
@@ -50,6 +54,15 @@
 
 
 ## Python files:
+
+
+> ###class INIT_MODE(str, Enum):
+>   Constants for the initialization mode of the toolchanger.
+>   Inherits from str so it can be JSON serializable.
+>   Not using StrEnum as it was first introduced in Python 3.11.
+>   Enum was introduced in Python 3.4.
+
+
 
 ktc.py has all common methods that need only initialized once.
     -constants
