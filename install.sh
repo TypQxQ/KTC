@@ -30,20 +30,8 @@ MOONRAKER_HOME="${HOME}/moonraker"
 # This is where Klipper config files are stored
 KLIPPER_CONFIG_HOME="${HOME}/printer_data/config"
 
-# This is where Klipper Python enviroment is stored
-KLIPPER_ENV="${HOME}/klippy-env"
-
-# This is where Klipper logs are stored
-KLIPPER_LOGS_HOME="${HOME}/printer_data/logs"
-
 # This is where Klipper config files were stored before the 0.10.0 release
 OLD_KLIPPER_CONFIG_HOME="${HOME}/klipper_config"
-
-# Path to the systemd directory
-SYSTEMDDIR="/etc/systemd/system"
-
-# Path to the moonraker asvc file where services are defined
-MOONRAKER_ASVC=~/printer_data/moonraker.asvc
 
 #
 # Console Write Helpers
@@ -53,7 +41,6 @@ c_green=$(echo -en "\e[92m")
 c_yellow=$(echo -en "\e[93m")
 c_magenta=$(echo -en "\e[35m")
 c_red=$(echo -en "\e[91m")
-c_cyan=$(echo -en "\e[96m")
 
 log_header()
 {
