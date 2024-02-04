@@ -7,7 +7,7 @@
 #
 
 import dataclasses
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, cast as type_cast
 
 from . import ktc
 
@@ -16,33 +16,20 @@ if TYPE_CHECKING:
     import klippy
     import gcode
     from . import ktc_persisting, ktc_log, ktc_tool
-    
+
 class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
     A "default_toolchanger" will be initialized if no toolchanger
     is specified in the config."""
 
-    def __init__(self, config: Optional['configfile.ConfigWrapper']):
-        """Initialize the toolchanger object."""
-        self.config = config                    # For later use. Used in ktc_tool objects too.
-        self.printer = config.get_printer()
-        self.reactor = self.printer.get_reactor()
-        self.gcode = self.printer.lookup_object("gcode")
-        self.log: 'ktc_log.KtcLog' = self.printer.load_object(
-            config, "ktc_log"
-        )  # Load the log object.
-        # super().__init__(config)
-        self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
-        self.ktc_persistent = None              # Load the ktc_persisting object.
-
+    def __init__(self, config: 'configfile.ConfigWrapper'):
+        super().__init__(config)
         # Initialize object variables.
         self.name: str = config.get_name().split(" ", 1)[1]
         self.params = self.get_params_dict_from_config(config)
         self.state = STATE.UNINITIALIZED
-        self.tools: dict[str, 'ktc_tool.KtcTool'] = {}  # All tools on this toolchanger.
-        self.parent_tool: 'ktc_tool.KtcTool' = None  # The parent tool of this toolchanger.
-        
+
         # Get initialization mode and check if valid.
         init_mode = config.get("init_mode", INIT_MODE.MANUAL)
         self.init_mode = INIT_MODE.get_value_from_configuration(init_mode)
@@ -59,6 +46,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
                 "Invalid init_order %s for ktc_toolchanger %s. Valid values are: %s"
             % (init_order, self.name, INIT_ORDER.list_valid_values()))
         
+        self.ktc: ktc.Ktc = self.printer.load_object(config, "ktc")
         self.active_tool = (
             self.ktc.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
         )
@@ -124,6 +112,9 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         ######
 
     def handle_connect(self):
+        self.log = type_cast('ktc_log.KtcLog', self.printer.load_object(
+            self.config, "ktc_log"))  # Load the log object.
+
         self.ktc_persistent: 'ktc_persisting.KtcPersisting' = ( # type: ignore
             self.printer.load_object(self.config, "ktc_persisting")
         )  # Load the ktc_persisting object.
@@ -408,7 +399,6 @@ def _get_value_from_configuration_for_dataclass(c: dataclasses.dataclass, config
         return None
     else:
         return r[0]
-    # return next((field.value for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)), None)
 
 def _list_valid_values_of_dataclass(c):
     return [field.name for field in dataclasses.fields(c)]

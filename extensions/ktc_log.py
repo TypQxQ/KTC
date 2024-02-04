@@ -109,7 +109,6 @@ class KtcLog:
             "KTC_RESET_STATS",
             "KTC_INIT_PRINT_STATS",
             "KTC_DUMP_PRINT_STATS",
-            "KTC_SAVE_STATS",
         ]
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)

@@ -5,7 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast, re
+import ast, re, dataclasses
 from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast
 # from . import ktc_tool
 
@@ -17,12 +17,8 @@ if TYPE_CHECKING:
     import gcode
     from . import ktc_log, ktc_persisting, ktc_toolchanger
 
-# TODO: Add config option to save variables to a different file.
 KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
 KTC_SAVE_VARIABLES_DELAY = 10
-
-# TODO: Remove this after migration
-VARS_KTC_TOOL_MAP = "ktc_state_tool_remap"
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
@@ -38,7 +34,10 @@ class KtcBaseClass:
     def __init__(self, config: Optional['configfile.ConfigWrapper'] = None):
         self.config = config
         self.name = ""
-        
+        self.ktc_persistent = None              # Load the ktc_persisting object.
+        self.log: 'ktc_log.KtcLog'              # Load the ktc_log object.
+        self.ktc: Ktc                           # Load the ktc object.
+
         self.printer = None # type: ignore # We are loading it later.
         self.gcode = None # type: ignore # We are loading it later.
 
@@ -62,7 +61,7 @@ class KtcBaseClass:
         # don't try to set any params or it will throw an error.
         if not config.has_section(config.get_name()):
             return result
-        
+
         for option in config.get_prefix_options("params_"):
             try:
                 result[option] = ast.literal_eval(config.get(option))
@@ -73,7 +72,6 @@ class KtcBaseClass:
                 )
         return result
 
-    
 class KtcBaseChangerClass(KtcBaseClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
@@ -84,33 +82,29 @@ class KtcBaseChangerClass(KtcBaseClass):
 
 class KtcBaseToolClass(KtcBaseClass):
     '''Base class for tools. Contains common methods and properties.'''
-    def __init__(self, config: Optional['configfile.ConfigWrapper'] = None, name: str = "", number: int = TOOL_NUMBERLESS_N):
+    def __init__(self, config: Optional['configfile.ConfigWrapper'] = None, 
+                 name: str = "", number: int = TOOL_NUMBERLESS_N):
         super().__init__(config)
 
         self.name = name        # Override the name in case it is supplied.
         self.number = number    # Override the number in case it is supplied.
 
         self.toolchanger: Optional[KtcBaseChangerClass] = None
-
         self.fan = None
-
         self.extruder = None
-
         self.heater = None
         self.heater_state = None
         self.heater_standby_temp = None
         self.heater_active_temp = None
-
         self.idle_to_standby_time = None
         self.idle_to_powerdown_time = None
         self.timer_idle_to_standby = None
         self.timer_idle_to_powerdown = None
-
         self.offset = [0, 0, 0]
 
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
-        
+
 class KtcConstantsClass:
     '''Constants for KTC. These are to be inherited by other classes.'''
     # Value of Unknown and None tools are set in module scope.
@@ -119,8 +113,21 @@ class KtcConstantsClass:
     TOOL_NONE_N = TOOL_NONE_N
     TOOL_UNKNOWN = KtcBaseToolClass(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
     TOOL_NONE = KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N)
-    # Special tool objects for unknown and none tools.
-        
+
+class KtcSettingsBaseDataClass:
+    @staticmethod
+    def _get_value_from_configuration_for_dataclass(c: dataclasses.dataclass, configured_value: str):
+        r = [field.default for field in dataclasses.fields(c) if str.lower(field.name) == str.lower(configured_value)]
+        if len(r) == 0:
+            return None
+        else:
+            return r[0]
+
+    @staticmethod
+    def _list_valid_values_of_dataclass(c):
+        return [field.name for field in dataclasses.fields(c)]
+    
+    
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def __init__(self, config: Optional['configfile.ConfigWrapper']):
@@ -138,7 +145,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.tools_by_number: dict[int, KtcBaseToolClass] = {}  # List of all tools by number.
         self.toolchangers: dict[str, KtcBaseChangerClass] = {}  # List of all toolchangers.
 
-        
         # TOOL_UNKNOWN = ktc_tool.KtcTool(name="KTC_Unknown", number=TOOL_UNKNOWN_N)
         # TOOL_NONE = ktc_tool.KtcTool(name="KTC_None", number=TOOL_NONE_N)
 
@@ -243,7 +249,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         return
 
         # Load persistent Tool remaping. Should be done after connect event where tools are initialized.
-        # self.tool_map = self.log.ktc_persistent.content.get(VARS_KTC_TOOL_MAP, {})
+        # self.tool_map = self.log.ktc_persistent.content.get("ktc_state_tool_remap", {})
         # self.tool_map = {}
 
         # try:
@@ -859,7 +865,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     cmd_KTC_SAVE_CURRENT_POSITION_help = "Save the current G-Code position."
     #  Saves current position.
-    #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified, restore_position_on_toolchange_type will not be changed.
+    #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified,
+    #  restore_position_on_toolchange_type will not be changed.
     #    0: No restore
     #    1: Restore XY
     #    2: Restore XYZ
@@ -966,7 +973,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         # Set the new tool.
         self.tool_map[from_tool] = to_tool
         self.gcode.run_script_from_command(
-            "SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (VARS_KTC_TOOL_MAP, self.tool_map)
+            "SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % ("ktc_state_tool_remap", self.tool_map)
         )
 
     def _tool_map_to_human_string(self):
@@ -991,7 +998,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.log.debug("Resetting Tool map")
         self.tool_map = {}
         self.gcode.run_script_from_command(
-            "SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (VARS_KTC_TOOL_MAP, self.tool_map)
+            "SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % ("ktc_state_tool_remap", self.tool_map)
         )
 
     ### GCODE COMMANDS FOR TOOL REMAP LOGIC ##################################
