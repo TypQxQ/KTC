@@ -12,15 +12,13 @@ from __future__ import annotations  # To reference the class itself in type hint
 import logging, logging.handlers, re
 import threading, queue, time, dataclasses
 import math, os.path, copy, operator
-from typing import TYPE_CHECKING, Dict, Any, cast as type_cast, MutableMapping
+import typing
 
-if TYPE_CHECKING:
-    from . import ktc_toolchanger, ktc_tool, ktc_persisting#, ktc
-    import configfile
-    import klippy
-    import gcode
-    import ktc
-
+# Only import these modules in Dev environment. Consult Dev_doc.md for more info.
+if typing.TYPE_CHECKING:
+    from .klippy import configfile, gcode
+    from .klippy import klippy
+    from . import ktc_toolchanger, ktc_tool, ktc_persisting, ktc
 
 class KtcBase3Class:
     pass
@@ -49,7 +47,7 @@ class KtcLog:
         # Initialize object variables
         self.config = config
         self.printer : 'klippy.Printer' = config.get_printer()
-        self.gcode = type_cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
+        self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
 
         self.ktc_persistent: 'ktc_persisting.KtcPersisting' = None      #type: ignore # Klippy is not type checked.
 
@@ -84,17 +82,17 @@ class KtcLog:
             self._ktc_logger.addHandler(queue_handler)
 
         # Statistics variables
-        self.changer_stats: Dict[str, ChangerStatisticsClass] = {}
-        self.tool_stats: Dict[str, ToolStatisticsClass] = {}
-        self.print_changer_stats: Dict[str, ChangerStatisticsClass] = {}
-        self.print_tool_stats: Dict[str, ToolStatisticsClass] = {}
+        self.changer_stats: typing.Dict[str, ChangerStatisticsClass] = {}
+        self.tool_stats: typing.Dict[str, ToolStatisticsClass] = {}
+        self.print_changer_stats: typing.Dict[str, ChangerStatisticsClass] = {}
+        self.print_tool_stats: typing.Dict[str, ToolStatisticsClass] = {}
 
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
-        self.gcode : 'gcode.GCodeDispatch' | Any = self.printer.lookup_object("gcode")
+        self.gcode : 'gcode.GCodeDispatch' | typing.Any = self.printer.lookup_object("gcode")
 
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent = type_cast('ktc_persisting.KtcPersisting', self.printer.load_object(
+        self.ktc_persistent = typing.cast('ktc_persisting.KtcPersisting', self.printer.load_object(
             self.config, "ktc_persisting"
         ))
 
@@ -172,7 +170,7 @@ class KtcLog:
         self.trace("Loading persisted state.")
 
         # Load general statistics
-        loaded_stats: Dict = self.ktc_persistent.content.get("Statistics", {})
+        loaded_stats: typing.Dict = self.ktc_persistent.content.get("Statistics", {})
         if loaded_stats == {}:
             self.debug("Did not find any saved statistics. Initialized empty.")
 
@@ -184,7 +182,7 @@ class KtcLog:
         )
 
     def _get_persisted_items(
-        self, section: str, module_name: str, stat_type : type[Any]
+        self, section: str, module_name: str, stat_type : type[typing.Any]
     ):
         """Load the persisted state from the file for a given section and item type
         For example, load all persisted ktc_toolchanger stats from the Statistics section.
@@ -194,7 +192,7 @@ class KtcLog:
         if loaded_stats == {}:
             self.debug("Did not find a saved %s section. Initialized empty." % section)
 
-        items: Dict[str, stat_type] = {}
+        items: typing.Dict[str, stat_type] = {}
         for item in self.printer.lookup_objects(module_name):
             item_name = ""
             try:
@@ -243,7 +241,7 @@ class KtcLog:
         self,
         section: str,
         module_name: str,
-        items: MutableMapping[str, Any],
+        items: typing.MutableMapping[str, typing.Any],
     ):
         """Save the statistics to the file for a given section and item type"""
         try:
@@ -472,10 +470,10 @@ class KtcLog:
 
         if changer_name is None or changer_name == "":
             # Get all tools for all changers
-            tools_to_sum = type_cast('ktc.Ktc', self.printer.lookup_object("ktc")).tools.items()
+            tools_to_sum = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc")).tools.items()
         else:
             # Get all tools for the specified changer
-            tools_to_sum = type_cast('ktc_toolchanger.KtcToolchanger', self.printer.lookup_object(
+            tools_to_sum = typing.cast('ktc_toolchanger.KtcToolchanger', self.printer.lookup_object(
                 "ktc_toolchanger " + changer_name
             )).tools.items()
 

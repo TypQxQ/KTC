@@ -7,15 +7,16 @@
 #
 
 from enum import Enum, IntEnum, unique
-from typing import Optional, TYPE_CHECKING, cast as type_cast
+import typing
 
 from . import ktc
 
-if TYPE_CHECKING:
-    import configfile
-    import klippy
-    import gcode
-    from . import ktc_persisting, ktc_log, ktc_tool
+# Only import these modules in Dev environment. Consult Dev_doc.md for more info.
+if typing.TYPE_CHECKING:
+    from .klippy import configfile
+    # from .klippy import klippy, gcode
+    from .klippy.extras import gcode_macro as klippy_gcode_macro
+    from . import ktc_log, ktc_persisting#, ktc_tool
 
 class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
     """Class initialized for each toolchanger.
@@ -26,12 +27,11 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
 
-        self.ktc = type_cast(ktc.Ktc, self.printer.load_object(config, "ktc"))
-        gcode_macro = self.printer.load_object(config, "gcode_macro")
+        self.ktc = typing.cast(ktc.Ktc, self.printer.load_object(config, "ktc"))
+        gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro',
+                                  self.printer.load_object(config, "gcode_macro"))   # type: ignore
 
         # Initialize object variables.
-        self.name: str = str(config.get_name()).split(" ", 1)[1]
-        self.params = self.get_params_dict_from_config(config)
         self._state = self.StateType.UNINITIALIZED
 
         # Get initialization mode and check if valid.
@@ -66,7 +66,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self.init_gcode_template = gcode_macro.load_template(   # type: ignore
             config, "", self.init_gcode)
 
-        # Get the parent tool if defined. This is set to the object 
+        # Get the parent tool if defined. This is set to the object
         # after connect, after all objects are initialized.
         self.parent_tool = config.get("parent_tool", None)
 
@@ -103,7 +103,6 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
 
         # self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
         # self.tool_map = {}
-        # self.last_endstop_query = {}
         # self.changes_made_by_set_all_tool_heaters_off = {}
         # self.saved_position = None
         ######
@@ -118,7 +117,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self._state = self.StateType[str(value)]
     
     def handle_connect(self):
-        self.log = type_cast('ktc_log.KtcLog', self.printer.load_object(
+        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
             self.config, "ktc_log"))  # Load the log object.
 
         self.ktc_persistent: 'ktc_persisting.KtcPersisting' = ( # type: ignore
@@ -330,7 +329,6 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
             # "purge_on_toolchange": self.purge_on_toolchange,
             # "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
             # "saved_position": self.saved_position,
-            # "last_endstop_query": self.last_endstop_query
             **self.params,
         }
         return status

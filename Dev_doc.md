@@ -1,5 +1,15 @@
 # Development doc for KTC
 
+## Setting up enviroment.
+This is how I set it up and made all type checkings work.
+The standard dev enviroment is using VSCode and working in the KTC directory in the home of the Pi youd for printing.
+The git should point to the repository used for development.
+Add a symbolic link to Klipper with the folowing command, asuming files are as below:
+> ln -s ~/klipper/klippy/ ~/KTC/extensions/klippy
+Add a .gitignore file inside the working directory, having this line:
+> /extensions/klippy/
+That's it.
+
 > Using inherited classes from Ktc code can use the BaseClass for typechecks and not cross import.
 > This minimizes risk for circular imports.
 >
@@ -87,7 +97,6 @@ ktc.py has all common methods that need only initialized once.
     saved_fan_speed:
 ?   restore_axis_on_toolchange:
 ?   saved_position
-?   last_endstop_query
     tools:              list of tool names
     TOOL_NONE:          TOOL_NONE.name
     TOOL_UNKNOWN:       TOOL_UNKNOWN.name

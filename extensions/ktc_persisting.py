@@ -15,18 +15,27 @@
 # This module will also only save the variables when needed and no more.
 # This is to avoid excessive writes to the SD card and overhaed on the system.
 
-import os.path, ast, configparser
-from . import ktc, ktc_log
+import os.path, ast, configparser, typing
+
+# Only import these modules in Dev environment. Consult Dev_doc.md for more info.
+if typing.TYPE_CHECKING:
+    from .klippy import configfile
+    from .klippy import klippy
+    from. import ktc_log
+
+# Constant values moved here to avoid circular imports
+KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
+KTC_SAVE_VARIABLES_DELAY = 10
 
 class KtcPersisting:
-    def __init__(self, config):
-        self.printer = config.get_printer()
-        self.reactor = self.printer.get_reactor()
-        self.log: ktc_log.KtcLog = self.printer.load_object(
+    def __init__(self, config: 'configfile.ConfigWrapper'):
+        self.printer : 'klippy.Printer' = config.get_printer()
+        self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
+        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
             config, "ktc_log"
-        )  # Load the log object.
+        ))
 
-        self.filename = os.path.expanduser(ktc.KTC_SAVE_VARIABLES_FILENAME)
+        self.filename = os.path.expanduser(KTC_SAVE_VARIABLES_FILENAME)
 
         self.content = {}
         self.ready_to_save = False
@@ -36,7 +45,7 @@ class KtcPersisting:
         # multiple changes and avoid excessive writes
         self.timer_save = self.reactor.register_timer(
             self._save_changes_timer_event,
-            self.reactor.monotonic() + (ktc.KTC_SAVE_VARIABLES_DELAY),
+            self.reactor.monotonic() + (KTC_SAVE_VARIABLES_DELAY),
         )
 
         try:
@@ -105,7 +114,7 @@ class KtcPersisting:
         except Exception as e:
             self.log.debug("_save_changes_timer_event:Exception: %s" % (str(e)))
             raise e.with_traceback(e.__traceback__)
-        nextwake = eventtime + ktc.KTC_SAVE_VARIABLES_DELAY
+        nextwake = eventtime + KTC_SAVE_VARIABLES_DELAY
         return nextwake
 
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument

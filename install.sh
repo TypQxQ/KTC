@@ -300,7 +300,7 @@ log_blank
 log_info "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-m <moonraker_home_dir>]"
 log_blank
 log_blank
-log_important "This script will install the KTC extensions ad macros."
+log_important "This script will install the KTC extensions and macros."
 log_important "It will add the base configuration in printer.cfg and moonraker.conf."
 log_blank
 yn=$(prompt_yn "Do you want to continue?")

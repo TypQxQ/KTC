@@ -5,14 +5,16 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-from typing import TYPE_CHECKING
+import typing
 from . import ktc   # Toolchanger has a type check on ln 210.
 
-if TYPE_CHECKING:
-    import configfile
-    import klippy
-    import gcode
+# Only import these modules in Dev environment. Consult Dev_doc.md for more info.
+if typing.TYPE_CHECKING:
+    # from .klippy import configfile, gcode
+    # from .klippy import klippy
+    # from .klippy.extras import gcode_macro
     from . import ktc_log, ktc_toolchanger
+    # from . import ktc_persisting
 
 
 class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):

@@ -5,20 +5,13 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast
-from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast
-# from . import ktc_tool
+import ast, typing
 
-# Only import these modules for type checking in development.
-# Need to add path to Klipper to the Type Checker in VSCode settings.
-if TYPE_CHECKING:
-    from klippy import configfile, gcode
-    from klippy.klippy import Printer
-    from klippy.extras import gcode_macro
+# Only import these modules in Dev environment. Consult Dev_doc.md for more info.
+if typing.TYPE_CHECKING:
+    from .klippy import configfile, gcode
+    from .klippy import klippy
     from . import ktc_log, ktc_persisting, ktc_toolchanger
-
-KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
-KTC_SAVE_VARIABLES_DELAY = 10
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
@@ -31,17 +24,12 @@ TOOL_NONE_N = -1
 
 class KtcBaseClass:
     """Base class for KTC. Contains common methods and properties."""
-    def __init__(self, config: Optional['configfile.ConfigWrapper'] = None):
+    def __init__(self, config: typing.Optional['configfile.ConfigWrapper'] = None):
         self.config = config
         self.name: str = ""
 
-        # If set to "X", "Y", "Z" or a combination of them, then the tool will 
-        # require the axis to be homed before it can be selected. Defaults to "".
+        # Can contain "X", "Y", "Z" or a combination.
         self.requires_axis_homed: str = ""
-
-        # self.ktc_persistent = None              # Load the ktc_persisting object.
-        # self.log: 'ktc_log.KtcLog' = None       # Load the ktc_log object.
-        # self.ktc: Ktc                           # Load the ktc object.
 
         self.printer = None # type: ignore # We are loading it later.
         self.reactor = None # type: ignore # We are loading it later.
@@ -53,49 +41,68 @@ class KtcBaseClass:
 
         self.printer : 'klippy.Printer' = config.get_printer()
         self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
-        self.gcode = typing_cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
+        self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
+        self.params = self.get_params_dict_from_config(config)
 
     def configure_inherited_params(self):
         '''Load inherited parameters from instances that this instance inherits from.'''
 
     @staticmethod
-    def get_params_dict_from_config(config):
+    def get_params_dict_from_config(config: 'configfile.ConfigWrapper'):
         """Get a dict of atributes starting with params_ from the config."""
         result = {}
 
-        # If the section doesn't exist inside the config,
-        # don't try to set any params or it will throw an error.
-        if not config.has_section(config.get_name()):
+        if config is None or not config.has_section(config.get_name()):
             return result
 
+        # Get all options that start with "params_" and add them to the result dict.
         for option in config.get_prefix_options("params_"):
             try:
-                result[option] = ast.literal_eval(config.get(option))
+                value : str = config.get(option)
+                if value.lower() in ["true", "false"]:
+                    result[option] = config.getboolean(option)
+                elif value.isdigit():
+                    result[option] = config.getint(option)
+                elif value.replace(".", "").isdigit():
+                    result[option] = config.getfloat(option)
+                elif value.startswith('"') and value.endswith('"'):
+                    result[option] = ast.literal_eval(value)
+                elif value.startswith("'") and value.endswith("'"):
+                    result[option] = ast.literal_eval(value)
+                else:
+                    result[option] = ast.literal_eval('"' + value + '"')
             except ValueError as e:
                 raise config.error(
-                    "Option '%s' in section '%s' is not a valid literal: %s"
+                    "Option '%s' in section '%s' is not a valid literal: %s."
                     % (option, config.get_name(), e)
                 )
         return result
 
-class KtcBaseChangerClass(KtcBaseClass):
+class KtcBaseNamedClass(KtcBaseClass):
+    '''Base class for named objects. Contains common methods and properties.'''
+    def __init__(self, config: typing.Optional['configfile.ConfigWrapper'] = None):
+        super().__init__(config)
+        self.name: str = str(config.get_name()).split(" ", 1)[1]    # type: ignore
+
+class KtcBaseChangerClass(KtcBaseNamedClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
+        self.name: str = str(config.get_name()).split(" ", 1)[1]
         self.parent_tool = None # The parent tool of the toolchanger if it is not default changer.
         self.tools : dict[str, KtcBaseToolClass] = {}  # List of all tools on the toolchanger.
         self.active_tool = None
 
 class KtcBaseToolClass(KtcBaseClass):
     '''Base class for tools. Contains common methods and properties.'''
-    def __init__(self, config: Optional['configfile.ConfigWrapper'] = None, 
+    def __init__(self, config: typing.Optional['configfile.ConfigWrapper'] = None,
                  name: str = "", number: int = TOOL_NUMBERLESS_N):
         super().__init__(config)
 
         self.name = name        # Override the name in case it is supplied.
-        self.number = number    # Override the number in case it is supplied.
-
-        self.toolchanger: Optional[KtcBaseChangerClass] = None
+        self.number = number
+        del self.requires_axis_homed
+        self.toolchanger: typing.Optional[KtcBaseChangerClass] = None
         self.fan = None
         self.extruder = None
         self.heater = None
@@ -122,10 +129,10 @@ class KtcConstantsClass:
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
-    def __init__(self, config: Optional['configfile.ConfigWrapper']):
+    def __init__(self, config: typing.Optional['configfile.ConfigWrapper']):
         super().__init__(config)
 
-        self.log = typing_cast('ktc_log.KtcLog', self.printer.load_object(
+        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
             config, "ktc_log"
         ))
 
@@ -165,7 +172,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
 
         self.tool_map = {}
-        self.last_endstop_query = {}
         self.changes_made_by_set_all_tool_heaters_off = {}
         self.saved_position = None
         self.restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
@@ -226,9 +232,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         ############################
         # Load the persistent variables object
-        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = self.printer.load_object(
-            self.config, "ktc_persisting"
-        )
+        self.ktc_persistent = typing.cast('ktc_persisting.KtcPersisting',
+            self.printer.load_object(self.config, "ktc_persisting"))
         
         # Load inherited parameters for each tool.
         for tool in self.tools.values():
@@ -337,7 +342,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         return self.__active_tool
 
     @active_tool.setter
-    def active_tool(self, value: Union[str, KtcBaseToolClass]):
+    def active_tool(self, value: typing.Union[str, KtcBaseToolClass]):
         if isinstance(value, KtcBaseClass):
             tool = value
         elif isinstance(value, str):
@@ -1033,7 +1038,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "saved_fan_speed": self.saved_fan_speed,
             "restore_axis_on_toolchange": self.restore_axis_on_toolchange,
             "saved_position": self.saved_position,
-            "last_endstop_query": self.last_endstop_query,
             "tools": list(self.tools.keys()),
             # "TOOL_NONE": self.TOOL_NONE.name,
             # "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
