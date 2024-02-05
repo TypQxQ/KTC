@@ -11,8 +11,8 @@
         "--disable=C0112"
     ],
     "python.analysis.typeCheckingMode": "standard",
-    "python.analysis.extraPaths": [
-        "../klipper/klippy/"
-    ]
+    // "python.analysis.extraPaths": [
+        // "../klipper/klippy/"
+    // ]
     
 }

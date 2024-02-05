@@ -610,9 +610,7 @@ class KtcLog:
             if start_time == 0:
                 return None
 
-            time_spent = start_time - time.time()
-            if time_spent < 0:
-                time_spent = 0
+            time_spent = max(start_time - time.time(), 0)
 
             final_time = getattr(self.tool_stats[tool.name], final_time_key, 0)
             final_time += time_spent

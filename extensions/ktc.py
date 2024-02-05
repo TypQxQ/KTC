@@ -5,16 +5,16 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast, re, dataclasses
-from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast, Any
+import ast
+from typing import Optional, TYPE_CHECKING, Union, cast as typing_cast
 # from . import ktc_tool
 
 # Only import these modules for type checking in development.
 # Need to add path to Klipper to the Type Checker in VSCode settings.
 if TYPE_CHECKING:
-    import configfile
-    import klippy
-    import gcode
+    from klippy import configfile, gcode
+    from klippy.klippy import Printer
+    from klippy.extras import gcode_macro
     from . import ktc_log, ktc_persisting, ktc_toolchanger
 
 KTC_SAVE_VARIABLES_FILENAME = "~/ktc_variables.cfg"
@@ -1024,57 +1024,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             # else:
             #     self._set_tool_status(to_tool, available)
         self.log.info(self._tool_map_to_human_string())
-
-    ### GCODE COMMANDS FOR waiting on endstop (Jubilee sytle toollock) ##################################
-
-    cmd_KTC_ENDSTOP_QUERY_help = (
-        "Wait for a ENDSTOP= untill it is TRIGGERED=0/[1] or ATEMPTS=#"
-    )
-
-    def cmd_KTC_ENDSTOP_QUERY(self, gcmd):
-        endstop_name = gcmd.get("ENDSTOP")  #'manual_stepper tool_lock'
-        should_be_triggered = bool(gcmd.get_int("TRIGGERED", 1, minval=0, maxval=1))
-        atempts = gcmd.get_int("ATEMPTS", -1, minval=1)
-        self.query_endstop(endstop_name, should_be_triggered, atempts)
-
-    def query_endstop(self, endstop_name, should_be_triggered=True, atempts=-1):
-        # Get endstops
-        endstop = None
-        query_endstops = self.printer.lookup_object("query_endstops")
-        for es, name in query_endstops.endstops:
-            if name == endstop_name:
-                endstop = es
-                break
-        if endstop is None:
-            raise Exception("Unknown endstop '%s'" % (endstop_name))
-
-        toolhead = self.printer.lookup_object("toolhead")
-        eventtime = self.reactor.monotonic()
-
-        dwell = 0.1
-        if atempts == -1:
-            dwell = 1.0
-
-        i = 0
-        while not self.printer.is_shutdown():
-            i += 1
-            last_move_time = toolhead.get_last_move_time()
-            is_triggered = bool(endstop.query_endstop(last_move_time))
-            self.log.trace(
-                "Check #%d of %s endstop: %s"
-                % (i, endstop_name, ("Triggered" if is_triggered else "Not Triggered"))
-            )
-            if is_triggered == should_be_triggered:
-                break
-            # If not running continuesly then check for atempts.
-            if atempts > 0 and atempts <= i:
-                break
-            eventtime = self.reactor.pause(eventtime + dwell)
-        # if i > 1 or atempts == 1:
-        # self.log.debug("Endstop %s is %s Triggered after #%d checks." % (endstop_name, ("" if is_triggered else "Not"), i))
-
-        self.last_endstop_query[endstop_name] = is_triggered
-
+    
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument
         status = {
             "global_offset": self.global_offset,
@@ -1151,32 +1101,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             if c not in XYZ_TO_INDEX:
                 raise Exception("Invalid RESTORE_POSITION_TYPE")
         return restore_type
-
-    # Todo:
-    # Inspired by https://github.com/jschuh/klipper-macros/blob/main/layers.cfg
-
-####################################
-# HELPER FUNCTIONS: Natural Sorting#
-####################################
-# https://stackoverflow.com/questions/5967500/how-to-correctly-sort-a-string-with-a-number-inside
-def natural_keys_sorting(list_to_sort):
-    return sorted(list_to_sort, key=natural_sorting)
-
-def natural_sorting(text):
-    """
-    alist.sort(key=natural_keys) sorts in human order
-    http://nedbatchelder.com/blog/200712/human_sorting.html
-    (See Toothy's implementation in the comments)
-    """
-    return [__atoi(c) for c in re.split(r"(\d+)", text)]
-
-def __atoi(text):
-    return int(text) if text.isdigit() else text
-
-
-# Function to avoid division by zero
-def safe_division(dividend, divisor):
-    return dividend / divisor if divisor else 0
 
 def load_config(config):
     return Ktc(config)
