@@ -1,4 +1,6 @@
+# Development symbolic links, Linux and Windows style.
 /extensions/klippy/
+/extensions/klippy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
