@@ -119,15 +119,22 @@ class KtcConstantsClass:
     TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
     TOOL_UNKNOWN_N = TOOL_UNKNOWN_N
     TOOL_NONE_N = TOOL_NONE_N
-    TOOL_UNKNOWN = typing.cast('ktc_tool.KtcTool', KtcBaseToolClass(name="KTC_Unknown", number=TOOL_UNKNOWN_N))
-    TOOL_NONE = typing.cast('ktc_tool.KtcTool', KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N))
+    TOOL_UNKNOWN = typing.cast(
+        'ktc_tool.KtcTool',
+        KtcBaseToolClass(name="KTC_Unknown", number=TOOL_UNKNOWN_N))
+    TOOL_NONE = typing.cast(
+        'ktc_tool.KtcTool',
+        KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N))
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
 
-        self.ktc_persistent = None
+        ############################
+        # Load the persistent variables object
+        self.ktc_persistent = typing.cast('ktc_persisting.KtcPersisting',
+            self.printer.load_object(config, "ktc_persisting"))
 
         self.saved_fan_speed = (
             0  # Saved partcooling fan speed when deselecting a tool with a fan.
@@ -158,7 +165,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self._restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
-        self.global_offset = config.get("global_offset", "0,0,0")
+        self.global_offset = config.get("global_offset", "0,0,0")   # type: ignore
         if isinstance(self.global_offset, str):
             offset_list = self.global_offset.split(",")
             if len(offset_list) == 3 and all(
@@ -177,24 +184,19 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
         # self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
 
-    # This method is called when all objects are loaded, initialized and configured.
     def handle_connect(self):
+        '''This method is called when all objects are loaded, initialized and configured.'''
+        # Reference the log object here to avoid circular imports.
+        self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object("ktc_log"))
+
         ############################
         # Configure default toolchanger and tools
-        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
-            self.config, "ktc_log"))
-
         self._config_default_toolchanger()
         self._config_tools()
 
-        ############################
-        # Load the persistent variables object
-        self.ktc_persistent = typing.cast('ktc_persisting.KtcPersisting',
-            self.printer.load_object(self.config, "ktc_persisting"))
 
-        # Load inherited parameters for each tool.
-        for tool in self.all_tools.values():
-            tool.configure_inherited_params()
+        #Run Recursive as below for configure_inherited_params ovan eller kör i samma loop som nedan?
+
 
         # Initialize all toolchangers that have init_mode == ON_START.
         if self.default_toolchanger.init_mode == "ON_START":
@@ -230,25 +232,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             desc = getattr(self, "cmd_" + cmd + "_help", None)
             self.gcode.register_command(cmd, func, False, desc)
 
-    def _initialize_toolchangers_next_level(self,
-        toolchanger: 'ktc_toolchanger.KtcToolchanger',
-        init_mode: 'ktc_toolchanger.KtcToolchanger.InitModeType'):
-        '''Initialize all toolchangers that have init_mode == ON_START
-        and have a parent tool that has been initialized.'''
-        for tool in toolchanger.tools.values():
-            tc = tool.toolchanger
-            if tc is not None and tc.init_mode == init_mode:
-                tc.initialize()
-                self._initialize_toolchangers_next_level(tc, init_mode)
-
     def handle_ready(self):
         '''This method is called when the printer is ready to print.'''
         return
 
-    # Validate default_toolchanger and set it to all tools that don't have toolchanger specified.
     def _config_default_toolchanger(self):
         '''Set the default toolchanger and validate it. 
-        Set the default toolchanger to all tools that don't have a toolchanger specified.
         '''
         # If a default toolchanger name is specified, validate it and set it as default.
         if not self.default_toolchanger_name.strip() == "":
@@ -257,6 +246,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 self.printer.lookup_object(
                     "ktc_toolchanger " + self.default_toolchanger_name, None) # type: ignore
             )
+            # Handle different errors if the default toolchanger is not found.
             if self.default_toolchanger is None:
                 if len(self.all_toolchangers) == 0:
                     raise self.config.error(
@@ -271,6 +261,26 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                             str(self.all_toolchangers.keys())
                         )
                 )
+        else:
+            self.default_toolchanger = typing.cast(
+                'ktc_toolchanger.KtcToolchanger',
+                self.printer.load_object(self.config, "ktc_toolchanger default_toolchanger")
+            )
+        
+        tc: 'ktc_toolchanger.KtcToolchanger'
+        for tc in dict(self.printer.lookup_objects("ktc_toolchanger")).values():
+            self.all_toolchangers[tc.name] = tc
+
+    def _initialize_toolchangers_next_level(self,
+        toolchanger: 'ktc_toolchanger.KtcToolchanger',
+        init_mode: 'ktc_toolchanger.KtcToolchanger.InitModeType'):
+        '''Initialize all toolchangers that have init_mode == ON_START
+        and have a parent tool that has been initialized.'''
+        for tool in toolchanger.tools.values():
+            tc = tool.toolchanger
+            if tc is not None and tc.init_mode == init_mode:
+                tc.initialize()
+                self._initialize_toolchangers_next_level(tc, init_mode)
 
         # If no default toolchanger specified and no toolchangers, create a default toolchanger.
         elif len(self.all_toolchangers) == 0:
@@ -305,14 +315,53 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
 
     def _config_tools(self):
+        tool: 'ktc_tool.KtcTool'
+        # For each tool that is defined in the config file:
+        for tool in dict(self.printer.lookup_objects("ktc_tool")).values():
+            # If not duplicate tool number, add the tool to the list of all tools by number.
+            if tool.number is not None:
+                if self.all_tools_by_number.get(tool.number) is not None:
+                    raise self.config.error(
+                        "Tool number %d is already used by tool %s."
+                        % (tool.number, self.all_tools_by_number[tool.number].name)
+                    )
+                else:
+                    self.all_tools_by_number[tool.number] = tool
+            # Add tool to toolchanger or default toolchanger if it has none.
+            if tool.toolchanger is not None:
+                tool.toolchanger.tools[tool.name] = tool
+            else:
+                self.default_toolchanger.tools[tool.name] = tool
+                tool.toolchanger = self.default_toolchanger
+            # Add tool to the list of all tools.
+            self.all_tools[tool.name] = tool
+
+        
+        
+        
+        
         # Set default toolchanger to all tools that don't have one.
-        for _, tool in {k: v for k, v in self.all_tools.items() if v.toolchanger is None}.items():
-            self.log.trace(
-                "Tool %s has no toolchanger. Setting default toolchanger: %s."
-                % (tool.name, self.default_toolchanger.name)
-            )
-            tool.toolchanger = self.default_toolchanger
-            self.default_toolchanger.tools[tool.name] = tool
+        # for _, tool in {k: v for k, v in self.all_tools.items() if v.toolchanger is None}.items():
+        # for tool in [tool for tool in self.all_tools.values() if tool.toolchanger is None]:
+        #     self.log.trace(
+        #         "Tool %s has no toolchanger. Setting default toolchanger: %s."
+        #         % (tool.name, self.default_toolchanger.name)
+        #     )
+        #     tool.toolchanger = self.default_toolchanger
+        #     self.default_toolchanger.tools[tool.name] = tool
+
+        # For all tools that have a toolchanger (all except None and Unknown)
+        # add the tool to the toolchanger and check for duplicate tool numbers.
+        # for tool in [tool for tool in self.all_tools.values() if tool.toolchanger is not None]:
+        # for tool in self.all_tools.values():
+        #     tool.toolchanger.tools[tool.name] = tool
+        #     if tool.number is not None:
+        #         if self.all_tools_by_number.get(tool.number) is not None:
+        #             raise self.config.error(
+        #                 "Tool number %d is already used by tool %s."
+        #                 % (tool.number, self.all_tools_by_number[tool.number].name)
+        #             )
+        #         self.all_tools_by_number[tool.number] = tool
 
         # Add TOOL_NONE and TOOL_UNKNOWN to the list of tools for ktc and all toolchangers.
         self.all_tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
@@ -321,17 +370,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             tc.tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
             tc.tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
 
-        for tool in [tool for tool in self.all_tools.values() if tool.toolchanger is not None]:
-            tool.toolchanger.tools[tool.name] = tool
-            if tool.number is not None:
-                if self.all_tools_by_number.get(tool.number) is not None:
-                    raise self.config.error(
-                        "Tool number %d is already used by tool %s."
-                        % (tool.number, self.all_tools_by_number[tool.number].name)
-                    )
-                self.all_tools_by_number[tool.number] = tool
-            
-        
     # Logic to check if a tool is valid when set.
     # Takes either a KtcTool object, the name of the tool or the number of the tool.
     @property

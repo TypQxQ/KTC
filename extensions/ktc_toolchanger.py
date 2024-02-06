@@ -27,9 +27,9 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
 
-        self.ktc = typing.cast(ktc.Ktc, self.printer.load_object(config, "ktc"))
+        self.ktc = None  # type: ignore # This is set in configure_inherited_params.
         gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro',
-                                  self.printer.load_object(config, "gcode_macro"))   # type: ignore
+                                  self.printer.lookup_object("gcode_macro"))   # type: ignore
 
         # Initialize object variables.
         self._state = self.StateType.UNINITIALIZED
@@ -70,12 +70,22 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         # after connect, after all objects are initialized.
         self.parent_tool = config.get("parent_tool", None)
 
-        # Add itself to the list of toolchangers if not already added.
-        if self.ktc.all_toolchangers.get(self.name) is None:
-            self.ktc.all_toolchangers[self.name] = self
-        else:
-            raise config.error(
-                "ktc_toolchanger %s already registered." % self.name
+    def configure_inherited_params(self):
+        super().configure_inherited_params()
+        self.ktc = typing.cast(ktc.Ktc, self.printer.lookup_object("ktc"))
+
+        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
+            self.config, "ktc_log"))  # Load the log object.
+
+        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = ( # type: ignore
+            self.printer.lookup_object("ktc_persisting")
+        )  # Load the ktc_persisting object.
+
+        if self.parent_tool is not None:
+            self.parent_tool = self.printer.lookup_object(self.parent_tool, None)
+            raise self.config.error(
+                "parent_tool %s not found for ktc_toolchanger %s."
+                % (self.parent_tool, self.name)
             )
 
         ###### Inherited parameters from ktc.
@@ -110,25 +120,8 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         return self._state
     @state.setter
     def state(self, value):
-        # raise Exception("Test: %s" % type(self).__name__ ) = "KtcToolchanger" :D
-        self.log.trace("ktc_toolchanger[%s].state: %s." % (self.name, value))
         self._state = self.StateType[str(value)]
     
-    def handle_connect(self):
-        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
-            self.config, "ktc_log"))  # Load the log object.
-
-        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = ( # type: ignore
-            self.printer.load_object(self.config, "ktc_persisting")
-        )  # Load the ktc_persisting object.
-
-        if self.parent_tool is not None:
-            self.parent_tool = self.printer.lookup_object(self.parent_tool, None)
-            raise self.config.error(
-                "parent_tool %s not found for ktc_toolchanger %s."
-                % (self.parent_tool, self.name)
-            )
-
     def handle_ready(self):
         return
         # if self.init_mode == self.InitModeType.ON_START:

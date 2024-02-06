@@ -16,6 +16,19 @@ That's it.
 > Each class can import ktc and ktc can not import them inside the init().
 > The classes should not import or load eachother inside the init()
 
+## Load paths
+### Minimum configuration load path:
+Minimum configuration would be one tool declared.
+
+- The tool loads ktc in it's init.
+- ktc loads ktc_persistent at init.
+- ktc_persistent loads log at init.
+- ktc_persistent loads persistent data from file at init.
+- ktc adds a default_toolchanger in _config_default_toolchanger
+- ktc
+- ktc creates default_toolchanger in handle_connect.
+- Adds the tool to the toolchanger and ktc.
+ 
 
 ## Base clases defined in ktc.py
 

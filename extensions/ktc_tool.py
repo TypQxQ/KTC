@@ -194,11 +194,11 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         ##### Register Tool select command #####
         if self.number is not None:
             self.gcode.register_command("KTC_T" + str(self.number), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
-            
-        ##### Add to list of tools #####
-        self.ktc.all_tools[self.name] = self
-        if self.toolchanger is not None:
-            self.toolchanger.tools[self.name] = self
+    
+        # ##### Add to list of tools #####
+        # self.ktc.all_tools[self.name] = self
+        # if self.toolchanger is not None:
+        #     self.toolchanger.tools[self.name] = self
             
     @property
     def toolchanger(self) -> 'ktc_toolchanger.KtcToolchanger':
@@ -210,7 +210,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         if not isinstance(value, ktc.KtcBaseClass):
             raise ValueError("Toolchanger must be a KtcToolchanger object.")
         self._toolchanger = value
-        self.configure_inherited_params()
+        # self.configure_inherited_params()
         
     def configure_inherited_params(self):
         if self.config is None: return

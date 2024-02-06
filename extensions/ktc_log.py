@@ -48,8 +48,7 @@ class KtcLog:
         self.config = config
         self.printer : 'klippy.Printer' = config.get_printer()
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
-
-        self.ktc_persistent: 'ktc_persisting.KtcPersisting' = None      #type: ignore # Klippy is not type checked.
+        self.ktc_persistent = None # type: ignore # Referenced in handle_connect
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -89,12 +88,9 @@ class KtcLog:
 
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
-        self.gcode : 'gcode.GCodeDispatch' | typing.Any = self.printer.lookup_object("gcode")
-
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent = typing.cast('ktc_persisting.KtcPersisting', self.printer.load_object(
-            self.config, "ktc_persisting"
-        ))
+        self.ktc_persistent = typing.cast(
+            'ktc_persisting.KtcPersisting', self.printer.lookup_object( "ktc_persisting"))
 
         # Register G-code commands
         handlers = [
@@ -470,7 +466,8 @@ class KtcLog:
 
         if changer_name is None or changer_name == "":
             # Get all tools for all changers
-            tools_to_sum = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc")).tools.items()
+            tools_to_sum = typing.cast(
+                'ktc.Ktc',self.printer.lookup_object("ktc")).all_tools.items()
         else:
             # Get all tools for the specified changer
             tools_to_sum = typing.cast('ktc_toolchanger.KtcToolchanger', self.printer.lookup_object(
