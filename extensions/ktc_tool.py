@@ -45,7 +45,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
 
         #TODO: Removed from config. Need to be removed from code.
         self.is_virtual = False
-        self.parentTool_id = -2 #self.ktc.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
+        self.parentTool_id = self.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
         self.parentTool = None              # Initialize physical parent as a dummy object.
 
 
@@ -196,7 +196,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
             self.gcode.register_command("KTC_T" + str(self.number), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
             
         ##### Add to list of tools #####
-        self.ktc.tools[self.name] = self
+        self.ktc.all_tools[self.name] = self
         if self.toolchanger is not None:
             self.toolchanger.tools[self.name] = self
             
@@ -284,7 +284,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         if current_tool_id == self.number:              # If trying to select the already selected tool:
             return                                      # Exit
 
-        if current_tool_id == self.ktc.TOOL_UNKNOWN.number:
+        if current_tool_id == self.TOOL_UNKNOWN.number:
             msg = "KtcTool.select_tool_actual: Unknown tool already mounted Can't park it before selecting new tool."
             self.log.always(msg)
             raise self.printer.command_error(msg)
@@ -302,20 +302,20 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
             self.ktc.SaveCurrentPosition(restore_mode) # Sets restore_axis_on_toolchange and saves current position
 
         # Drop any tools already mounted if not virtual on same.
-        if current_tool_id > self.ktc.TOOL_NONE_N:              # If there is a current tool already selected and it's a known tool.
+        if current_tool_id > self.TOOL_NONE_N:              # If there is a current tool already selected and it's a known tool.
             # TODO: Change this to nicer code.
-            self.log.track_tool_selected_end(self.ktc.tools_by_number[current_tool_id]) # Log that the current tool is to be unmounted.
+            self.log.track_tool_selected_end(self.ktc.all_tools_by_number[current_tool_id]) # Log that the current tool is to be unmounted.
 
             current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
            
             # If the next tool is not another virtual tool on the same physical tool.
-            if int(self.parentTool_id ==  self.ktc.TOOL_NONE_N or 
+            if int(self.parentTool_id ==  self.TOOL_NONE_N or 
                         self.parentTool_id) !=  int( 
                         current_tool.get_status()["parentTool_id"]
                         ):
                 self.log.info("Will Dropoff():%s" % str(current_tool_id))
                 current_tool.Dropoff()
-                current_tool_id = self.ktc.TOOL_NONE_N
+                current_tool_id = self.TOOL_NONE_N
             else: # If it's another virtual tool on the same parent physical tool.
                 self.log.info("Dropoff: T" + str(current_tool_id) + "- Virtual - Running UnloadVirtual")
                 current_tool.UnloadVirtual()
@@ -329,10 +329,10 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
             self.log.trace("cmd_SelectTool: T%s - Not Virtual - Pickup" % str(self.number))
             self.Pickup()
         else:
-            if current_tool_id > self.ktc.TOOL_NONE_N:                 # If still has a selected tool: (This tool is a virtual tool with same physical tool as the last)
+            if current_tool_id > self.TOOL_NONE_N:                 # If still has a selected tool: (This tool is a virtual tool with same physical tool as the last)
                 current_tool = self.printer.lookup_object('ktc_tool ' + str(current_tool_id))
                 self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Physical Tool is not Dropped - ")
-                if self.parentTool_id > self.ktc.TOOL_NONE_N and self.parentTool_id == current_tool.get_status()["parentTool_id"]:
+                if self.parentTool_id > self.TOOL_NONE_N and self.parentTool_id == current_tool.get_status()["parentTool_id"]:
                     self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Same physical tool - Pickup")
                     self.LoadVirtual()
                 else:
@@ -347,7 +347,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
                 self.Pickup()
 
                 # If the new physical tool already has another virtual tool loaded:
-                if parentTool_virtual_loaded > self.ktc.TOOL_NONE_N:
+                if parentTool_virtual_loaded > self.TOOL_NONE_N:
                     # TODO: Change this to use the name mapping instead of number.
                     if parentTool_virtual_loaded != self.number:
                         self.log.info("cmd_SelectTool: T" + str(parentTool_virtual_loaded) + "- Virtual - Running UnloadVirtual")
@@ -441,7 +441,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         except Exception as e:
             raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
 
-        self.ktc.active_tool = self.ktc.TOOL_NONE                 # Dropoff successfull
+        self.ktc.active_tool = self.TOOL_NONE                 # Dropoff successfull
         self.log.track_tool_deselecting_end(self)                 # Log the time it takes for tool change.
 
 
@@ -589,8 +589,8 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
                 self.timer_idle_to_standby.set_timer(0, self.name)
                 self.timer_idle_to_powerdown.set_timer(0, self.name)
                 heater.set_temp(self.heater_active_temp)
-                self.log.track_heater_standby_end(self.ktc.tools[tool_for_tracking_heater])     # Set the standby as finishes in statistics.
-                self.log.track_heater_active_start(self.ktc.tools[tool_for_tracking_heater])    # Set the active as started in statistics.                                               # Set the active as started in statistics.
+                self.log.track_heater_standby_end(self.ktc.all_tools[tool_for_tracking_heater])     # Set the standby as finishes in statistics.
+                self.log.track_heater_active_start(self.ktc.all_tools[tool_for_tracking_heater])    # Set the active as started in statistics.                                               # Set the active as started in statistics.
             elif chng_state == self.HEATER_STATE_STANDBY:                                                                       # Else If Standby
                 self.log.trace("set_heater: T%d heater state now STANDBY." % self.name )
                 if int(self.heater_state) == self.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):

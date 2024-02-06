@@ -125,7 +125,7 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
     persistent_state:   Get or Set the persistend state. ex. ['active_tool':'20']
     state :         ktc_toolchanger.STATE attr indicating current state.
     init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
-    active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
+    active_tool:    tool object currently active. Defaults to TOOL_UNKNOWN
     init_order:     
     <!-- active_tool_n:  The toolnumber of the active_tool. -->
     tools:                
@@ -134,7 +134,7 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
     tools:          list of tool.names in tools
     active_tool:    active_tool.name
     init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
-    active_tool:    tool object currently active. Defaults to ktc.TOOL_UNKNOWN
+    active_tool:    tool object currently active. Defaults to TOOL_UNKNOWN
 
     - methods
     engage :        method to engage the tool lock. Locking the tool

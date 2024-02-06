@@ -71,10 +71,8 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self.parent_tool = config.get("parent_tool", None)
 
         # Add itself to the list of toolchangers if not already added.
-        # This can potentially happen if the toolchanger is named "default_toolchanger".
-        # Other cases are possible and should be handled here.
-        if self.ktc.toolchangers.get(self.name) is None:
-            self.ktc.toolchangers[self.name] = self
+        if self.ktc.all_toolchangers.get(self.name) is None:
+            self.ktc.all_toolchangers[self.name] = self
         else:
             raise config.error(
                 "ktc_toolchanger %s already registered." % self.name
@@ -132,8 +130,9 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
             )
 
     def handle_ready(self):
-        if self.init_mode == self.InitModeType.ON_START:
-            self.initialize()
+        return
+        # if self.init_mode == self.InitModeType.ON_START:
+        #     self.initialize()
 
     def _handle_home_rails_begin(self, homing_state, rails):
         if self.init_mode == self.InitModeType.HOMING_START:
@@ -192,14 +191,14 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
 
         # Get the active tool from the persistent variables.
         active_tool_name = str.lower(self.persistent_state.get(
-            "active_tool", self.ktc.TOOL_UNKNOWN.name
+            "active_tool", self.TOOL_UNKNOWN.name
         ))
 
         # Set the active tool to the tool with the name from the persistent variables.
         # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
         self.active_tool = self.tools.get(active_tool_name, None)
         if self.active_tool is None:
-            self.active_tool = self.ktc.TOOL_UNKNOWN
+            self.active_tool = self.TOOL_UNKNOWN
             self.log.always(
                 "ktc_toolchanger.initialize(): Active tool %s not found for ktc_toolchanger %s. Using tool %s."
                 % (active_tool_name, self.name, self.active_tool.name)
@@ -229,7 +228,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
            
         
     
-        # if self.active_tool == self.ktc.TOOL_NONE:
+        # if self.active_tool == self.TOOL_NONE:
         #     self.disengage()
         # else:
         #     self.engage(True)

@@ -170,13 +170,15 @@ install_update_manager() {
             # Add the configuration to moonraker.conf
             echo "" >> "${dest}"    # Add a blank line
             echo "" >> "${dest}"    # Add a blank line
-            echo -e "[update_manager KTC]]" >> "${dest}"    # Add the section header
+            echo -e "[update_manager KTC\]" >> "${dest}"    # Add the section header
             echo -e "type: git_repo" >> "${dest}"
             echo -e "path: ${REPO_DIR}" >> "${dest}"
             echo -e "origin: https://github.com/TypQxQ/KTC.git" >> "${dest}"
             echo -e "primary_branch: main" >> "${dest}"
             echo -e "install_script: install.sh" >> "${dest}"
             echo -e "managed_services: klipper" >> "${dest}"
+
+            restart_moonraker
         else
             log_error "[update_manager KTC] already exists in moonraker.conf - skipping installing it there"
         fi
@@ -333,7 +335,7 @@ link_extension
 install_update_manager
 
 # Install the configuration to Klipper
-# install_klipper_config
+install_klipper_config
 
 log_blank
 log_blank
