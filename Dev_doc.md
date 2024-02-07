@@ -24,11 +24,23 @@ Minimum configuration would be one tool declared.
 - ktc loads ktc_persistent at init.
 - ktc_persistent loads log at init.
 - ktc_persistent loads persistent data from file at init.
-- ktc adds a default_toolchanger in _config_default_toolchanger
-- ktc
-- ktc creates default_toolchanger in handle_connect.
-- Adds the tool to the toolchanger and ktc.
- 
+- ktc_config_default_toolchanger adds default_toolchanger
+- ktc_config_default_toolchanger adds the toolchanger to ktc.toolchangers
+- ktc._config_tools adds the tool(s) to ktc.default_toolchanger.tools
+- ktc._config_tools adds the tool(s) to ktc.all_toolls
+
+1- (Run configure_inherited_params recursevly)
+    1- Run on ktc
+        2- Run on default_toolchanger
+        3- Make a dictionary of tools that are toolchanger parents.
+        3- Run on first tool of default_toolchanger
+            4- Run on first toolchanger having the above tool as parent from (3)
+All obj having ran configure_inherited_params get configured = true.
+If "inherits from" is a tool/changer that has not configured == true and not the same toolchanger (for tools) then error: "inherit from must point to obj on same or previous level."
+
+
+- ktc runs .initialize() on all toolchangers with .init_mode == "ON_START" recursevly.
+
 
 ## Base clases defined in ktc.py
 

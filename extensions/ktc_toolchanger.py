@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-from enum import Enum, IntEnum, unique
+from enum import Enum
 import typing
 
 from . import ktc
@@ -16,7 +16,7 @@ if typing.TYPE_CHECKING:
     from .klippy import configfile
     # from .klippy import klippy, gcode
     from .klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_log, ktc_persisting#, ktc_tool
+    from . import ktc_log, ktc_persisting, ktc_tool
 
 class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
     """Class initialized for each toolchanger.
@@ -29,24 +29,23 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
 
         self.ktc = None  # type: ignore # This is set in configure_inherited_params.
         gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro',
-                                  self.printer.lookup_object("gcode_macro"))   # type: ignore
-
-        # Initialize object variables.
-        self._state = self.StateType.UNINITIALIZED
+                                  self.printer.lookup_object("gcode_macro"))    # type: ignore
 
         # Get initialization mode and check if valid.
-        init_mode = config.get("init_mode", self.InitModeType.MANUAL.name)           # type: ignore
+        init_mode = typing.cast(
+            str, config.get("init_mode", self.InitModeType.MANUAL.name))        # type: ignore
         try:
-            self.init_mode = self.InitModeType[init_mode]
+            self.init_mode = self.InitModeType[init_mode.upper()]
         except KeyError as e:
             raise config.error(
                 "Invalid init_mode %s for ktc_toolchanger %s. Valid values are: %s"
             % (init_mode, self.name, self.InitModeType.list_valid_values())) from e
 
         # Get the initialization order and check if valid.
-        init_order = config.get("init_order", self.InitOrderType.INDEPENDENT.name)   # type: ignore
+        init_order = typing.cast(
+            str, config.get("init_order", self.InitOrderType.INDEPENDENT.name)) # type: ignore
         try:
-            self.init_order = self.InitOrderType[init_order]
+            self.init_order = self.InitOrderType[init_order.upper()]
         except KeyError as e:
             raise config.error(
                 "Invalid init_order %s for ktc_toolchanger %s. Valid values are: %s"
@@ -68,7 +67,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
 
         # Get the parent tool if defined. This is set to the object
         # after connect, after all objects are initialized.
-        self.parent_tool = config.get("parent_tool", None)
+        self.parent_tool = typing.cast('ktc_tool.KtcTool', config.get("parent_tool", None))  # type: ignore
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
@@ -120,7 +119,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         return self._state
     @state.setter
     def state(self, value):
-        self._state = self.StateType[str(value)]
+        self._state = self.StateType[str(value).upper()]
     
     def handle_ready(self):
         return
@@ -168,7 +167,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
                 self.parent_tool.toolchanger.initialize()
 
         # Check if the parent tool is ready if the init_order is set to
-        # be after the parent tool is selected.                
+        # be after the parent tool is selected.
         if self.init_order == self.InitOrderType.AFTER_PARENT_SELECTED:
             # Parent toolchanger should be initialized now if possible.
             if self.parent_tool.toolchanger.state < self.StateType.READY:
@@ -234,7 +233,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         try:
             if self.state < self.StateType.INITIALIZING:
                 raise Exception(
-                    "Status is: %s." % self.StateType.value_to_key_string(self.state)
+                    "Status is: %s. Can't engage %s." % (self.state, self.name)
                 )
 
             if self.engage_gcode_template is None:
@@ -326,39 +325,6 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         return status
 
     @unique
-    class StateType(IntEnum):
-        """Constants for the status of the toolchanger.
-        Using dataclasses to allow for easy traversal of the values."""
-        ERROR= -3
-        UNINITIALIZED = -2
-        INITIALIZING = -1
-        INITIALIZED = 0
-        READY = 1
-        CHANGING = 2
-        ENGAGING = 3
-        DISENGAGING = 4
-        ENGAGED = 5
-
-        @classmethod
-        # This might be unnecessary.
-        def value_to_key_string(cls, status):
-            try:
-                return cls(status).name
-            except Exception:
-                return None
-
-        @classmethod
-        def list_valid_values(cls):
-            return [name for name, _ in cls.__members__]
-
-        @classmethod
-        def get_value_from_configuration(cls, configured_value):
-            return cls[str(configured_value).upper()]
-
-        def __str__(self):
-            return f'{self.name}'
-
-    @unique
     class InitModeType(str, Enum):
         """Constants for the initialization mode of the toolchanger.
         Inherits from str so it can be JSON serializable.
@@ -373,10 +339,10 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         def list_valid_values(cls):
             return [name for name, _ in cls.__members__]
 
-        @classmethod
-        def get_value_from_configuration(cls, configured_value):
-            return cls[str(configured_value).upper()]
-            # return cls(str(configured_value).lower())
+        # @classmethod
+        # def get_value_from_configuration(cls, configured_value):
+        #     return cls[str(configured_value).upper()]
+        #     # return cls(str(configured_value).lower())
 
     @unique
     class InitOrderType(str, Enum):
@@ -391,9 +357,9 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         def list_valid_values(cls):
             return [name for name, _ in cls.__members__]
 
-        @classmethod
-        def get_value_from_configuration(cls, configured_value):
-            return cls[str(configured_value).upper()]
+        # @classmethod
+        # def get_value_from_configuration(cls, configured_value):
+        #     return cls[str(configured_value).upper()]
 
 def load_config_prefix(config):
     """Load the toolchanger object with the given config.

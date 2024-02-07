@@ -107,7 +107,9 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         # If none, then the default toolchanger will be set in ktc._config_default_toolchanger()
         toolchanger_name = config.get('toolchanger', None)
         if toolchanger_name is not None:
-            self.toolchanger = self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name)
+            self.toolchanger = typing.cast(     # type: ignore
+                'ktc_toolchanger.KtcToolchanger', 
+                self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name))
 
         ##### Params #####
         self.params = self.get_params_dict_from_config(config)
