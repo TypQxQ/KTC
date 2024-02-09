@@ -701,9 +701,11 @@ class ktc_ToolStandbyTempTimer:
             self.log.track_heater_active_end(self)                                               # Set the active as finishes in statistics.
 
         except Exception as e:
-            raise Exception("Failed to set Standby temp for tool T%s: %s. %s" % (str(self.tool_id), 
-                                                                                 ("for virtual T%s" % str(self.last_virtual_tool_using_physical_timer)),
-                                                                                 str(e)))  # if actual_tool_calling != self.tool_id else ""
+            raise Exception(
+                "Failed to set Standby temp for tool T%s: %s. %s" 
+                % (str(self.tool_id),("for virtual T%s" 
+                                      % str(self.last_virtual_tool_using_physical_timer)),
+                   str(e)))  # if actual_tool_calling != self.tool_id else ""
 
         self.nextwake = self.reactor.NEVER
         if self.repeat:

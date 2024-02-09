@@ -171,9 +171,10 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
                 raise Exception(
                     "Toolchanger %s has parent tool %s that resides on toolchanger %s " 
                     % (self.name, self.parent_tool.name, self.parent_tool.toolchanger.name) +
-                    "that is not ready but init_order for this toolchanger is set to AFTER_PARENT_SELECTED."
+                    "that is not ready but init_order for this toolchanger"
+                    + "is set to AFTER_PARENT_SELECTED."
                 )
-                
+
             if (self.parent_tool.toolchanger.state < self.StateType.ENGAGED and
                 self.parent_tool.toolchanger.active_tool != self.parent_tool):
                 self.parent_tool.select()
@@ -189,10 +190,11 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         if self.active_tool is None:
             self.active_tool = self.TOOL_UNKNOWN
             self.log.always(
-                "ktc_toolchanger.initialize(): Active tool %s not found for ktc_toolchanger %s. Using tool %s."
+                "ktc_toolchanger.initialize(): Active tool "
+                + "%s not found for ktc_toolchanger %s. Using tool %s."
                 % (active_tool_name, self.name, self.active_tool.name)
             )
-        
+
         self.log.trace("ktc_toolchanger[%s].initialize(): Loaded persisted active tool: %s." 
                        % (self.name, self.active_tool.name))
 

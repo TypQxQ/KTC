@@ -1123,8 +1123,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "restore_axis_on_toolchange": self._restore_axis_on_toolchange,
             "saved_position": self._saved_position,
             "tools": list(self.all_tools.keys()),
-            # "TOOL_NONE": self.TOOL_NONE.name,
-            # "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
+            "TOOL_NONE": self.TOOL_NONE.name,
+            "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
             **self.params,
         }
         return status
