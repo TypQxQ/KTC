@@ -23,25 +23,27 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
     HEATER_STATE_STANDBY = 1
     HEATER_STATE_ACTIVE = 2
     
-    def __init__(self, config = None, name: str = "", number: int = -3):
+    # def __init__(self, config = None, name: str = "", number: int = -3):
+    def __init__(self, config):
         # Initialize all static variables before loading from config so we can declare constant tools in ktc.
-        self.config = config
-        self._toolchanger = None            # Internal Toolchanger object. Used for property setter.
+        # self.config = config
+        super().__init__(config)
+        # self._toolchanger = None            # Internal Toolchanger object. Used for property setter.
 
-        self.name: str = name               # Name of the tool.
-        self.number: int = number           # Tool number to register this tool as. Default as not defined, -3.
-        self.extruder = None                # Name of extruder connected to this tool. Defaults to None.
-        self.params = {}
+        # self.name: str = name               # Name of the tool.
+        # self.number: int = number           # Tool number to register this tool as. Default as not defined, -3.
+        # self.extruder = None                # Name of extruder connected to this tool. Defaults to None.
+        # self.params = {}
         
         # TODO: Change this to a list of fans.
-        self.fan = None                     # Name of general fan configuration connected to this tool as a part fan. Defaults to "none".
+        # self.fan = None                     # Name of general fan configuration connected to this tool as a part fan. Defaults to "none".
 
-        self.lazy_home_when_parking = None  # (default: 0 - disabled) - When set to 1, will home unhomed XY axes if needed and will not move any axis if already homed and parked. 2 Will also home Z if not homed.
+        # self.lazy_home_when_parking = None  # (default: 0 - disabled) - When set to 1, will home unhomed XY axes if needed and will not move any axis if already homed and parked. 2 Will also home Z if not homed.
                                             # Wipe. -1 = none, 1= Only load filament, 2= Wipe in front of carriage, 3= Pebble wiper, 4= First Silicone, then pebble. Defaults to None.
         self.zone = None                    # Position of the parking zone in the format X, Y, Z. Defaults to None.
         self.park = None                    # Position to move to when fully parking the tool in the dock in the format X, Y
 
-        self.offset = None                  # Offset of the nozzle in the format X, Y, Z
+        # self.offset = None                  # Offset of the nozzle in the format X, Y, Z
 
         #TODO: Removed from config. Need to be removed from code.
         self.is_virtual = False
@@ -62,22 +64,22 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
 
 
 
-        self.heater_state = 0               # 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
-        self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
-        self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
-        self.heater_active_temp = 0         # Temperature to set when in active mode. Placeholder. Requred on Physical and virtual tool if any has extruder.
-        self.heater_standby_temp = 0        # Temperature to set when in standby mode.  Placeholder. Requred on Physical and virtual tool if any has extruder.
-        self.idle_to_standby_time = 0.1    # Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature. Requred on Physical tool
-        self.idle_to_powerdown_time = 600   # Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
+        # self.heater_state = 0               # 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
+        # self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
+        # self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
+        # self.heater_active_temp = 0         # Temperature to set when in active mode. Placeholder. Requred on Physical and virtual tool if any has extruder.
+        # self.heater_standby_temp = 0        # Temperature to set when in standby mode.  Placeholder. Requred on Physical and virtual tool if any has extruder.
+        # self.idle_to_standby_time = 0.1    # Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature. Requred on Physical tool
+        # self.idle_to_powerdown_time = 600   # Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
 
 
         # If called without config then just return a dummy object.
-        if config is None:
-            return
+        # if config is None:
+        #     return
 
         # Initialize object references.
-        self.printer = config.get_printer()
-        self.gcode = self.printer.lookup_object('gcode')
+        # self.printer = config.get_printer()
+        # self.gcode = self.printer.lookup_object('gcode')
         self.gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.ktc : 'ktc.Ktc' = self.printer.load_object(config, 'ktc')
         self.log : 'ktc_log.KtcLog' = self.printer.load_object(config, 'ktc_log')
@@ -96,8 +98,8 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         ###### Inherited parameters from toolchanger #####
         # Empty parameters are overriden after the toolchanger is loaded.
         # Tool Selection and Deselection G-Code macros
-        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", "")
-        self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", "")
+        self._tool_select_gcode = self._config_get('tool_select_gcode', "")
+        self._tool_deselect_gcode = self.config.get('tool_deselect_gcode', "")
 
         ##### Inherited Parameters #####
         # self.requires_axis_homed = self.config_get('requires_axis_homed')
@@ -112,13 +114,13 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name))
 
         ##### Params #####
-        self.params = self.get_params_dict_from_config(config)
+        # self.params = self.get_params_dict_from_config(config)
 
         ##### Physical Parent #####
-        self.parentTool_id = config.getint('parent_tool', self.TOOL_NONE_N)
+        _ = config.getint('parent_tool', self.TOOL_NONE_N)
 
         # TODO: Change this to use the ktc_toolchanger instead of parentTool.
-        self.parentTool = KtcTool()     # Initialize physical parent as a dummy object.
+        self.parentTool = None     # Initialize physical parent as a dummy object.
         try:
             if self.parentTool_id >= 0 and not self.parentTool_id == int(self.number):
                 self.parentTool = self.printer.lookup_object("ktc_tool " + str(self.parentTool_id))
@@ -141,33 +143,21 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         self.lazy_home_when_parking = False # self._config_getbool('lazy_home_when_parking', False)
 
         ##### Coordinates #####
-        try:
-            self.zone = self._config_get('zone')
-            if not isinstance(self.zone, list):
-                self.zone = str(self.zone).split(',')
-            self.park = self._config_get('park')
-            if not isinstance(self.park, list):
-                self.park = str(self.park).split(',')
-            self.offset = self._config_get('offset')
-            if not isinstance(self.offset, list):
-                self.offset = str(self.offset).split(',')
+        self.zone = self._config_get('zone', "0,0,0")
+        self.park = self._config_get('park', "0,0,0")
+        self.offset = self._config_get('offset', "0,0,0")
+
+        for v in [self.zone, self.park, self.offset]:
+            if not isinstance(v, list):
+                v = str(v).split(',')
 
             # Remove any accidental blank spaces.
-            self.zone = [s.strip() for s in self.zone]
-            self.park = [s.strip() for s in self.park]
-            self.offset = [s.strip() for s in self.offset]
-
-            if len(self.zone) != 3:
-                raise config.error("zone Offset is malformed, must be a list of x,y,z If you want it blank, use 0,0,0")
-            if len(self.park) != 3:
-                raise config.error("park Offset is malformed, must be a list of x,y,z If you want it blank, use 0,0,0")
-            if len(self.offset) != 3:
-                raise config.error("offset Offset is malformed, must be a list of x,y,z. If you want it blank, use 0,0,0")
-
-        except Exception as e:
-            raise config.error(
-                    "Coordinates of section '%s' is not well formated: %s"
-                    % (config.get_name(), str(e)))
+            v = [s.strip() for s in v]
+            if len(v) != 3:
+                raise config.error(
+                    "Coordinates of section '%s' is not well formated: %s" % 
+                    (config.get_name(), str(e))
+                    + "Coordinates must be a list of x,y,z.For example, 0.0,0.1,2.3")
 
         ##### Standby settings (if the tool has an extruder) #####
         if self.extruder is not None:
@@ -177,7 +167,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
             # if self.idle_to_powerdown_time is None:
             #     self.idle_to_powerdown_time = self.toolgroup.idle_to_powerdown_time
 
-            # TODO: Change this to use the ktc_toolchanger instead of parentTool.
+            # TODO: Maybe delete?
             # If this tool has a diffrent parent than itself and it's extruder is diffrent
             if self.parentTool_id > self.TOOL_NONE_N and self.parentTool_id != int(self.number) and self.extruder != self.parentTool.extruder:
                 # Use parent's timer for the child tool.
@@ -189,9 +179,9 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
                 self.timer_idle_to_powerdown = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN)
 
         ##### G-Code VirtualToolChange #####
-        if self.is_virtual:
-            self.virtual_toolload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolload_gcode')
-            self.virtual_toolunload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolunload_gcode')
+        # if self.is_virtual:
+        self.virtual_toolload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolload_gcode')
+        self.virtual_toolunload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolunload_gcode')
 
         ##### Register Tool select command #####
         if self.number is not None:
@@ -209,48 +199,55 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
     @toolchanger.setter
     def toolchanger(self, value):
         # TODO: Change this to use the base class instead of the specific class.
-        if not isinstance(value, ktc.KtcBaseClass):
+        if value is not None and not isinstance(value, ktc.KtcBaseChangerClass):
             raise ValueError("Toolchanger must be a KtcToolchanger object.")
         self._toolchanger = value
-        # self.configure_inherited_params()
         
     def configure_inherited_params(self):
+        super().configure_inherited_params()
         if self.config is None: return
         ##### G-Code ToolChange #####
-        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", self.toolchanger.tool_select_gcode)
-        self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", self.toolchanger.tool_deselect_gcode)
+        # TODO: Check if inheriting.....
+        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", "")#self.toolchanger.tool_select_gcode)
+        self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", "")#self.toolchanger.tool_deselect_gcode)
         
         ##### Inherited Parameters #####
         self.requires_axis_homed = self.config.get('requires_axis_homed', self.toolchanger.requires_axis_homed)
 
+        # Tool Selection and Deselection G-Code macros
+        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", "")
+        self.tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", "")
+        
+        self.state = self.StateType.CONFIGURED
+
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
-        if self.parentTool.config is not None:
-            inherited_value = self.parentTool.config.getboolean(config_param, default_value)
+        # if self.parentTool.config is not None:
+        #     inherited_value = self.parentTool.config.getboolean(config_param, default_value)
         return self.config.getboolean(config_param, inherited_value)
 
     def _config_getfloat(self, config_param, default_value = None):
         inherited_value = default_value
-        if self.parentTool.config is not None:
-            inherited_value = self.parentTool.config.getfloat(config_param, default_value)
+        # if self.parentTool.config is not None:
+        #     inherited_value = self.parentTool.config.getfloat(config_param, default_value)
         return self.config.getfloat(config_param, inherited_value)
 
     def _config_get(self, config_param, default_value = None):
         inherited_value = default_value
-        if self.parentTool.config is not None:
-            inherited_value = self.parentTool.config.get(config_param, default_value)
+        # if self.parentTool.config is not None:
+        #     inherited_value = self.parentTool.config.get(config_param, default_value)
         return self.config.get(config_param, inherited_value)
 
     def _get_gcode_template_with_inheritence(self, config_param, optional = False):
-        temp_gcode = self.parentTool.get_config(config_param)                   # First try to get gcode parameter from eventual physical Parent.
+        # temp_gcode = self.parentTool.get_config(config_param)                   # First try to get gcode parameter from eventual physical Parent.
         # if temp_gcode is None:                                          # If didn't get any from physical parent,
         #     temp_gcode =  self.toolgroup.get_config(config_param)       # try getting from toolgroup.
 
-        if optional and temp_gcode is None:
-            temp_gcode = ""
+        # if optional and temp_gcode is None:
+        #     temp_gcode = ""
 
         # gcode = self.get_config(config_param, temp_gcode)               # Get from this config and fallback on previous.
-        template = self.gcode_macro.load_template(self.config, config_param, temp_gcode)
+        template = self.gcode_macro.load_template(self.config, config_param, "")#temp_gcode)
         return template
 
     def get_config(self, config_param, default = None):

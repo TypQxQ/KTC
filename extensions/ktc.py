@@ -1,4 +1,4 @@
- KTC - Klipper Tool Changer code (v.2)
+# KTC - Klipper Tool Changer code (v.2)
 # Toollock and general Tool support
 #
 # Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
@@ -32,6 +32,7 @@ class KtcBaseClass:
         # Can contain "X", "Y", "Z" or a combination.
         self.requires_axis_homed: str = ""
         self.log = None # type: ignore # We are loading it later.
+        self._state = self.StateType.NOT_CONFIGURED
 
         # self.printer = None # type: ignore # We are loading it later.
         # self.reactor = None # type: ignore # We are loading it later.
@@ -48,10 +49,15 @@ class KtcBaseClass:
         self.log = None # type: ignore # We are loading it later.
 
         # Initialize object variables.
-        self._state = self.StateType.NOT_CONFIGURED
 
     def configure_inherited_params(self):
         '''Load inherited parameters from instances that this instance inherits from.'''
+        if self.state >= self.StateType.CONFIGURED:
+            return
+        elif self.state == self.StateType.CONFIGURING:
+            raise ValueError("Can't configure inherited parameters while configuring.")
+
+        self.state = self.StateType.CONFIGURING
 
     @staticmethod
     def get_params_dict_from_config(config: 'configfile.ConfigWrapper'):
@@ -113,6 +119,13 @@ class KtcBaseClass:
         def __str__(self):
             return f'{self.name}'
 
+    @property
+    def state(self):
+        return self._state
+    @state.setter
+    def state(self, value):
+        self._state = self.StateType[str(value).upper()]
+
 class KtcBaseChangerClass(KtcBaseClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
@@ -134,13 +147,13 @@ class KtcBaseToolClass(KtcBaseClass):
         self.fan = None
         self.extruder = None
         self.heater = None
-        self.heater_state = None
-        self.heater_standby_temp = None
-        self.heater_active_temp = None
-        self.idle_to_standby_time = None
-        self.idle_to_powerdown_time = None
-        self.timer_idle_to_standby = None
-        self.timer_idle_to_powerdown = None
+        self.heater_state = 0               # 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
+        self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
+        self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
+        self.heater_active_temp = 0         # Temperature to set when in active mode. Placeholder. Requred on Physical and virtual tool if any has extruder.
+        self.heater_standby_temp = 0        # Temperature to set when in standby mode.  Placeholder. Requred on Physical and virtual tool if any has extruder.
+        self.idle_to_standby_time = 0.1    # Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature. Requred on Physical tool
+        self.idle_to_powerdown_time = 600   # Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
         self.offset = [0, 0, 0]
 
     def set_offset(self, **kwargs):
@@ -158,6 +171,7 @@ class KtcConstantsClass:
     TOOL_NONE = typing.cast(
         'ktc_tool.KtcTool',
         KtcBaseToolClass(name="KTC_None", number=TOOL_NONE_N))
+    TOOL_NONE.state = TOOL_UNKNOWN.state = KtcBaseClass.StateType.CONFIGURED
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
@@ -177,6 +191,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.all_tools_by_number: dict[
             int, 'ktc_tool.KtcTool'] = {}
         self.all_toolchangers: dict[str, 'ktc_toolchanger.KtcToolchanger'] = {}
+        self._tools_having_tc: typing.Dict['ktc_tool.KtcTool', 'ktc_toolchanger.KtcToolchanger'] = {}
 
         self.__active_tool = self.TOOL_UNKNOWN  # The currently active tool.
 
@@ -232,13 +247,15 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.configure_inherited_params()
         self._recursive_configure_inherited_attributes(self.default_toolchanger)
 
-        # Initialize all toolchangers that have init_mode == ON_START.
-        if (self.default_toolchanger.init_mode == 
-            self.default_toolchanger.__class__.InitModeType.ON_START):
-            self.default_toolchanger.initialize()
-        self._initialize_toolchangers_next_level(
-            self.default_toolchanger,
-            self.default_toolchanger.__class__.InitModeType.ON_START)
+        # Control that all tools and toolchangers are configured.
+        if self.state < self.StateType.CONFIGURED:
+            raise ValueError("KTC did not configure properly.")
+        for tc in self.all_toolchangers.values():
+            if tc.state < tc.StateType.CONFIGURED:
+                raise ValueError("Toolchanger %s did not configure properly." % tc.name)
+        for tool in self.all_tools.values():
+            if tool.state < tool.StateType.CONFIGURED:
+                raise ValueError("Tool %s did not configure properly." % tool.name)
 
         # Register commands
         handlers = [
@@ -269,7 +286,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def handle_ready(self):
         '''This method is called when the printer is ready to print.'''
-        return
+        # Initialize all toolchangers that have init_mode == ON_START.
+        self._recursive_initialize_toolchangers(
+            self.default_toolchanger,
+            self.default_toolchanger.__class__.InitModeType.ON_START)
+        
 
     def _config_default_toolchanger(self):
         '''Set the default toolchanger and validate it. 
@@ -333,6 +354,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         tc: 'ktc_toolchanger.KtcToolchanger'
         for tc in dict(self.printer.lookup_objects("ktc_toolchanger")).values():
             self.all_toolchangers[tc.name] = tc
+            # Check so all toolchangers besides the default toolchanger have a parent tool.
+            if self.default_toolchanger != tc and tc.parent_tool is None:
+                raise self.config.error(
+                    "Toolchanger %s has no parent_tool while it is not the default toolchanger."
+                    % tc.name
+                )
 
     def _config_tools(self):
         '''Add all tools to the list of all tools and validate them.'''
@@ -363,35 +390,36 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         for tc in self.all_toolchangers.values():
             tc.tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
             tc.tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
+            # Fill the _tools_having_tc dict with the tools that have a toolchanger as child.
+            self._tools_having_tc[tc.parent_tool] = tc  # type: ignore
 
     def _recursive_configure_inherited_attributes(
-        self, tc: 'ktc_toolchanger.KtcToolchanger', tools_having_tc = None):
+        self, tc: 'ktc_toolchanger.KtcToolchanger'):
         '''Recursively configure inherited parameters for all toolchangers and tools.'''
-        # If first run, initialize the list of tools having the toolchanger.
-        if tools_having_tc is None:
-            tools_having_tc: typing.Dict['ktc_tool.KtcTool', 'ktc_toolchanger.KtcToolchanger'] = {}
-            for tc in self.all_toolchangers.values():
-                tools_having_tc[tc.parent_tool] = tc # type: ignore
-                
         # For tools, excluding TOOL_NONE and TOOL_UNKNOWN, in the toolchanger:
-        tool: 'ktc_tool.KtcTool'
+        tc.configure_inherited_params()
         for tool in [tool for tool in tc.tools.values() if tool.toolchanger is not None]:
             tool.configure_inherited_params()
             # If this tool is a parent for a toolchanger
-            if tool in tools_having_tc:
+            if tool in self._tools_having_tc:
                 # Run this method for the toolchanger that has this tool as a parent.
-                self._recursive_configure_inherited_attributes(tools_having_tc[tool], tools_having_tc)
+                self._recursive_configure_inherited_attributes(self._tools_having_tc[tool])
 
-    def _initialize_toolchangers_next_level(self,
-        toolchanger: 'ktc_toolchanger.KtcToolchanger',
+    def _recursive_initialize_toolchangers(self,
+        tc: 'ktc_toolchanger.KtcToolchanger',
         init_mode: 'ktc_toolchanger.KtcToolchanger.InitModeType'):
         '''Initialize all toolchangers that have init_mode == ON_START
         and have a parent tool that has been initialized.'''
-        for tool in toolchanger.tools.values():
-            tc = tool.toolchanger
-            if tc is not None and tc.init_mode == init_mode:
-                tc.initialize()
-                self._initialize_toolchangers_next_level(tc, init_mode)
+        if tc.init_mode == init_mode:
+            tc.initialize()
+        
+        # Check if any toolchangers exist on next level and run this method for them.
+        for tool in [tool for tool in tc.tools.values() if tool in self._tools_having_tc]:
+            self._recursive_initialize_toolchangers(self._tools_having_tc[tool], init_mode)
+
+    def configure_inherited_params(self):
+        super().configure_inherited_params()
+        self.state = self.StateType.CONFIGURED
 
     @property
     def active_tool(self) -> KtcBaseToolClass:

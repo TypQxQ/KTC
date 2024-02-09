@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 
-from enum import Enum
+from enum import Enum, unique
 import typing
 
 from . import ktc
@@ -65,13 +65,22 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self.init_gcode_template = gcode_macro.load_template(   # type: ignore
             config, "", self.init_gcode)
 
-        # Get the parent tool if defined. This is set to the object
-        # after connect, after all objects are initialized.
-        self.parent_tool = typing.cast('ktc_tool.KtcTool', config.get("parent_tool", None))  # type: ignore
+        # Load the tools for the toolchanger.
+        parent_tool_name = config.get("parent_tool", None)  # type: ignore
+        if parent_tool_name is not None:
+            self.parent_tool = typing.cast('ktc_tool.KtcTool', self.printer.load_object(
+                config, "ktc_tool " + parent_tool_name))  # type: ignore
+            if self.parent_tool is None:
+                raise config.error(
+                    "parent_tool %s not found for ktc_toolchanger %s."
+                    % (parent_tool_name, self.name)
+                )
+            
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
         self.ktc = typing.cast(ktc.Ktc, self.printer.lookup_object("ktc"))
+        self.state = self.StateType.CONFIGURED
 
         self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
             self.config, "ktc_log"))  # Load the log object.
@@ -79,17 +88,10 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self.ktc_persistent: 'ktc_persisting.KtcPersisting' = ( # type: ignore
             self.printer.lookup_object("ktc_persisting")
         )  # Load the ktc_persisting object.
-
-        if self.parent_tool is not None:
-            self.parent_tool = self.printer.lookup_object(self.parent_tool, None)
-            raise self.config.error(
-                "parent_tool %s not found for ktc_toolchanger %s."
-                % (self.parent_tool, self.name)
-            )
-
+        
         ###### Inherited parameters from ktc.
         # If set to "X", "Y", "Z" or a combination of them, then the tool will require the axis to be homed before it can be selected. Defaults to "".
-        self.requires_axis_homed = config.get("requires_axis_homed", self.ktc.requires_axis_homed)
+        self.requires_axis_homed = self.config.get("requires_axis_homed", self.ktc.requires_axis_homed)
         
         # Tool Selection and Deselection G-Code macros
         # This is overridden by the tool if it has a tool_select_gcode or tool_deselect_gcode defined.
@@ -97,10 +99,10 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self.tool_deselect_gcode = self.config.get("tool_deselect_gcode", self.ktc.tool_deselect_gcode)
 
         ###### Register event handlers.
-        self.printer.register_event_handler("klippy:ready", self.handle_ready)
-        self.printer.register_event_handler("klippy:connect", self.handle_connect)
-        self.printer.register_event_handler("homing:home_rails_begin", self._handle_home_rails_begin)
-        self.printer.register_event_handler("homing:home_rails_end", self._handle_home_rails_end)
+        # self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        # self.printer.register_event_handler("klippy:connect", self.handle_connect)
+        # self.printer.register_event_handler("homing:home_rails_begin", self._handle_home_rails_begin)
+        # self.printer.register_event_handler("homing:home_rails_end", self._handle_home_rails_end)
 
         ######
         # TODO: Move to ktc.
@@ -114,23 +116,18 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         # self.saved_position = None
         ######
 
-    @property
-    def state(self):
-        return self._state
-    @state.setter
-    def state(self, value):
-        self._state = self.StateType[str(value).upper()]
-    
     def handle_ready(self):
         return
         # if self.init_mode == self.InitModeType.ON_START:
         #     self.initialize()
 
     def _handle_home_rails_begin(self, homing_state, rails):
+        return
         if self.init_mode == self.InitModeType.HOMING_START:
             self.initialize()
             
     def _handle_home_rails_end(self, homing_state, rails):
+        return
         if self.init_mode == self.InitModeType.HOMING_END:
             self.initialize()
 
