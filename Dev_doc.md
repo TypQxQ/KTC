@@ -84,8 +84,8 @@ If "inherits from" is a tool/changer that has not configured == true and not the
 >   - TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
 >   - TOOL_NONE_N: -1
 >   - TOOL_UNKNOWN_N: -2
->   - TOOL_UNKNOWN: Instance KtcBaseToolClass: name="KTC_Unknown", number=TOOL_UNKNOWN_N
->   - TOOL_NONE = Instance KtcBaseToolClass:name="KTC_None", number=TOOL_NONE_N
+>   - TOOL_UNKNOWN: Instance KtcBaseToolClass: name="tool_unknown", number=TOOL_UNKNOWN_N
+>   - TOOL_NONE = Instance KtcBaseToolClass:name="tool_none", number=TOOL_NONE_N
 
 
 ## Python files:
