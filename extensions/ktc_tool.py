@@ -6,7 +6,6 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 import typing
-from . import ktc   # Toolchanger has a type check on ln 210.
 from .ktc_base import *
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
@@ -18,7 +17,7 @@ if typing.TYPE_CHECKING:
     # from . import ktc_persisting
 
 
-class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
+class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     """Class for a single tool in the toolchanger."""
     HEATER_STATE_OFF = 0
     HEATER_STATE_STANDBY = 1
@@ -200,7 +199,7 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
     @toolchanger.setter
     def toolchanger(self, value):
         # TODO: Change this to use the base class instead of the specific class.
-        if value is not None and not isinstance(value, ktc.KtcBaseChangerClass):
+        if value is not None and not isinstance(value, KtcBaseChangerClass):
             raise ValueError("Toolchanger must be a KtcToolchanger object.")
         self._toolchanger = value
         
@@ -276,6 +275,9 @@ class KtcTool(ktc.KtcBaseToolClass, ktc.KtcConstantsClass):
         else:
             self.select_tool_actual(restore_mode)
 
+    def select(self):
+        return
+        
     # To avoid recursive remaping.
     def select_tool_actual(self, restore_mode = None):
         current_tool_id = int(self._ktc.active_tool_n)

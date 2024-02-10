@@ -10,16 +10,16 @@ from enum import unique
 import typing
 from .ktc_base import *
 
-from . import ktc
+# from . import ktc
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from .klippy import configfile
     # from .klippy import klippy, gcode
     from .klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_log, ktc_persisting, ktc_tool
+    from . import ktc_persisting, ktc_tool
 
-class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
+class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
     A "default_toolchanger" will be initialized if no toolchanger
@@ -37,7 +37,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         self.init_order = self.InitOrderType.get_value_from_configuration(
             config, "init_order", self.InitOrderType.INDEPENDENT)
 
-        self.active_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
+        self.selected_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
 
         # Load the parent tool if it is defined.
         self.parent_tool = None
@@ -84,7 +84,8 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         # something else than independent.
         if self.init_order != self.InitOrderType.INDEPENDENT and self.parent_tool is not None:
             raise Exception(
-                "Toolchanger %s has no parent tool defined but init_order is set to AFTER_PARENT." % self.name
+                "Toolchanger %s has no parent tool " % self.name
+                + "defined but init_order is set to AFTER_PARENT."
             )
 
         # Check if the parent tool is initialized if the init_order is set to
@@ -99,7 +100,8 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         # be after the parent tool is selected.
         if self.init_order == self.InitOrderType.AFTER_PARENT_SELECTED:
             # Parent toolchanger should be initialized now if possible.
-            if self.parent_tool.toolchanger.state < self.StateType.READY:
+            if (self.parent_tool is not None and 
+                self.parent_tool.toolchanger.state < self.StateType.READY):
                 raise Exception(
                     "Toolchanger %s has parent tool %s that resides on toolchanger %s " 
                     % (self.name, self.parent_tool.name, self.parent_tool.toolchanger.name) +
@@ -107,8 +109,9 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
                     + "is set to AFTER_PARENT_SELECTED."
                 )
 
-            if (self.parent_tool.toolchanger.state < self.StateType.ENGAGED and
-                self.parent_tool.toolchanger.active_tool != self.parent_tool):
+            if (self.parent_tool is not None and
+                self.parent_tool.toolchanger.state < self.StateType.ENGAGED and
+                self.parent_tool.toolchanger.selected_tool != self.parent_tool):
                 self.parent_tool.select()
 
         # Get the active tool from the persistent variables.
@@ -118,17 +121,17 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
 
         # Set the active tool to the tool with the name from the persistent variables.
         # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
-        self.active_tool = self.tools.get(active_tool_name, None)
-        if self.active_tool is None:
-            self.active_tool = self.TOOL_UNKNOWN
+        self.selected_tool = self.tools.get(active_tool_name, None)
+        if self.selected_tool is None:
+            self.selected_tool = self.TOOL_UNKNOWN
             self.log.always(
                 "ktc_toolchanger.initialize(): Active tool "
                 + "%s not found for ktc_toolchanger %s. Using tool %s."
-                % (active_tool_name, self.name, self.active_tool.name)
+                % (active_tool_name, self.name, self.selected_tool.name)
             )
 
         self.log.trace("ktc_toolchanger[%s].initialize(): Loaded persisted active tool: %s." 
-                       % (self.name, self.active_tool.name))
+                       % (self.name, self.selected_tool.name))
 
         # Run the init gcode template if it is defined.
         if self._init_gcode != "":
@@ -143,23 +146,23 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
             self.state = self.StateType.INITIALIZED
             
         self.log.trace("ktc_toolchanger[%s].initialize(): Complete." % self.name)
-        self.log.trace("ktc_toolchanger[%s].active_tool: %s." % (self.name, self.active_tool.name))
+        self.log.trace("ktc_toolchanger[%s].selected_tool: %s." % (self.name, self.selected_tool.name))
         self.log.trace("ktc_toolchanger[%s].state: %s." % (self.name, self.state))
         
         if self._ktc.default_toolchanger == self:
-            self._ktc.active_tool = self.active_tool
+            self._ktc.selected_tool = self.selected_tool
             self.log.trace("ktc.active_tool set to: %s." % self._ktc.active_tool.name)
            
         
     
-        # if self.active_tool == self.TOOL_NONE:
+        # if self.selected_tool == self.TOOL_NONE:
         #     self.disengage()
         # else:
         #     self.engage(True)
         #     self.log.always(
         #     )
 
-        # self._ktc.active_tool = self.active_tool
+        # self._ktc.active_tool = self.selected_tool
 
     def engage(self, ignore_engaged=False) -> bool:
         try:
@@ -242,8 +245,8 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         status = {
             # "global_offset": self.global_offset,
             "name": self.name,
-            "active_tool": self.active_tool.name,
-            "active_tool_n": self.active_tool.number,
+            "selected_tool": self.selected_tool.name,
+            "selected_tool_n": self.selected_tool.number,
             "state": self.state,
             "init_mode": self.init_mode,
             "tool_names": list(self.tools),
@@ -256,7 +259,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
         return status
 
     @unique
-    class InitModeType(str, ktc.KtcConfigurableEnum):
+    class InitModeType(str, KtcConfigurableEnum):
         """Constants for the initialization mode of the toolchanger.
         Inherits from str so it can be JSON serializable."""
         MANUAL = "manual"
@@ -267,7 +270,7 @@ class KtcToolchanger(ktc.KtcBaseChangerClass, ktc.KtcConstantsClass):
             # HOMING_END = "homing_end"
 
     @unique
-    class InitOrderType(str, ktc.KtcConfigurableEnum):
+    class InitOrderType(str, KtcConfigurableEnum):
         """Constants for the initialization order of the toolchanger."""
         INDEPENDENT  = "independent"
         AFTER_PARENT_SELECTED = "after_parent_selected"

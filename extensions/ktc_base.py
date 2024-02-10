@@ -14,7 +14,7 @@ from enum import IntEnum, unique, Enum
 if typing.TYPE_CHECKING:
     from .klippy import configfile, gcode
     from .klippy import klippy
-    from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc
+    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
@@ -184,7 +184,7 @@ class KtcBaseChangerClass(KtcBaseClass):
         self.name: str = str(config.get_name()).split(" ", 1)[1]
         self.parent_tool = None # The parent tool of the toolchanger if it is not default changer.
         # TODO: Change to selected_tool
-        self.active_tool = None
+        self.selected_tool = None
         self.tools: dict[str, 'ktc_tool.KtcTool'] = {}
 
 class KtcBaseToolClass(KtcBaseClass):

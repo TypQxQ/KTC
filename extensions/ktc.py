@@ -287,7 +287,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         # Set the active tool in the toolchanger if not TOOL_NONE or TOOL_UNKNOWN.
         if self.__active_tool.toolchanger is not None:
-            self.__active_tool.toolchanger.active_tool = tool
+            self.__active_tool.toolchanger.selected_tool = tool
 
         self.log.trace("ktc.active_tool set to: " + tool.name)
 
