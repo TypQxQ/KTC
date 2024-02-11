@@ -35,8 +35,16 @@ Minimum configuration would be one tool declared.
         3- Make a dictionary of tools that are toolchanger parents.
         3- Run on first tool of default_toolchanger
             4- Run on first toolchanger having the above tool as parent from (3)
-All obj having ran configure_inherited_params get configured = true.
-If "inherits from" is a tool/changer that has not configured == true and not the same toolchanger (for tools) then error: "inherit from must point to obj on same or previous level."
+            4b- Run on next
+        3b- Run on next
+All obj having ran configure_inherited_params get state=configured.
+
+## Tool Heaters
+When a tool has a heater it checks if a heater obj exists for it in ktc.heaters[]
+If it exists, then link to it.
+If it does not exist, create with own timers. Own object.
+When selecting tool, check if heater changes.
+Active_heater in ktc? maybe a private one.
 
 
 - ktc runs .initialize() on all toolchangers with .init_mode == "ON_START" recursevly.

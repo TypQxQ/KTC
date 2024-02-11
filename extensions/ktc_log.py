@@ -49,7 +49,7 @@ class KtcLog:
         self.config = config
         self.printer : 'klippy.Printer' = config.get_printer()
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
-        self.ktc_persistent = None # type: ignore # Referenced in handle_connect
+        # self.ktc_persistent = None # type: ignore # Referenced in handle_connect
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -57,9 +57,12 @@ class KtcLog:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
         # Read and load configuration
-        self.log_level = config.getint("log_level", default=1, minval=0, maxval=3)      #type: ignore # Klippy is not type checked.
-        self.logfile_level = config.getint("logfile_level", default=3,                  #type: ignore # Klippy is not type checked.
-                                           minval=-1, maxval=4)
+        self.log_level = config.getint(
+            "log_level", default=1,      #type: ignore # Klippy is not type checked.
+            minval=0, maxval=3)
+        self.logfile_level = config.getint(
+            "logfile_level", default=3,  #type: ignore # Klippy is not type checked.
+            minval=-1, maxval=4)
 
         # Initialize Logger variable
         self._ktc_logger = None
@@ -90,7 +93,7 @@ class KtcLog:
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent = typing.cast(
+        self.ktc_persistent = typing.cast(      # pylint: disable=attribute-defined-outside-init
             'ktc_persisting.KtcPersisting', self.printer.lookup_object( "ktc_persisting"))
 
         # Register G-code commands
@@ -122,7 +125,8 @@ class KtcLog:
 
     def handle_disconnect(self):
         """Handle the disconnect event. This is called when the printer disconnects from Klipper."""
-        self.ktc_persistent.disconnect()  # Close the persistent variables file
+        if self.ktc_persistent is not None:
+            self.ktc_persistent.disconnect()  # Close the persistent variables file
 
     ####################################
     # LOGGING METHODS                  #
@@ -614,17 +618,11 @@ class KtcLog:
 
             # TODO Delete when confirmed working
             self.trace(
-                "_increase_tool_time_diff for Tool: %s: start_time: %s, self.tool_stats[tool.name].start_time: %s"
-                % (
-                    tool.name,
-                    start_time,
-                    getattr(
-                        self.tool_stats[tool.name],
-                        "start_" + final_time_key,
-                        "Not found",
-                    ),
+                f"_increase_tool_time_diff for Tool: {tool.name}: start_time: "
+                + f"{start_time}, self.tool_stats[tool.name].start_time: "
+                + f"{getattr(self.tool_stats[tool.name], 'start_' + final_time_key, 'Not found')}"
                 )
-            )
+
         except Exception as e:
             # Handle any exceptions that occur during the process
             print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")

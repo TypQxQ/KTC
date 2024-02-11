@@ -13,6 +13,7 @@ from enum import IntEnum, unique, Enum
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from .klippy import configfile, gcode
+    from .klippy.extras import gcode_macro as klippy_gcode_macro
     from .klippy import klippy
     from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
@@ -54,7 +55,6 @@ class KtcBaseClass:
 
         # Can contain "X", "Y", "Z" or a combination.
         self.requires_axis_homed: str = ""
-        self.log = None # type: ignore # We are loading it later.
         self._state = self.StateType.NOT_CONFIGURED
 
         # If this is a empty object then don't load the config.
@@ -65,8 +65,8 @@ class KtcBaseClass:
         self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
         self.params = self.get_params_dict_from_config(config)
-        self.log = None # type: ignore # We are loading it later.
-        self._ktc = None # type: ignore # We are loading it later.
+        self.log: 'ktc_log.KtcLog' = None # type: ignore # We are loading it later.
+        self._ktc: 'ktc.Ktc' = None # type: ignore # We are loading it later.
 
         # Get inheritable parameters from the config.
         self._engage_gcode = config.get("engage_gcode", "")  # type: ignore
@@ -182,10 +182,12 @@ class KtcBaseChangerClass(KtcBaseClass):
     def __init__(self, config: 'configfile.ConfigWrapper'):
         super().__init__(config)
         self.name: str = str(config.get_name()).split(" ", 1)[1]
-        self.parent_tool = None # The parent tool of the toolchanger if it is not default changer.
-        # TODO: Change to selected_tool
+        # The parent tool of the toolchanger if it is not default changer.
+        self.parent_tool: 'ktc_tool.KtcTool' = None # type: ignore
         self.selected_tool = None
         self.tools: dict[str, 'ktc_tool.KtcTool'] = {}
+        self._engage_gcode_template: klippy_gcode_macro.GCodeMacro = None # type: ignore
+        self._disengage_gcode_template: klippy_gcode_macro.GCodeMacro = None # type: ignore
 
 class KtcBaseToolClass(KtcBaseClass):
     '''Base class for tools. Contains common methods and properties.'''
@@ -195,10 +197,11 @@ class KtcBaseToolClass(KtcBaseClass):
 
         self.name = name        # Override the name in case it is supplied.
         self.number = number
-        self.toolchanger: typing.Optional['ktc_toolchanger.KtcToolchanger'] = None
+        self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
         # TODO: Change to array of fans
         self.fan = None
         self.extruder = None
+        # TODO: Change to heater object
         self.heater = None
         # 0 = off, 1 = standby temperature, 2 = active temperature.
         self.heater_state = 0

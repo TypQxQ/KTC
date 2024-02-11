@@ -5,14 +5,13 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast, typing
-from enum import IntEnum, unique, Enum
-from .ktc_base import *
+import typing
+# from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
+from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass # pylint: disable=relative-beyond-top-level
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from .klippy import configfile, gcode
-    from .klippy import klippy
+    from .klippy import configfile
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
@@ -33,7 +32,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.all_tools_by_number: dict[
             int, 'ktc_tool.KtcTool'] = {}
         self.all_toolchangers: dict[str, 'ktc_toolchanger.KtcToolchanger'] = {}
-        self._tools_having_tc: typing.Dict['ktc_tool.KtcTool', 'ktc_toolchanger.KtcToolchanger'] = {}
+        self._tools_having_tc: typing.Dict[
+            'ktc_tool.KtcTool','ktc_toolchanger.KtcToolchanger'] = {}
 
         self.__active_tool = self.TOOL_UNKNOWN  # The currently active tool.
 
@@ -71,7 +71,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def handle_connect(self):
         '''This method is called when all objects are loaded, initialized and configured.'''
         # Reference the log object here to avoid circular imports.
-        self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object("ktc_log"))
+        self.log = typing.cast(     #pylint: disable=attribute-defined-outside-init
+            'ktc_log.KtcLog', self.printer.lookup_object("ktc_log"))
 
         ############################
         # Configure default toolchanger and tools
@@ -126,7 +127,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self._recursive_initialize_toolchangers(
             self.default_toolchanger,
             self.default_toolchanger.__class__.InitModeType.ON_START)
-        
+
     def _config_default_toolchanger(self):
         '''Set the default toolchanger and validate it. 
         '''
@@ -247,7 +248,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         and have a parent tool that has been initialized.'''
         if tc.init_mode == init_mode:
             tc.initialize()
-        
+
         # Check if any toolchangers exist on next level and run this method for them.
         for tool in [tool for tool in tc.tools.values() if tool in self._tools_having_tc]:
             self._recursive_initialize_toolchangers(self._tools_having_tc[tool], init_mode)
@@ -315,20 +316,20 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
         "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]"
-        + " [IGNORE_ENGAGED: False]")
+        + " [DISREGARD_ENGAGED: False]")
     def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd=None):
-        ignore_engaged = gcmd.get("IGNORE_ENGAGED", False)
-        if isinstance(ignore_engaged, str):
-            if ignore_engaged.lower() == "true":
-                ignore_engaged = True
+        disregard_engaged = gcmd.get("DISREGARD_ENGAGED", False)
+        if isinstance(disregard_engaged, str):
+            if disregard_engaged.lower() == "true":
+                disregard_engaged = True
             else:
-                ignore_engaged = False
-        if isinstance(ignore_engaged, int):
-            if ignore_engaged > 0:
-                ignore_engaged = True
+                disregard_engaged = False
+        if isinstance(disregard_engaged, int):
+            if disregard_engaged > 0:
+                disregard_engaged = True
             else:
-                ignore_engaged = False
-        self.parse_gcmd_get_toolchanger(gcmd).engage(ignore_engaged = ignore_engaged)
+                disregard_engaged = False
+        self.parse_gcmd_get_toolchanger(gcmd).engage(disregard_engaged = disregard_engaged)
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )

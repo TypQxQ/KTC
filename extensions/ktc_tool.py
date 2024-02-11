@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 import typing
-from .ktc_base import *
+from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
