@@ -11,7 +11,7 @@ from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass # pylint
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from .klippy import configfile
+    from ...klipper.klippy import configfile
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool
 
 class Ktc(KtcBaseClass, KtcConstantsClass):

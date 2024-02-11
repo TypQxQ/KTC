@@ -17,8 +17,8 @@ from .ktc_base import *
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from .klippy import configfile, gcode
-    from .klippy import klippy
+    from ...klipper.klippy import configfile, gcode
+    from ...klipper.klippy import klippy
     from . import ktc_toolchanger, ktc_tool, ktc_persisting, ktc
 
 class KtcBase3Class:

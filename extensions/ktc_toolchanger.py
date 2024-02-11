@@ -13,8 +13,8 @@ from .ktc_base import KtcConstantsClass, KtcBaseChangerClass, KtcConfigurableEnu
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from .klippy import configfile
-    from .klippy.extras import gcode_macro as klippy_gcode_macro
+    from ...klipper.klippy import configfile
+    from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_persisting, ktc_tool
 
 class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):

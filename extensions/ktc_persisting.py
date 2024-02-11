@@ -19,8 +19,8 @@ import os.path, ast, configparser, typing
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from .klippy import configfile
-    from .klippy import klippy
+    from ...klipper.klippy import configfile
+    from ...klipper.klippy import klippy
     from. import ktc_log
 
 # Constant values moved here to avoid circular imports

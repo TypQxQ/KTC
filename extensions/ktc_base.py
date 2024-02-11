@@ -12,9 +12,8 @@ from enum import IntEnum, unique, Enum
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from .klippy import configfile, gcode
-    from .klippy.extras import gcode_macro as klippy_gcode_macro
-    from .klippy import klippy
+    from ...klipper.klippy import configfile, gcode, klippy
+    from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
 # Constants for the restore_axis_on_toolchange variable.

@@ -7,12 +7,14 @@
 
 import typing
 from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
+# from . import ktc_heater
+from .ktc_heater import KtcHeater
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    # from .klippy import configfile, gcode
-    # from .klippy import klippy
-    # from .klippy.extras import gcode_macro
+    from ...klipper.klippy import configfile, gcode
+    from ...klipper.klippy import klippy
+    from ...klipper.klippy.extras import gcode_macro
     from . import ktc_log, ktc_toolchanger
     # from . import ktc_persisting
 
@@ -22,7 +24,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     HEATER_STATE_OFF = 0
     HEATER_STATE_STANDBY = 1
     HEATER_STATE_ACTIVE = 2
-    
+
     # def __init__(self, config = None, name: str = "", number: int = -3):
     def __init__(self, config):
         # Initialize all static variables before loading from config so we can declare constant tools in ktc.
@@ -582,7 +584,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 else:
                     self.log.trace("set_heater: KTC Tool %s heater state not changed." % self.name )
                 return None
-            if chng_state == self.HEATER_STATE_OFF:                                                                         # If Change to Shutdown
+            if chng_state == KtcHeater.StateType.HEATER_STATE_OFF:                                                                         # If Change to Shutdown
                 self.log.trace("set_heater: KTC Tool %s heater state now OFF." % self.name )
                 self.timer_idle_to_standby.set_timer(0, self.name)
                 self.timer_idle_to_powerdown.set_timer(0.1, self.name)
@@ -700,7 +702,7 @@ class ktc_ToolStandbyTempTimer:
                 self.log.track_heater_standby_end(self)                                                # Set the standby as finishes in statistics.
 
                 tool.get_timer_to_standby().set_timer(0, self.last_virtual_tool_using_physical_timer)        # Stop Standby timer.
-                tool._set_state(KtcTool.HEATER_STATE_OFF)        # Set off state.
+                tool._set_state(KtcHeater.StateType.HEATER_STATE_OFF)        # Set off state.
                 heater.set_temp(0)        # Set temperature to 0.
 
             self.log.track_heater_active_end(self)                                               # Set the active as finishes in statistics.

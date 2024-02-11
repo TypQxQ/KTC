@@ -1,15 +1,9 @@
 # Development doc for KTC
 
 ## Setting up enviroment.
-This is how I set it up and made all type checkings work.
-The standard dev enviroment is using VSCode and working in the KTC directory in the home of the Pi youd for printing.
-The git should point to the repository used for development.
-Add a symbolic link to Klipper with the folowing command, asuming files are as below:
-> ln -s ~/klipper/klippy/ ~/KTC/extensions/klippy
-Add a .gitignore file inside the working directory, having this line:
-> /extensions/klippy/
-That's it.
+It is assumed KTC and Klipper folders are in same directory for typing to work.
 
+## Why so many classes?
 > Using inherited classes from Ktc code can use the BaseClass for typechecks and not cross import.
 > This minimizes risk for circular imports.
 >
