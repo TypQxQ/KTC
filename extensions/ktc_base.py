@@ -25,6 +25,9 @@ TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
 
+DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY = 0.2
+DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
+
 class KtcConfigurableEnum(Enum):
     @classmethod
     def get_value_from_configuration(cls, config: 'configfile.ConfigWrapper', value_name: str,
@@ -75,10 +78,10 @@ class KtcBaseClass:
         self.requires_axis_homed = self.config.get("requires_axis_homed", "")   # type: ignore
         self._tool_select_gcode = config.get("tool_select_gcode", "")     # type: ignore
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", "") # type: ignore
-        self.idle_to_standby_time = self.config.getfloat(
-            "idle_to_standby_time", 0.1)    # type: ignore
-        self.idle_to_powerdown_time = self.config.getfloat(
-            "idle_to_powerdown_time", 0.1)  # type: ignore
+        self.heater_active_to_standby_delay = self.config.getfloat(
+            "heater_active_to_standby_delay", None, 0.1)    # type: ignore
+        self.heater_active_to_powerdown_delay = self.config.getfloat(
+            "heater_active_to_powerdown_delay", None, 0.1)  # type: ignore
 
         # Get initial values from the config.
         self._initiating_config = {}
@@ -140,26 +143,22 @@ class KtcBaseClass:
 
         # Get Offset from persistent storage
         self.offset = self.persistent_state.get("offset", None)
-        if self.offset is None:
-            if parent.offset is not None:
-                self.offset = parent.offset
-            else:   # If topmost parent (ktc) then set to 0,0,0.
+
+        # If this is the topmost parent.
+        if parent == self:
+            if self.heater_active_to_powerdown_delay is None:
+                self.heater_active_to_powerdown_delay = DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY
+                self.heater_active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
+            if self.offset is None:
                 self.offset = [0, 0, 0]
 
-        self.log.always(f"offset for {self.name}: {self.offset}")
-
-        if self._engage_gcode == "":
-            self._engage_gcode = parent._engage_gcode                   # type: ignore # pylint: disable=protected-access
-        if self._disengage_gcode == "":
-            self._disengage_gcode = parent._disengage_gcode             # type: ignore # pylint: disable=protected-access
-        if self._init_gcode == "":
-            self._init_gcode = parent._init_gcode                       # type: ignore # pylint: disable=protected-access
-        if self.requires_axis_homed == "":
-            self.requires_axis_homed = parent.requires_axis_homed       # type: ignore # pylint: disable=protected-access
-        if self._tool_select_gcode == "":
-            self._tool_select_gcode = parent._tool_select_gcode         # type: ignore # pylint: disable=protected-access
-        if self._tool_deselect_gcode == "":
-            self._tool_deselect_gcode = parent._tool_deselect_gcode     # type: ignore # pylint: disable=protected-access
+        params_to_inherit = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
+                             "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
+                             "heater_active_to_standby_delay", "heater_active_to_powerdown_delay"]
+        # Set the parameters from the parent object if they are not set.
+        for v in params_to_inherit:
+            if getattr(self, v) is None:
+                setattr(self, v, getattr(parent, v))
 
         for v in parent.params:
             if v not in self.params:
@@ -307,11 +306,11 @@ class KtcBaseToolClass(KtcBaseClass):
         # 0 = off, 1 = standby temperature, 2 = active temperature.
         self.heater_state = 0
         # Timer to set temperature to standby temperature
-        # after idle_to_standby_time seconds. Set if this tool has an extruder.
-        self.timer_idle_to_standby = None
-        # Timer to set temperature to 0 after idle_to_powerdown_time seconds.
+        # after heater_active_to_standby_delay seconds. Set if this tool has an extruder.
+        self.timer_heater_active_to_standby_delay = None
+        # Timer to set temperature to 0 after heater_active_to_powerdown_delay seconds.
         # Set if this tool has an extruder.
-        self.timer_idle_to_powerdown = None
+        self.timer_heater_active_to_powerdown_delay = None
         # Temperature to set when in active mode.
         # Requred on Physical and virtual tool if any has extruder.
         self.heater_active_temp = 0
@@ -321,11 +320,11 @@ class KtcBaseToolClass(KtcBaseClass):
         # Time in seconds from being parked to setting temperature to
         # standby the temperature above. Use 0.1 to change imediatley
         # to standby temperature. Requred on Physical tool
-        self.idle_to_standby_time = 0.1
+        # self.heater_active_to_standby_delay = 0.1
         # Time in seconds from being parked to setting temperature to 0.
         # Use something like 86400 to wait 24h if you want to disable.
         # Requred on Physical tool.
-        self.idle_to_powerdown_time = 600
+        # self.heater_active_to_powerdown_delay = 600
         self.offset = [0, 0, 0]
 
     def set_offset(self, **kwargs):

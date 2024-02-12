@@ -36,12 +36,16 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             config, "init_order", self.InitOrderType.INDEPENDENT)
 
         self.selected_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
+        
+        self.force_deselect_when_parent_deselects: bool = config.getboolean(
+            "force_deselect_when_parent_deselects", False)  # type: ignore
 
         # Load the parent tool if it is defined.
         self.parent_tool = None # type: typing.Optional['ktc_tool.KtcTool']
         parent_tool_name = config.get("parent_tool", None)  # type: ignore
-        if parent_tool_name is not None:
-            self.parent_tool = typing.cast('ktc_tool.KtcTool', self.printer.load_object(    # type: ignore
+        if parent_tool_name is not None and parent_tool_name != "":
+            self.parent_tool = typing.cast('ktc_tool.KtcTool',
+                                           self.printer.load_object(    # type: ignore
                 config, "ktc_tool " + parent_tool_name))  # type: ignore
             if self.parent_tool is None:
                 raise config.error(
@@ -54,22 +58,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         self.gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro', # type: ignore # pylint: disable=attribute-defined-outside-init
                                   self.printer.lookup_object("gcode_macro"))    # type: ignore
         self.state = self.StateType.CONFIGURED  # pylint: disable=attribute-defined-outside-init # pylint bug
-
-    # @property
-    # def persistent_state(self) -> dict:
-    #     '''Return the persistent state from file.
-    #     Is initialized inside handle_connect.'''
-    #     if self._ktc_persistent is None:
-    #         raise Exception(
-    #             "ktc_toolchanger[%s].persistent_state: ktc_persistent not initialized." % self.name
-    #         )
-    #     v: dict = self._ktc_persistent.content.get("State", {})
-    #     return v.get("ktc_toolchanger_" + self.name.lower(), {})
-
-    # @persistent_state.setter
-    # def persistent_state(self, value: dict):
-    #     self._ktc_persistent.content["State"]["ktc_toolchanger_" + self.name.lower()] = value
-    #     self._ktc_persistent.ready_to_save = True
 
     def initialize(self):
         """Initialize the tool lock."""

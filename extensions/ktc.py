@@ -622,9 +622,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         if actv_tmp is not None:
             set_heater_cmd["heater_active_temp"] = int(actv_tmp)
         if stdb_timeout is not None:
-            set_heater_cmd["idle_to_standby_time"] = stdb_timeout
+            set_heater_cmd["heater_active_to_standby_delay"] = stdb_timeout
         if shtdwn_timeout is not None:
-            set_heater_cmd["idle_to_powerdown_time"] = shtdwn_timeout
+            set_heater_cmd["heater_active_to_powerdown_delay"] = shtdwn_timeout
         if chng_state is not None:
             set_heater_cmd["heater_state"] = chng_state
             # tool.set_heater(heater_state= chng_state)
@@ -638,7 +638,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 % (
                     "*" if tool.heater_state == 2 else " ",
                     tool.heater_active_temp,
-                    tool.idle_to_standby_time,
+                    tool.heater_active_to_standby_delay,
                 )
             )
             msg += (
@@ -646,19 +646,19 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 % (
                     "*" if tool.heater_state == 1 else " ",
                     tool.heater_standby_temp,
-                    tool.idle_to_powerdown_time,
+                    tool.heater_active_to_powerdown_delay,
                 )
             )
             if tool.heater_state != 3:
-                if tool.timer_idle_to_standby.get_status()["next_wake"] == True:
+                if tool.timer_heater_active_to_standby_delay.get_status()["next_wake"] == True:
                     msg += (
                         "\n Will go to standby temperature in in %s seconds."
-                        % tool.timer_idle_to_standby.get_status()["next_wake"]
+                        % tool.timer_heater_active_to_standby_delay.get_status()["next_wake"]
                     )
-                if tool.timer_idle_to_powerdown.get_status()["counting_down"] == True:
+                if tool.timer_heater_active_to_powerdown_delay.get_status()["counting_down"] == True:
                     msg += (
                         "\n Will power down in %s seconds."
-                        % tool.timer_idle_to_powerdown.get_status()["next_wake"]
+                        % tool.timer_heater_active_to_powerdown_delay.get_status()["next_wake"]
                     )
             gcmd.respond_info(msg)
 

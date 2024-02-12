@@ -43,6 +43,27 @@ Active_heater in ktc? maybe a private one.
 
 - ktc runs .initialize() on all toolchangers with .init_mode == "ON_START" recursevly.
 
+## Configuration:
+### KTC (all optional)
+#### Inheritable
+- engage_gcode = "":    Gcode to run at toochanger engage, status from READY to ENGAGED
+- disengage_gcode = "": Gcode to run at toochanger disengage, status from ENGAGED to READY
+- init_gcode = "":      Gcode to run at toolchanger initialization, from CONFIGURED to READY
+- requires_axis_homed = "": Axis in XYZ to be required before tool can be changed, for select
+- tool_select_gcode = "":   Gcode to run whan selecting the tool, from ready to SELECTED
+- tool_deselect_gcode = "": Oposite of above.
+- heater_active_to_standby_delay = 0.1:     Seconds to wait when a tool has been deselected, before changing temperature on heater to standy temperature. 0.1 is a tenth of a second.
+Use something like  86400 to wait 24h if you want to run indefinitly.
+- heater_active_to_powerdown_delay = 0.2: As above but from active to off.
+- init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to initialize to other value.
+
+#### NonInheritable
+
+### KtcToolchanger (all optional)
+- init_mode = MANUAL:    When is the toolchanger initialized in relation to printer start and homing.
+- init_order = INDEPENDENT:   And in relation to the parent tool.
+- force_deselect_when_parent_deselects = False
+- parent_tool = ""
 
 ## Base clases defined in ktc.py
 
