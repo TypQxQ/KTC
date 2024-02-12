@@ -21,7 +21,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         ############################
         # Load the persistent variables object
-        self.ktc_persistent = typing.cast('ktc_persisting.KtcPersisting',
+        self._ktc_persistent = typing.cast('ktc_persisting.KtcPersisting',
             self.printer.load_object(config, "ktc_persisting"))
 
         self.saved_fan_speed = (
@@ -31,6 +31,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.all_tools: dict[str, 'ktc_tool.KtcTool'] = {}
         self.all_tools_by_number: dict[
             int, 'ktc_tool.KtcTool'] = {}
+        self._registered_toolnumbers: list[int] = []
         self.all_toolchangers: dict[str, 'ktc_toolchanger.KtcToolchanger'] = {}
         self._tools_having_tc: typing.Dict[
             'ktc_tool.KtcTool','ktc_toolchanger.KtcToolchanger'] = {}
@@ -229,6 +230,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             # Fill the _tools_having_tc dict with the tools that have a toolchanger as child.
             self._tools_having_tc[tc.parent_tool] = tc  # type: ignore
 
+        self.register_tool_gcode_commands()
+
+    def register_tool_gcode_commands(self):
+        '''Register Gcode commands for all tools having a number.'''
+        new_toolnumbers: list[int] = []
+        for tool in self.all_tools.values():
+            if tool.number is not None and tool.number > self.TOOL_NONE_N:
+                new_toolnumbers.append(tool.number)
+                if tool.number not in self._registered_toolnumbers:
+                    self._registered_toolnumbers.append(tool.number)
+                self.gcode.register_command(
+                    "KTC_T" + str(tool.number), tool.select(), False, 
+                    "Select tool " + tool.name + " with number " + str(tool.number)
+                )
+        # Get all toolnumbers from self._registered_toolnumbers that are not in new_toolnumbers.
+        for toolnumber in [x for x in self._registered_toolnumbers if x not in new_toolnumbers]:
+            self.gcode.register_command("KTC_T" + str(toolnumber), None)
+
     def _recursive_configure_inherited_attributes(
         self, tc: 'ktc_toolchanger.KtcToolchanger'):
         '''Recursively configure inherited parameters for all toolchangers and tools.'''
@@ -292,7 +311,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         self.log.trace("ktc.active_tool set to: " + tool.name)
 
-        self.ktc_persistent.save_variable(
+        self._ktc_persistent.save_variable(
             "current_tool", str("'" + tool.name + "'"), section="State", force_save=True
         )
 

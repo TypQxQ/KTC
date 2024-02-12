@@ -20,7 +20,7 @@ import os.path, ast, configparser, typing
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile
-    from ...klipper.klippy import klippy
+    from ...klipper.klippy import klippy, reactor
     from. import ktc_log
 
 # Constant values moved here to avoid circular imports
@@ -30,7 +30,7 @@ KTC_SAVE_VARIABLES_DELAY = 10
 class KtcPersisting:
     def __init__(self, config: 'configfile.ConfigWrapper'):
         self.printer : 'klippy.Printer' = config.get_printer()
-        self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
+        self.reactor: 'reactor.Reactor' = self.printer.get_reactor()
         self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
             config, "ktc_log"
         ))
@@ -75,10 +75,8 @@ class KtcPersisting:
         self.content = sections
 
     def save_variable(self, varname: str, value: str, section: str = "Variables",
-                      force_save: bool = False) -> None:
+                      force_save: bool = False):
         try:
-            self.log.trace("ktc_persisting.save_variable(Varname=%s, valus=%s, value type=%s)" %
-                           (varname, value, type(value)))
             value = ast.literal_eval(value)
         except ValueError as e:
             raise Exception("Unable to parse '%s' as a literal: %s" % (value, e)) from e
@@ -88,11 +86,14 @@ class KtcPersisting:
             self.content[section] = {}
 
         self.content[section][varname] = value
-        self.log.trace("save_variable  %s" % (varname,))
         self.ready_to_save = True
 
         if force_save:
-            self._save_changes_timer_event(self.reactor.monotonic())
+            self.force_save()
+
+    def force_save(self):
+        self.ready_to_save = True
+        self._save_changes_timer_event(self.reactor.monotonic())
 
     def _save_changes_timer_event(self, eventtime):
         try:

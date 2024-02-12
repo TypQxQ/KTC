@@ -6,85 +6,41 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 import typing
-from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
-# from . import ktc_heater
-from .ktc_heater import KtcHeater
+from .ktc_base import KtcBaseToolClass, KtcConstantsClass, KtcBaseChangerClass # pylint: disable=relative-beyond-top-level, wildcard-import
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
     from ...klipper.klippy import klippy
-    from ...klipper.klippy.extras import gcode_macro
-    from . import ktc_log, ktc_toolchanger
+    from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
+    from . import ktc_toolchanger
     # from . import ktc_persisting
+    from .ktc_heater import KtcHeater
 
 
 class KtcTool(KtcBaseToolClass, KtcConstantsClass):
-    """Class for a single tool in the toolchanger."""
-    HEATER_STATE_OFF = 0
-    HEATER_STATE_STANDBY = 1
-    HEATER_STATE_ACTIVE = 2
-
-    # def __init__(self, config = None, name: str = "", number: int = -3):
-    def __init__(self, config):
+    """Class for a single tool in the toolchanger"""
+    def __init__(self, config: 'configfile.ConfigWrapper'):
         # Initialize all static variables before loading from config so we can declare constant tools in ktc.
-        # self.config = config
         super().__init__(config)
         # self._toolchanger = None            # Internal Toolchanger object. Used for property setter.
 
-        # self.name: str = name               # Name of the tool.
-        # self.number: int = number           # Tool number to register this tool as. Default as not defined, -3.
-        # self.extruder = None                # Name of extruder connected to this tool. Defaults to None.
-        # self.params = {}
-        
         # TODO: Change this to a list of fans.
         # self.fan = None                     # Name of general fan configuration connected to this tool as a part fan. Defaults to "none".
 
-        # self.lazy_home_when_parking = None  # (default: 0 - disabled) - When set to 1, will home unhomed XY axes if needed and will not move any axis if already homed and parked. 2 Will also home Z if not homed.
                                             # Wipe. -1 = none, 1= Only load filament, 2= Wipe in front of carriage, 3= Pebble wiper, 4= First Silicone, then pebble. Defaults to None.
-        self.zone = None                    # Position of the parking zone in the format X, Y, Z. Defaults to None.
-        self.park = None                    # Position to move to when fully parking the tool in the dock in the format X, Y
-
-        # self.offset = None                  # Offset of the nozzle in the format X, Y, Z
-
         #TODO: Removed from config. Need to be removed from code.
         self.is_virtual = False
         self.parentTool_id = self.TOOL_NONE_N      # Parent tool is used as a Physical parent for all tools of this group. Only used if the tool i virtual. None gets remaped to -1.
         self.parentTool = None              # Initialize physical parent as a dummy object.
+        self.virtual_loaded = -1            # The abstract tool loaded in the physical tool.
 
-
-        # self.pickup_gcode = None            # The plain gcode string for pickup of the tool.
-        # self.dropoff_gcode = None           # The plain gcode string for droppoff of the tool.
 
         #TODO: Needs moving to regular gcode.
         self.virtual_toolload_gcode = None  # The plain gcode string is to load for virtual tool having this tool as parent. This is for loading the virtual tool.
         self.virtual_toolunload_gcode = None# The plain gcode string is to unload for virtual tool having this tool as parent. This is for unloading the virtual tool.
 
         self.unload_virtual_at_dropoff = None          # If it takes long time to unload/load it may be faster to leave it loaded and force unload at end of print.
-
-        self.virtual_loaded = -1            # The abstract tool loaded in the physical tool.
-
-
-
-        # self.heater_state = 0               # 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
-        # self.timer_idle_to_standby = None   # Timer to set temperature to standby temperature after idle_to_standby_time seconds. Set if this tool has an extruder.
-        # self.timer_idle_to_powerdown = None # Timer to set temperature to 0 after idle_to_powerdown_time seconds. Set if this tool has an extruder.
-        # self.heater_active_temp = 0         # Temperature to set when in active mode. Placeholder. Requred on Physical and virtual tool if any has extruder.
-        # self.heater_standby_temp = 0        # Temperature to set when in standby mode.  Placeholder. Requred on Physical and virtual tool if any has extruder.
-        # self.idle_to_standby_time = 0.1    # Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature. Requred on Physical tool
-        # self.idle_to_powerdown_time = 600   # Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
-
-
-        # If called without config then just return a dummy object.
-        # if config is None:
-        #     return
-
-        # Initialize object references.
-        # self.printer = config.get_printer()
-        # self.gcode = self.printer.lookup_object('gcode')
-        self.gcode_macro = self.printer.load_object(config, 'gcode_macro')
-        self.ktc : 'ktc.Ktc' = self.printer.load_object(config, 'ktc')
-        self.log : 'ktc_log.KtcLog' = self.printer.load_object(config, 'ktc_log')
 
         ##### Name #####
         self.name = config.get_name().split(" ", 1)[1]
@@ -97,16 +53,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         # Will be added to the ktc.tools_by_number dict in ktc._config_tools()
         self.number = config.getint('tool_number', None) # type: ignore
 
-        ###### Inherited parameters from toolchanger #####
-        # Empty parameters are overriden after the toolchanger is loaded.
-        # Tool Selection and Deselection G-Code macros
-        self._tool_select_gcode = self._config_get('tool_select_gcode', "")
-        self._tool_deselect_gcode = self.config.get('tool_deselect_gcode', "")
-
-        ##### Inherited Parameters #####
-        # self.requires_axis_homed = self.config_get('requires_axis_homed')
-        _ = self.config.get('requires_axis_homed', "")
-
         ##### Toolchanger #####
         # If none, then the default toolchanger will be set in ktc._config_default_toolchanger()
         toolchanger_name = config.get('toolchanger', None)
@@ -114,9 +60,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.toolchanger = typing.cast(     # type: ignore
                 'ktc_toolchanger.KtcToolchanger', 
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name))
-
-        ##### Params #####
-        # self.params = self.get_params_dict_from_config(config)
 
         ##### Physical Parent #####
         _ = config.getint('parent_tool', self.TOOL_NONE_N)
@@ -141,15 +84,10 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         ##### Fan #####
         self.fan = self._config_get('fan')
 
-        ##### Lazy Home when parking #####
-        self.lazy_home_when_parking = False # self._config_getbool('lazy_home_when_parking', False)
-
         ##### Coordinates #####
-        self.zone = self._config_get('zone', "0,0,0")
-        self.park = self._config_get('park', "0,0,0")
         self.offset = self._config_get('offset', "0,0,0")
 
-        for v in [self.zone, self.park, self.offset]:
+        for v in [self.offset]:
             if not isinstance(v, list):
                 v = str(v).split(',')
 
@@ -160,12 +98,31 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     "Coordinates of section '%s' is not well formated: %s" % 
                     (config.get_name(), str(e))
                     + "Coordinates must be a list of x,y,z.For example, 0.0,0.1,2.3")
+        
+
+    @property
+    def toolchanger(self) -> 'ktc_toolchanger.KtcToolchanger':
+        return self._toolchanger
+
+    @toolchanger.setter
+    def toolchanger(self, value):
+        # TODO: Change this to use the base class instead of the specific class.
+        if value is not None and not isinstance(value, KtcBaseChangerClass):
+            raise ValueError("Toolchanger must be a KtcToolchanger object.")
+        self._toolchanger = value
+
+    def configure_inherited_params(self):
+        super().configure_inherited_params()
+        if self.config is None:
+            return
 
         ##### Standby settings (if the tool has an extruder) #####
         if self.extruder is not None:
-            self.idle_to_standby_time = self._config_getfloat("idle_to_standby_time", self.idle_to_standby_time)
+            self.idle_to_standby_time = self._config_getfloat(
+                "idle_to_standby_time", self.idle_to_standby_time)
 
-            self.idle_to_powerdown_time = self._config_getfloat("idle_to_powerdown_time", self.idle_to_powerdown_time)
+            self.idle_to_powerdown_time = self._config_getfloat(
+                "idle_to_powerdown_time", self.idle_to_powerdown_time)
             # if self.idle_to_powerdown_time is None:
             #     self.idle_to_powerdown_time = self.toolgroup.idle_to_powerdown_time
 
@@ -180,49 +137,29 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.timer_idle_to_standby = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_STANDBY)
                 self.timer_idle_to_powerdown = ktc_ToolStandbyTempTimer(self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN)
 
-        ##### G-Code VirtualToolChange #####
-        # if self.is_virtual:
-        self.virtual_toolload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolload_gcode')
-        self.virtual_toolunload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolunload_gcode')
-
-        ##### Register Tool select command #####
-        if self.number is not None:
-            self.gcode.register_command("KTC_T" + str(self.number), self.cmd_SelectTool, desc=self.cmd_SelectTool_help)
-    
-        # ##### Add to list of tools #####
-        # self._ktc.all_tools[self.name] = self
-        # if self.toolchanger is not None:
-        #     self.toolchanger.tools[self.name] = self
-            
-    @property
-    def toolchanger(self) -> 'ktc_toolchanger.KtcToolchanger':
-        return self._toolchanger
-    
-    @toolchanger.setter
-    def toolchanger(self, value):
-        # TODO: Change this to use the base class instead of the specific class.
-        if value is not None and not isinstance(value, KtcBaseChangerClass):
-            raise ValueError("Toolchanger must be a KtcToolchanger object.")
-        self._toolchanger = value
-        
-    def configure_inherited_params(self):
-        super().configure_inherited_params()
-        if self.config is None:
-            return
         ##### G-Code ToolChange #####
-        self.tool_select_gcode_template = self.gcode_macro.load_template(
+        # Initialize object references.
+        self._gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro', # type: ignore # pylint: disable=attribute-defined-outside-init
+                                  self.printer.lookup_object("gcode_macro"))    # type: ignore
+
+        self.tool_select_gcode_template = self._gcode_macro.load_template(
             self.config, "", self._tool_select_gcode)
-        self._tool_deselect_gcode_template = self.gcode_macro.load_template(
+        self._tool_deselect_gcode_template = self._gcode_macro.load_template(
             self.config, "", self._tool_deselect_gcode)
         
         ##### Inherited Parameters #####
         self.requires_axis_homed = self.config.get('requires_axis_homed', self.toolchanger.requires_axis_homed)
 
         # Tool Selection and Deselection G-Code macros
-        self.tool_select_gcode_template = self.gcode_macro.load_template(self.config, "tool_select_gcode", "")
-        self._tool_deselect_gcode_template = self.gcode_macro.load_template(self.config, "tool_deselect_gcode", "")
+        self.tool_select_gcode_template = self._gcode_macro.load_template(self.config, "tool_select_gcode", "")
+        self._tool_deselect_gcode_template = self._gcode_macro.load_template(self.config, "tool_deselect_gcode", "")
         
         self.state = self.StateType.CONFIGURED
+
+        ##### Need recoding
+        # if self.is_virtual:
+        # self.virtual_toolload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolload_gcode')
+        # self.virtual_toolunload_gcode_template = self._get_gcode_template_with_inheritence('virtual_toolunload_gcode')
 
     def _config_getbool(self, config_param, default_value = None):
         inherited_value = default_value
@@ -251,14 +188,13 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         #     temp_gcode = ""
 
         # gcode = self.get_config(config_param, temp_gcode)               # Get from this config and fallback on previous.
-        template = self.gcode_macro.load_template(self.config, config_param, "")#temp_gcode)
+        template = self._gcode_macro.load_template(self.config, config_param, "")#temp_gcode)
         return template
 
     def get_config(self, config_param, default = None):
         if self.config is None: return None
         return self.config.get(config_param, default)
         
-    cmd_SelectTool_help = "Select Tool"
     def cmd_SelectTool(self, gcmd):
         self.log.trace("KTC T" + str(self.number) + " Selected.")
         # Allow either one.
@@ -297,9 +233,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         
         self.log.tool_stats[self.name].selects_started += 1
 
-
         if self.extruder is not None:               # If the new tool to be selected has an extruder prepare warmup before actual tool change so all unload commands will be done while heating up.
-            self.set_heater(heater_state = self.HEATER_STATE_ACTIVE)
+            self.set_heater(heater_state = KtcHeater.StateType.HEATER_STATE_ACTIVE)
 
         # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
         # Otherwise do not change either the restore_axis_on_toolchange or saved_position.
@@ -363,11 +298,11 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                             curtime = self.printer.get_reactor().monotonic()
                             # heater = self.printer.lookup_object(self.extruder).get_heater()
 
-                            uv.set_heater(heater_state = self.HEATER_STATE_ACTIVE)
-                            # if int(self.heater_state) == self.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):
+                            uv.set_heater(heater_state = KtcHeater.StateType.HEATER_STATE_ACTIVE)
+                            # if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):
                             self._ktc._Temperature_wait_with_tolerance(curtime, self.extruder, 2)
                         uv.UnloadVirtual()
-                        self.set_heater(heater_state = self.HEATER_STATE_ACTIVE)
+                        self.set_heater(heater_state = KtcHeater.StateType.HEATER_STATE_ACTIVE)
 
 
                 self.log.trace("cmd_SelectTool: T" + str(self.number) + "- Virtual - Picked up physical tool and now Loading virtual tool.")
@@ -382,7 +317,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         # Check if homed
         if not self._ktc.printer_is_homed_for_toolchange():
-            raise self.printer.command_error("KtcTool.Pickup: Printer not homed and Lazy homing option for tool %s is: %s" % (self.name, str(self.lazy_home_when_parking)))
+            raise self.printer.command_error("KtcTool.Pickup: Printer not homed and Lazy homing option for tool %s is: " % (self.name))
 
         # If has an extruder then activate that extruder.
         if self.extruder is not None:
@@ -420,7 +355,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         # Check if homed
         if not self._ktc.printer_is_homed_for_toolchange():
-            self.log.always("KtcTool.Dropoff: Printer not homed and Lazy homing option is: " + str(self.lazy_home_when_parking))
+            self.log.always("KtcTool.Dropoff: Printer not homed")
             return None
 
         # Turn off fan if has a fan.
@@ -547,11 +482,11 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         for i in kwargs:
             if i == "heater_active_temp":
                 self.heater_active_temp = kwargs[i]
-                if int(self.heater_state) == self.HEATER_STATE_ACTIVE:
+                if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE:
                     heater.set_temp(self.heater_active_temp)
             elif i == "heater_standby_temp":
                 self.heater_standby_temp = kwargs[i]
-                if int(self.heater_state) == self.HEATER_STATE_STANDBY:
+                if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_STANDBY:
                     heater.set_temp(self.heater_standby_temp)
             elif i == "idle_to_standby_time":
                 self.idle_to_standby_time = kwargs[i]
@@ -561,7 +496,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 changing_timer = True
 
         # If already in standby and timers are counting down, i.e. have not triggered since set in standby, then reset the ones counting down.
-        if int(self.heater_state) == self.HEATER_STATE_STANDBY and changing_timer:
+        if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_STANDBY and changing_timer:
             if self.timer_idle_to_powerdown.get_status()["counting_down"] == True:
                 self.timer_idle_to_powerdown.set_timer(self.idle_to_powerdown_time, self.name)
                 if self.idle_to_powerdown_time > 2:
@@ -575,10 +510,10 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         # Change Active mode, Continuing with part two of temp changing.:
         if "heater_state" in kwargs:
             if self.heater_state == chng_state:                                                         # If we don't actually change the state don't do anything.
-                if chng_state == self.HEATER_STATE_ACTIVE:
+                if chng_state == KtcHeater.StateType.HEATER_STATE_ACTIVE:
                     self.log.trace("set_heater: KTC Tool %s heater state not changed. Setting active temp." % self.name )
                     heater.set_temp(self.heater_active_temp)
-                elif chng_state == self.HEATER_STATE_STANDBY:
+                elif chng_state == KtcHeater.StateType.HEATER_STATE_STANDBY:
                     self.log.trace("set_heater: KTC Tool %s heater state not changed. Setting standby temp." % self.name )
                     heater.set_temp(self.heater_standby_temp)
                 else:
@@ -590,16 +525,16 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.timer_idle_to_powerdown.set_timer(0.1, self.name)
                 # self.log.track_heater_standby_end(self)                                                # Set the standby as finishes in statistics.
                 # self.log.track_heater_active_end(self)                                                # Set the active as finishes in statistics.
-            elif chng_state == self.HEATER_STATE_ACTIVE:                                                                       # Else If Active
+            elif chng_state == KtcHeater.StateType.HEATER_STATE_ACTIVE:                                                                       # Else If Active
                 self.log.trace("set_heater: T%d heater state now ACTIVE." % self.name )
                 self.timer_idle_to_standby.set_timer(0, self.name)
                 self.timer_idle_to_powerdown.set_timer(0, self.name)
                 heater.set_temp(self.heater_active_temp)
                 self.log.track_heater_standby_end(self._ktc.all_tools[tool_for_tracking_heater])     # Set the standby as finishes in statistics.
                 self.log.track_heater_active_start(self._ktc.all_tools[tool_for_tracking_heater])    # Set the active as started in statistics.                                               # Set the active as started in statistics.
-            elif chng_state == self.HEATER_STATE_STANDBY:                                                                       # Else If Standby
+            elif chng_state == KtcHeater.StateType.HEATER_STATE_STANDBY:                                                                       # Else If Standby
                 self.log.trace("set_heater: T%d heater state now STANDBY." % self.name )
-                if int(self.heater_state) == self.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):
+                if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):
                     self.timer_idle_to_standby.set_timer(self.idle_to_standby_time, self.name)
                     self.timer_idle_to_powerdown.set_timer(self.idle_to_powerdown_time, self.name)
                     if self.idle_to_standby_time > 2:
@@ -629,9 +564,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             "parentTool_id": self.parentTool_id,
             "extruder": self.extruder,
             "fan": self.fan,
-            "lazy_home_when_parking": self.lazy_home_when_parking,
-            "zone": self.zone,
-            "park": self.park,
             "offset": self.offset,
             "heater_state": self.heater_state,
             "heater_active_temp": self.heater_active_temp,

@@ -49,7 +49,6 @@ class KtcLog:
         self.config = config
         self.printer : 'klippy.Printer' = config.get_printer()
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
-        # self.ktc_persistent = None # type: ignore # Referenced in handle_connect
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -93,7 +92,7 @@ class KtcLog:
     def handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
         # Load the persistent variables object here to avoid circular dependencies
-        self.ktc_persistent = typing.cast(      # pylint: disable=attribute-defined-outside-init
+        self._ktc_persistent = typing.cast(      # pylint: disable=attribute-defined-outside-init
             'ktc_persisting.KtcPersisting', self.printer.lookup_object( "ktc_persisting"))
 
         # Register G-code commands
@@ -125,8 +124,8 @@ class KtcLog:
 
     def handle_disconnect(self):
         """Handle the disconnect event. This is called when the printer disconnects from Klipper."""
-        if self.ktc_persistent is not None:
-            self.ktc_persistent.disconnect()  # Close the persistent variables file
+        if self._ktc_persistent is not None:
+            self._ktc_persistent.disconnect()  # Close the persistent variables file
 
     ####################################
     # LOGGING METHODS                  #
@@ -171,7 +170,7 @@ class KtcLog:
         self.trace("Loading persisted state.")
 
         # Load general statistics
-        loaded_stats: typing.Dict = self.ktc_persistent.content.get("Statistics", {})
+        loaded_stats: typing.Dict = self._ktc_persistent.content.get("Statistics", {})
         if loaded_stats == {}:
             self.debug("Did not find any saved statistics. Initialized empty.")
 
@@ -189,7 +188,7 @@ class KtcLog:
         For example, load all persisted ktc_toolchanger stats from the Statistics section.
         Return a dict with the loaded items."""
 
-        loaded_stats: dict = self.ktc_persistent.content.get(section, {})
+        loaded_stats: dict = self._ktc_persistent.content.get(section, {})
         if loaded_stats == {}:
             self.debug("Did not find a saved %s section. Initialized empty." % section)
 
@@ -261,7 +260,7 @@ class KtcLog:
                 }
 
                 # Save the tool statistics to file
-                self.ktc_persistent.save_variable(
+                self._ktc_persistent.save_variable(
                     module_name + "_" + item_name, str(item_dict), section=section
                 )
         except Exception as e:

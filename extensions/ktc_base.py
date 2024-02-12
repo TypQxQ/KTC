@@ -14,7 +14,7 @@ from enum import IntEnum, unique, Enum
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode, klippy
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
+    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc, ktc_persisting
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
@@ -68,15 +68,53 @@ class KtcBaseClass:
         self._ktc: 'ktc.Ktc' = None # type: ignore # We are loading it later.
 
         # Get inheritable parameters from the config.
+        # Empty strings are overwritten by the parent object in configure_inherited_params.
         self._engage_gcode = config.get("engage_gcode", "")  # type: ignore
         self._disengage_gcode = config.get("disengage_gcode", "")  # type: ignore
         self._init_gcode = config.get("init_gcode", "")  # type: ignore
         self.requires_axis_homed = self.config.get("requires_axis_homed", "")   # type: ignore
         self._tool_select_gcode = config.get("tool_select_gcode", "")     # type: ignore
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", "") # type: ignore
+        self.idle_to_standby_time = self.config.getfloat(
+            "idle_to_standby_time", 0.1)    # type: ignore
+        self.idle_to_powerdown_time = self.config.getfloat(
+            "idle_to_powerdown_time", 0.1)  # type: ignore
+
+        # Get initial values from the config.
+        self._initiating_config = {}
+        # Offset as a list of 3 floats.
+        init: str = ""
+        for init in config.get_prefix_options("init_"):
+            init = init.strip().lower()
+            if init == "init_offset":
+                try:
+                    v : str = config.get(init)
+                    # t = typing.cast(str,self.config.get("init_offset", None))  # type: ignore
+                    if v is not None or v != "":
+                        vl = [float(x) for x in v.split(",")]
+                        if len(vl) != 3:
+                            raise ValueError("Offset must be a list of 3 floats.")
+                        self._initiating_config['offset'] = vl
+                except Exception as e:
+                    raise self.config.error(f"Invalid offset for {self.config.get_name()}: {e}")
+
 
     def configure_inherited_params(self):
-        '''Load inherited parameters from instances that this instance inherits from.'''
+        '''Load inherited parameters from instances that this instance inherits from.
+        This is called after all instances are loaded.'''
+        # Ref. to the ktc_persisting object. Loaded by ktc_log.
+        self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
+            self.printer.lookup_object("ktc_persisting")
+        )
+
+        # Check if any initiating values are set.
+        if len(self._initiating_config) > 0:
+            if "offset" in self._initiating_config:
+                self.persistent_state = {"offset": self._initiating_config["offset"]}
+                raise self.config.error(f"Offset for {self.config.get_name()} successfully aved as"
+                    + f" {self._initiating_config['offset']}."
+                    +" Remove the offset from the config and restart Klipper to continue.")
+
         if self.state >= self.StateType.CONFIGURED:
             return
         elif self.state == self.StateType.CONFIGURING:
@@ -100,6 +138,16 @@ class KtcBaseClass:
         else:
             raise ValueError("Can't configure inherited parameters for object: " + str(type(self)))
 
+        # Get Offset from persistent storage
+        self.offset = self.persistent_state.get("offset", None)
+        if self.offset is None:
+            if parent.offset is not None:
+                self.offset = parent.offset
+            else:   # If topmost parent (ktc) then set to 0,0,0.
+                self.offset = [0, 0, 0]
+
+        self.log.always(f"offset for {self.name}: {self.offset}")
+
         if self._engage_gcode == "":
             self._engage_gcode = parent._engage_gcode                   # type: ignore # pylint: disable=protected-access
         if self._disengage_gcode == "":
@@ -113,6 +161,10 @@ class KtcBaseClass:
         if self._tool_deselect_gcode == "":
             self._tool_deselect_gcode = parent._tool_deselect_gcode     # type: ignore # pylint: disable=protected-access
 
+        for v in parent.params:
+            if v not in self.params:
+                self.params[v] = parent.params[v]
+
     @staticmethod
     def get_params_dict_from_config(config: 'configfile.ConfigWrapper'):
         """Get a dict of atributes starting with params_ from the config."""
@@ -125,16 +177,28 @@ class KtcBaseClass:
         for option in config.get_prefix_options("params_"):
             try:
                 value : str = config.get(option)
-                if value.lower() in ["true", "false"]:
+                # List of Integers:
+                if value.replace("-", "").replace(" ", "").replace(",", "").isdigit():
+                    result[option] = [int(x) for x in value.split(",")]
+                # List of Floats:
+                elif value.replace(".", "").replace("-", "").replace(" ", "").replace(",", "").isdigit():
+                    result[option] = [float(x) for x in value.split(",")]
+                # Boolean:
+                elif value.lower().strip() in ["true", "false"]:
                     result[option] = config.getboolean(option)
-                elif value.isdigit():
+                # Integer:
+                elif value.replace("-", "").replace(" ", "").isdigit():
                     result[option] = config.getint(option)
-                elif value.replace(".", "").isdigit():
+                # Float:
+                elif value.replace(".", "").replace("-", "").replace(" ", "").isdigit():
                     result[option] = config.getfloat(option)
+                # String:
                 elif value.startswith('"') and value.endswith('"'):
                     result[option] = ast.literal_eval(value)
+                # String:
                 elif value.startswith("'") and value.endswith("'"):
                     result[option] = ast.literal_eval(value)
+                # Check if it is a valid String:
                 else:
                     result[option] = ast.literal_eval('"' + value + '"')
             except ValueError as e:
@@ -176,6 +240,44 @@ class KtcBaseClass:
     def state(self, value):
         self._state = self.StateType[str(value).upper()]
 
+    @property
+    def persistent_state(self) -> dict:
+        '''Return the persistent state from file.
+        Is initialized inside handle_connect.'''
+        if self._ktc_persistent is None:
+            self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
+                self.printer.lookup_object("ktc_persisting")
+            )
+        if isinstance(self, KtcBaseToolClass):
+            c = "ktc_tool_" + self.name.lower()
+        elif isinstance(self, KtcBaseChangerClass):
+            c = "ktc_toolchanger_" + self.name.lower()
+        elif isinstance(self, KtcBaseClass):
+            c = "ktc"
+        else:
+            raise ValueError(f"Can't get persistent state for object: {type(self)}")
+
+        v: dict = self._ktc_persistent.content.get("State", {})
+        return v.get(c, {})
+
+    @persistent_state.setter
+    def persistent_state(self, value):
+        if self._ktc_persistent is None:
+            self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
+                self.printer.lookup_object("ktc_persisting")
+            )
+
+        if isinstance(self, KtcBaseToolClass):
+            c = "ktc_tool_" + self.name.lower()
+        elif isinstance(self, KtcBaseChangerClass):
+            c = "ktc_toolchanger_" + self.name.lower()
+        elif isinstance(self, KtcBaseClass):
+            c = "ktc"
+        else:
+            raise ValueError(f"Can't set persistent state for object: {type(self)}")
+
+        self._ktc_persistent.save_variable(c, str(value), "State", True)
+
 class KtcBaseChangerClass(KtcBaseClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
@@ -210,10 +312,10 @@ class KtcBaseToolClass(KtcBaseClass):
         # Timer to set temperature to 0 after idle_to_powerdown_time seconds.
         # Set if this tool has an extruder.
         self.timer_idle_to_powerdown = None
-        # Temperature to set when in active mode. Placeholder.
+        # Temperature to set when in active mode.
         # Requred on Physical and virtual tool if any has extruder.
         self.heater_active_temp = 0
-        # Temperature to set when in standby mode.  Placeholder.
+        # Temperature to set when in standby mode.
         # Requred on Physical and virtual tool if any has extruder.
         self.heater_standby_temp = 0
         # Time in seconds from being parked to setting temperature to

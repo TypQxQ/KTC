@@ -455,7 +455,7 @@ This command can be used without any additional parameters. Without parameters i
   - `zone` - Fast aproach coordinates when parking
   - `park` - Parking spot, slow aproach.
   - `offset` - Tool offset.
-  - `heater_state` - 0 = off, 1 = standby temperature, 2 = active temperature. Placeholder.
+  - `heater_state` - 0 = off, 1 = standby temperature, 2 = active temperature.
   - `heater_active_temp` - Temperature to set when in active mode.
   - `heater_standby_temp` - Temperature to set when in standby mode.
   - `idle_to_standby_time` - Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature.

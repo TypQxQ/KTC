@@ -12,7 +12,7 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from ...klipper.klippy import klippy
-    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
+    # from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
 class KtcHeater:
 
