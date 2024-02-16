@@ -70,6 +70,9 @@ class KtcBaseClass:
         self.log: 'ktc_log.KtcLog' = None # type: ignore # We are loading it later.
         self._ktc: 'ktc.Ktc' = None # type: ignore # We are loading it later.
 
+        self.state = self.StateType.NOT_CONFIGURED
+        self.offset: dict[float, float, float] = None   # type: ignore
+
         # Get inheritable parameters from the config.
         # Empty strings are overwritten by the parent object in configure_inherited_params.
         self._engage_gcode = config.get("engage_gcode", "")  # type: ignore
@@ -118,6 +121,7 @@ class KtcBaseClass:
                     + f" {self._initiating_config['offset']}."
                     +" Remove the offset from the config and restart Klipper to continue.")
 
+        # Check for circular inheritance.
         if self.state >= self.StateType.CONFIGURED:
             return
         elif self.state == self.StateType.CONFIGURING:
@@ -125,9 +129,13 @@ class KtcBaseClass:
                              + self.config.get_name())
         self.state = self.StateType.CONFIGURING
 
+        # Ref. to ktc objects.
         self._ktc = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc"))
-        self.log = typing.cast('ktc_log.KtcLog', self.printer.load_object(
+        self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object(
             self.config, "ktc_log"))  # Load the log object.
+
+        # Get Offset from persistent storage
+        self.offset = self.persistent_state.get("offset", None)
 
         #  Set the parent object
         if isinstance(self, KtcBaseToolClass):
@@ -140,9 +148,6 @@ class KtcBaseClass:
             parent = self
         else:
             raise ValueError("Can't configure inherited parameters for object: " + str(type(self)))
-
-        # Get Offset from persistent storage
-        self.offset = self.persistent_state.get("offset", None)
 
         # If this is the topmost parent.
         if parent == self:
@@ -160,9 +165,9 @@ class KtcBaseClass:
             if getattr(self, v) is None:
                 setattr(self, v, getattr(parent, v))
 
-        for v in parent.params:
+        for v in parent.params: # type: ignore
             if v not in self.params:
-                self.params[v] = parent.params[v]
+                self.params[v] = parent.params[v]   # type: ignore
 
     @staticmethod
     def get_params_dict_from_config(config: 'configfile.ConfigWrapper'):
@@ -180,7 +185,8 @@ class KtcBaseClass:
                 if value.replace("-", "").replace(" ", "").replace(",", "").isdigit():
                     result[option] = [int(x) for x in value.split(",")]
                 # List of Floats:
-                elif value.replace(".", "").replace("-", "").replace(" ", "").replace(",", "").isdigit():
+                elif value.replace(".", "").replace("-", "").replace(
+                    " ", "").replace(",", "").isdigit():
                     result[option] = [float(x) for x in value.split(",")]
                 # Boolean:
                 elif value.lower().strip() in ["true", "false"]:
@@ -297,7 +303,9 @@ class KtcBaseToolClass(KtcBaseClass):
 
         self.name = name        # Override the name in case it is supplied.
         self.number = number
-        self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
+        # Is overridden by the tool object.
+        self._toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
+        self.toolchanger = self._toolchanger
         # TODO: Change to array of fans
         self.fan = None
         self.extruder = None
@@ -325,7 +333,6 @@ class KtcBaseToolClass(KtcBaseClass):
         # Use something like 86400 to wait 24h if you want to disable.
         # Requred on Physical tool.
         # self.heater_active_to_powerdown_delay = 600
-        self.offset = [0, 0, 0]
 
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''

@@ -36,12 +36,11 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             config, "init_order", self.InitOrderType.INDEPENDENT)
 
         self.selected_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
-        
+
         self.force_deselect_when_parent_deselects: bool = config.getboolean(
             "force_deselect_when_parent_deselects", False)  # type: ignore
 
         # Load the parent tool if it is defined.
-        self.parent_tool = None # type: typing.Optional['ktc_tool.KtcTool']
         parent_tool_name = config.get("parent_tool", None)  # type: ignore
         if parent_tool_name is not None and parent_tool_name != "":
             self.parent_tool = typing.cast('ktc_tool.KtcTool',
@@ -69,6 +68,11 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 "Toolchanger %s has no parent tool " % self.name
                 + "defined but init_order is set to AFTER_PARENT."
             )
+        
+        # If tool is anything but configured, log it.
+        if self.state != self.StateType.CONFIGURED:
+            self.log.debug("Initializing toolchanger %s from state %s." % (self.name, self.state))
+        self.state = self.StateType.INITIALIZING
 
         # Order check. If dependent on parent.
         if (self.init_order == self.InitOrderType.AFTER_PARENT_INITIALIZATION or
@@ -108,10 +112,18 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             context['ktc'] = self._ktc.get_status()
             context['STATE_TYPE'] = self.StateType
             init_gcode_template.run_gcode_from_command(context)
+            # Check that the gcode has changed the state.
+            if self.state == self.StateType.CONFIGURED:
+                raise self.config.error(
+                    ("ktc_toolchanger %s: init_gcode did not " % self.name)
+                    + "change the state. Use for example "
+                    + "'KTC_SET_TOOLCHANGER_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "change the state to READY."
+                )
         else:
             self.state = self.StateType.READY
 
-        # Set the tool as engaged, it means selected for tools.
+        # Set the tool as engaged. Fir tools it is equivalent to selected.
         self.selected_tool.state = self.StateType.ENGAGED
 
         # TODO: Remove after testing.

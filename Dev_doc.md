@@ -48,7 +48,7 @@ Active_heater in ktc? maybe a private one.
 #### Inheritable
 - engage_gcode = "":    Gcode to run at toochanger engage, status from READY to ENGAGED
 - disengage_gcode = "": Gcode to run at toochanger disengage, status from ENGAGED to READY
-- init_gcode = "":      Gcode to run at toolchanger initialization, from CONFIGURED to READY
+- init_gcode = "":      Gcode to run at toolchanger initialization, from CONFIGURED to READY. If used, it is important that the Gcode changes the state of toolchanger.
 - requires_axis_homed = "": Axis in XYZ to be required before tool can be changed, for select
 - tool_select_gcode = "":   Gcode to run whan selecting the tool, from ready to SELECTED
 - tool_deselect_gcode = "": Oposite of above.
