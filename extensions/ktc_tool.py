@@ -178,8 +178,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 restore_mode
             )  # Sets restore_axis_on_toolchange and saves current position
 
-        if ()
-        self.toolchanger.force_deselect_when_parent_deselects
+        if (self._ktc.active_tool.force_deselect_when_parent_deselects)
         
         # Drop any tools already mounted if not virtual on same.
         if (

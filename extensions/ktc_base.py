@@ -59,6 +59,9 @@ class KtcBaseClass:
         self.requires_axis_homed: str = ""
         self._state = self.StateType.NOT_CONFIGURED
 
+        self.force_deselect_when_parent_deselects: bool = config.getboolean(
+            "force_deselect_when_parent_deselects", True)  # type: ignore
+
         # If this is a empty object then don't load the config.
         if config is None:
             return
@@ -159,7 +162,8 @@ class KtcBaseClass:
 
         params_to_inherit = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
                              "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
-                             "heater_active_to_standby_delay", "heater_active_to_powerdown_delay"]
+                             "heater_active_to_standby_delay", "heater_active_to_powerdown_delay",
+                             "force_deselect_when_parent_deselects"]
         # Set the parameters from the parent object if they are not set.
         for v in params_to_inherit:
             if getattr(self, v) is None:

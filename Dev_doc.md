@@ -33,6 +33,17 @@ Minimum configuration would be one tool declared.
         3b- Run on next
 All obj having ran configure_inherited_params get state=configured.
 
+## SELECT
+- If no tool is selected then just select
+- If active tool does not have to be deselected on change
+    - Check if toolchanger on same level has a tool selected
+        - Check if tool needs force deselect.
+    - Check if toolchanger over this needs deselecting
+- If tool on same changer is selected deselect first.
+- If active tool is on changer under a sibling
+- If active tool is on changer 
+
+
 ## Tool Heaters
 When a tool has a heater it checks if a heater obj exists for it in ktc.heaters[]
 If it exists, then link to it.
@@ -56,6 +67,7 @@ Active_heater in ktc? maybe a private one.
 Use something like  86400 to wait 24h if you want to run indefinitly.
 - heater_active_to_powerdown_delay = 0.2: As above but from active to off.
 - init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to initialize to other value.
+- force_deselect_when_parent_deselects = True: 
 
 #### NonInheritable
 

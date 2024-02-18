@@ -37,9 +37,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
         self.selected_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
 
-        self.force_deselect_when_parent_deselects: bool = config.getboolean(
-            "force_deselect_when_parent_deselects", False)  # type: ignore
-
         # Load the parent tool if it is defined.
         parent_tool_name = config.get("parent_tool", None)  # type: ignore
         if parent_tool_name is not None and parent_tool_name != "":
