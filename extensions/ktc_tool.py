@@ -11,6 +11,7 @@ from .ktc_base import (
     KtcConstantsClass,
     KtcBaseChangerClass,
 )  # pylint: disable=relative-beyond-top-level, wildcard-import
+from .ktc_heater import KtcHeater
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
@@ -20,7 +21,6 @@ if typing.TYPE_CHECKING:
     from . import ktc_toolchanger
 
     # from . import ktc_persisting
-    from .ktc_heater import KtcHeater
 
 
 class KtcTool(KtcBaseToolClass, KtcConstantsClass):
@@ -149,26 +149,25 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     # # To avoid recursive remaping.
     # def select_tool_actual(self, restore_mode=None):
         current_tool_id = int(self._ktc.active_tool_n)
+        ct = self._ktc.active_tool
 
-        self.log.trace("Current Tool is T" + str(current_tool_id) + ".")
-        # self.log.trace("This tool is_virtual is " + str(self.is_virtual) + ".")
+        self.log.trace(f"Current KTC Tool is {ct.name}.")
 
-        if (
-            current_tool_id == self.number
-        ):  # If trying to select the already selected tool:
-            return  # Exit
+        # If already selected then exit.
+        if self.toolchanger.selected_tool == self:
+            return
 
-        if current_tool_id == self.TOOL_UNKNOWN.number:
-            msg = ("KtcTool.select_tool_actual: Unknown tool already mounted." 
+        if self._ktc.active_tool == self.TOOL_UNKNOWN:
+            msg = ("KtcTool.select: Unknown tool already mounted." 
                    + "Can't park it before selecting new tool.")
             self.log.always(msg)
             raise self.printer.command_error(msg)
 
         self.log.tool_stats[self.name].selects_started += 1
 
-        if (
-            self.extruder is not None
-        ):  # If the new tool to be selected has an extruder prepare warmup before actual tool change so all unload commands will be done while heating up.
+        # If the new tool to be selected has an extruder prepare warmup before
+        # actual tool change so all moves will be done while heating up.
+        if self.extruder is not None:
             self.set_heater(heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE)
 
         # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
@@ -179,6 +178,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 restore_mode
             )  # Sets restore_axis_on_toolchange and saves current position
 
+        if ()
+        self.toolchanger.force_deselect_when_parent_deselects
+        
         # Drop any tools already mounted if not virtual on same.
         if (
             current_tool_id > self.TOOL_NONE_N

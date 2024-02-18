@@ -429,7 +429,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                         break  # Break for loop to start again.
 
         except Exception as e:
-            raise Exception("cmd_KTC_TOOL_DROPOFF_ALL: Error: %s" % str(e))
+            raise Exception("cmd_KTC_TOOL_DROPOFF_ALL: Error: %s" % str(e)) from e
 
     cmd_KTC_OVERRIDE_CURRENT_TOOL_help = (
         "Override the current tool as to be the specified tool. TOOL=toolname"

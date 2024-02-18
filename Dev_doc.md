@@ -231,7 +231,8 @@ Maybe delete?
 # ToolLock: Tool is locked in place.
 # ToolUnLock: Toollock is disengaged and tool is free.
 
-
+## TESTS TO DO
+# Check if TOOL_UNKNOWN is active if it raises error when selecting another tool.
 
 class ktc_MeanLayerTime:
     def __init__(self, printer):
