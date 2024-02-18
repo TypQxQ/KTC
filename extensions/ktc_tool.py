@@ -162,7 +162,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             return  # Exit
 
         if current_tool_id == self.TOOL_UNKNOWN.number:
-            msg = "KtcTool.select_tool_actual: Unknown tool already mounted Can't park it before selecting new tool."
+            msg = ("KtcTool.select_tool_actual: Unknown tool already mounted." 
+                   + "Can't park it before selecting new tool.")
             self.log.always(msg)
             raise self.printer.command_error(msg)
 
