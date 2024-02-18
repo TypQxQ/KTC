@@ -290,7 +290,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 raise ValueError(
                     "active_tool: tool name not found: %s." % str(value)
                 )
-                
+
         elif isinstance(value, int):  # If value is an int for backwayds compatibility.
             tool = self.all_tools_by_number.get(value, None)
             if tool is None:
@@ -421,7 +421,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                         )
                         self.printer.lookup_object(
                             "ktc_tool " + str(tool.get_status()["virtual_loaded"])
-                        ).select_tool_actual()
+                        ).cmd_SelectTool()
                         self.printer.lookup_object(
                             "ktc_tool " + str(tool.get_status()["virtual_loaded"])
                         ).Dropoff(force_virtual_unload=True)

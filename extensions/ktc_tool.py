@@ -29,10 +29,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     def __init__(self, config: "configfile.ConfigWrapper"):
         super().__init__(config)
 
-        # TODO: Change this to a list of fans.
-        # Name of general fan configuration connected to this tool as a part fan.
-        # Defaults to "none". self.fan = None
-
         # TODO: Removed from config. Need to be removed from code.
         self.is_virtual = False
         # Parent tool is used as a Physical parent for all tools of this group.
@@ -108,7 +104,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.timer_heater_active_to_powerdown_delay = ktc_ToolStandbyTempTimer(
                 self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN
             )
-        # If this tool is a subtool of another tool we inherit the timers from the parent tool.
+        # If this tool is a subtool of another tool and 
+        # the etruder is not overriden then use the inherited extruder.
         elif self.toolchanger.parent_tool is not None and (
             self.toolchanger.parent_tool.timer_heater_active_to_standby_delay
             is not None
@@ -123,7 +120,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         self.state = self.StateType.CONFIGURED
 
     def cmd_SelectTool(self, gcmd):
-        self.log.trace("KTC T" + str(self.number) + " Selected.")
+        self.log.trace("KTC Tool " + str(self.number) + " Selected.")
         # Allow either one.
         restore_mode = self._ktc.ktc_parse_restore_type(gcmd.get("R", None), None)
         restore_mode = self._ktc.ktc_parse_restore_type(
@@ -132,25 +129,25 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         # TODO: Change this to use the name mapping instead of number.
         # Check if the requested tool has been remaped to another one.
-        tool_is_remaped = self._ktc.tool_is_remaped(self.number)
+    #     tool_is_remaped = self._ktc.tool_is_remaped(self.number)
 
-        if tool_is_remaped > -1:
-            self.log.always(
-                "ktc_Tool %d is remaped to Tool %d" % (self.number, tool_is_remaped)
-            )
-            remaped_tool = self.printer.lookup_object(
-                "ktc_tool " + str(tool_is_remaped)
-            )
-            remaped_tool.select_tool_actual(restore_mode)
-            return
-        else:
-            self.select_tool_actual(restore_mode)
+    #     if tool_is_remaped > -1:
+    #         self.log.always(
+    #             "ktc_Tool %d is remaped to Tool %d" % (self.number, tool_is_remaped)
+    #         )
+    #         remaped_tool = self.printer.lookup_object(
+    #             "ktc_tool " + str(tool_is_remaped)
+    #         )
+    #         remaped_tool.select_tool_actual(restore_mode)
+    #         return
+    #     else:
+    #         self.select_tool_actual(restore_mode)
 
-    def select(self):
-        return
+    # def select(self):
+    #     return
 
-    # To avoid recursive remaping.
-    def select_tool_actual(self, restore_mode=None):
+    # # To avoid recursive remaping.
+    # def select_tool_actual(self, restore_mode=None):
         current_tool_id = int(self._ktc.active_tool_n)
 
         self.log.trace("Current Tool is T" + str(current_tool_id) + ".")
