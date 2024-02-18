@@ -119,7 +119,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         self.state = self.StateType.CONFIGURED
 
-    def cmd_SelectTool(self, gcmd):
+    def cmd_SelectTool(self, gcmd, actual_active_tool=True):
         self.log.trace("KTC Tool " + str(self.number) + " Selected.")
         # Allow either one.
         restore_mode = self._ktc.ktc_parse_restore_type(gcmd.get("R", None), None)
@@ -163,11 +163,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.log.always(msg)
             raise self.printer.command_error(msg)
 
-        self.log.tool_stats[self.name].selects_started += 1
-
         # If the new tool to be selected has an extruder prepare warmup before
         # actual tool change so all moves will be done while heating up.
-        if self.extruder is not None:
+        if actual_active_tool and  self.extruder is not None:
             self.set_heater(heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE)
 
         # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
@@ -178,8 +176,17 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 restore_mode
             )  # Sets restore_axis_on_toolchange and saves current position
 
-        if (self._ktc.active_tool.force_deselect_when_parent_deselects)
+        # Check if any tool is selected.
+        if (self.toolchanger.selected_tool is not self.TOOL_NONE) 
+            if self._ktc.active_tool.force_deselect_when_parent_deselects:
+                self._ktc.active_tool.deselect_tool()
+        # Check if 
+        # Check if this tools changer has a tool selected.
+        if self.toolchanger.selected_tool is not self.TOOL_NONE:
+            self.toolchanger.selected_tool.deselect_tool()
         
+        self.log.tool_stats[self.name].selects_started += 1
+
         # Drop any tools already mounted if not virtual on same.
         if (
             current_tool_id > self.TOOL_NONE_N
@@ -345,7 +352,11 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         self.log.track_tool_selecting_end(self)
 
+    def deselect_tool(self):
+        self.Dropoff()
+        
     def Dropoff(self, force_virtual_unload=False):
+        # Alsocheck if any tool over this oneshould bedeselected.
         self.log.always("Dropoff: T%s - Running." % str(self.number))
 
         self.log.track_tool_selected_end(

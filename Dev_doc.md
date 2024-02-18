@@ -35,10 +35,11 @@ All obj having ran configure_inherited_params get state=configured.
 
 ## SELECT
 - If no tool is selected then just select
-- If active tool does not have to be deselected on change
-    - Check if toolchanger on same level has a tool selected
-        - Check if tool needs force deselect.
-    - Check if toolchanger over this needs deselecting
+- If active tool needs deselecting, deselect.
+- Check if toolchanger on same level has a tool selected
+    - Check if tool needs force deselect.
+- Check if toolchanger over this needs deselecting
+
 - If tool on same changer is selected deselect first.
 - If active tool is on changer under a sibling
 - If active tool is on changer 

@@ -341,6 +341,9 @@ class KtcBaseToolClass(KtcBaseClass):
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
 
+    def deselect_tool(self):
+        return
+
 class KtcConstantsClass:
     '''Constants for KTC. These are to be inherited by other classes.'''
     # Value of Unknown and None tools are set in module scope.
