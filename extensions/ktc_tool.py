@@ -195,8 +195,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 # Then select the new tools recursively.
                 tools = self._get_list_from_tool_traversal_conditional(
                     self, "state", self.StateType.ENGAGED, operator.ne)
-                tools = tools.reverse()
-                for t in tools:
+                for t in reversed(tools):
                     t.select()
 
         self.log.tool_stats[self.name].selects_started += 1
