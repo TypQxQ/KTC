@@ -5,7 +5,8 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-import typing
+from __future__ import annotations
+import typing, operator
 from .ktc_base import (
     KtcBaseToolClass,
     KtcConstantsClass,
@@ -119,13 +120,15 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         self.state = self.StateType.CONFIGURED
 
-    def cmd_SelectTool(self, gcmd, actual_active_tool=True):
+    def cmd_SelectTool(self, gcmd):
         self.log.trace("KTC Tool " + str(self.number) + " Selected.")
         # Allow either one.
         restore_mode = self._ktc.ktc_parse_restore_type(gcmd.get("R", None), None)
         restore_mode = self._ktc.ktc_parse_restore_type(
             gcmd.get("RESTORE_POSITION_TYPE", None), restore_mode
         )
+
+        self.select(restore_mode, True)
 
         # TODO: Change this to use the name mapping instead of number.
         # Check if the requested tool has been remaped to another one.
@@ -143,169 +146,90 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     #     else:
     #         self.select_tool_actual(restore_mode)
 
-    # def select(self):
-    #     return
+    def select(self, restore_mode=None, final_selected=False):
 
     # # To avoid recursive remaping.
     # def select_tool_actual(self, restore_mode=None):
-        current_tool_id = int(self._ktc.active_tool_n)
-        ct = self._ktc.active_tool
+        # current_tool_id = int(self._ktc.active_tool_n)
+        at = self._ktc.active_tool
 
-        self.log.trace(f"Current KTC Tool is {ct.name}.")
+        self.log.trace(f"Current KTC Tool is {at.name}.")
 
         # If already selected then exit.
-        if self.toolchanger.selected_tool == self:
+        if self == at:
             return
 
-        if self._ktc.active_tool == self.TOOL_UNKNOWN:
+        if at == self.TOOL_UNKNOWN:
             msg = ("KtcTool.select: Unknown tool already mounted." 
-                   + "Can't park it before selecting new tool.")
+                   + "Can't automatically deselect unknown before "
+                   + "selecting new tool.")
             self.log.always(msg)
             raise self.printer.command_error(msg)
 
         # If the new tool to be selected has an extruder prepare warmup before
         # actual tool change so all moves will be done while heating up.
-        if actual_active_tool and  self.extruder is not None:
+        if final_selected and self.extruder is not None:
             self.set_heater(heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE)
 
         # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
         # Otherwise do not change either the restore_axis_on_toolchange or saved_position.
-        # This makes it possible to call SAVE_POSITION or SAVE_CURRENT_POSITION before the actual T command.
+        # This makes it possible to call SAVE_POSITION or SAVE_CURRENT_POSITION
+        # before the actual T command.
         if restore_mode is not None:
             self._ktc.SaveCurrentPosition(
                 restore_mode
             )  # Sets restore_axis_on_toolchange and saves current position
 
-        # Check if any tool is selected.
-        if (self.toolchanger.selected_tool is not self.TOOL_NONE) 
-            if self._ktc.active_tool.force_deselect_when_parent_deselects:
-                self._ktc.active_tool.deselect_tool()
-        # Check if 
-        # Check if this tools changer has a tool selected.
-        if self.toolchanger.selected_tool is not self.TOOL_NONE:
-            self.toolchanger.selected_tool.deselect_tool()
-        
+        # Check if this is final tool and any tool is selected.
+        if at is not self.TOOL_NONE and final_selected:
+            # If the new tool is on the same toolchanger as the current tool.
+            if self.toolchanger == at.toolchanger:
+                at.deselect_tool()
+            # If on different toolchanger:
+            else:
+                # First deselect all tools recursively.
+                tools = self._get_list_from_tool_traversal_conditional(
+                    at, "force_deselect_when_parent_deselects", True)
+                for t in tools:
+                    t.deselect_tool()
+                # Then select the new tools recursively.
+                tools = self._get_list_from_tool_traversal_conditional(
+                    self, "state", self.StateType.ENGAGED, operator.ne)
+                tools = tools.reverse()
+                for t in tools:
+                    t.select()
+
         self.log.tool_stats[self.name].selects_started += 1
 
-        # Drop any tools already mounted if not virtual on same.
-        if (
-            current_tool_id > self.TOOL_NONE_N
-        ):  # If there is a current tool already selected and it's a known tool.
-            # TODO: Change this to nicer code.
-            self.log.track_tool_selected_end(
-                self._ktc.all_tools_by_number[current_tool_id]
-            )  # Log that the current tool is to be unmounted.
-
-            current_tool = self.printer.lookup_object(
-                "ktc_tool " + str(current_tool_id)
-            )
-
-            # If the next tool is not another virtual tool on the same physical tool.
-            if int(self.parentTool_id == self.TOOL_NONE_N or self.parentTool_id) != int(
-                current_tool.get_status()["parentTool_id"]
-            ):
-                self.log.info("Will Dropoff():%s" % str(current_tool_id))
-                current_tool.Dropoff()
-                current_tool_id = self.TOOL_NONE_N
-            else:  # If it's another virtual tool on the same parent physical tool.
-                self.log.info(
-                    "Dropoff: T"
-                    + str(current_tool_id)
-                    + "- Virtual - Running UnloadVirtual"
-                )
-                current_tool.UnloadVirtual()
-
         # Now we asume tool has been dropped if needed be.
+        self.Pickup()
 
-        # Check if this is a virtual tool.
-        if not self.is_virtual:
-            self.log.trace(
-                "cmd_SelectTool: T%s - Not Virtual - Pickup" % str(self.number)
-            )
-            self.Pickup()
-        else:
-            if (
-                current_tool_id > self.TOOL_NONE_N
-            ):  # If still has a selected tool: (This tool is a virtual tool with same physical tool as the last)
-                current_tool = self.printer.lookup_object(
-                    "ktc_tool " + str(current_tool_id)
-                )
-                self.log.trace(
-                    "cmd_SelectTool: T"
-                    + str(self.number)
-                    + "- Virtual - Physical Tool is not Dropped - "
-                )
-                if (
-                    self.parentTool_id > self.TOOL_NONE_N
-                    and self.parentTool_id == current_tool.get_status()["parentTool_id"]
-                ):
-                    self.log.trace(
-                        "cmd_SelectTool: T"
-                        + str(self.number)
-                        + "- Virtual - Same physical tool - Pickup"
-                    )
-                    self.LoadVirtual()
-                else:
-                    msg = (
-                        "cmd_SelectTool: T"
-                        + str(self.number)
-                        + "- Virtual - Not Same physical tool"
-                    )
-                    msg += "Shouldn't reach this because it is dropped in previous."
-                    self.log.debug(msg)
-                    raise Exception(msg)
-            else:  # New Physical tool with a virtual tool.
-                parentTool = self.printer.lookup_object(
-                    "ktc_tool " + str(self.parentTool_id)
-                )
-                parentTool_virtual_loaded = parentTool.get_status()["virtual_loaded"]
-                self.log.trace(
-                    "cmd_SelectTool: T"
-                    + str(self.number)
-                    + "- Virtual - Picking upp physical tool"
-                )
-                self.Pickup()
+        self.log.tool_stats[self.name].selects_completed += 1
 
-                # If the new physical tool already has another virtual tool loaded:
-                if parentTool_virtual_loaded > self.TOOL_NONE_N:
-                    # TODO: Change this to use the name mapping instead of number.
-                    if parentTool_virtual_loaded != self.number:
-                        self.log.info(
-                            "cmd_SelectTool: T"
-                            + str(parentTool_virtual_loaded)
-                            + "- Virtual - Running UnloadVirtual"
-                        )
+        if final_selected:
+            self._ktc.active_tool = self
+            self.log.track_tool_selected_start(self)
 
-                        uv: KtcTool = self.printer.lookup_object(
-                            "ktc_tool " + str(parentTool_virtual_loaded)
-                        )
-                        if (
-                            uv.extruder is not None
-                        ):  # If the new tool to be selected has an extruder prepare warmup before actual tool change so all unload commands will be done while heating up.
-                            curtime = self.printer.get_reactor().monotonic()
-                            # heater = self.printer.lookup_object(self.extruder).get_heater()
+    def _get_list_from_tool_traversal_conditional(
+        self, start_tool: KtcBaseToolClass, param: str, value, condition = operator.eq):
+        return_list = []
 
-                            uv.set_heater(
-                                heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE
-                            )
-                            # if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE and int(self.heater_standby_temp) < int(heater.get_status(curtime)["temperature"]):
-                            self._ktc._Temperature_wait_with_tolerance(
-                                curtime, self.extruder, 2
-                            )
-                        uv.UnloadVirtual()
-                        self.set_heater(
-                            heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE
-                        )
+        if (start_tool is None or
+            start_tool == self.TOOL_NONE or
+            start_tool == self.TOOL_UNKNOWN or
+            start_tool == self._ktc):
+            return return_list
 
-                self.log.trace(
-                    "cmd_SelectTool: T"
-                    + str(self.number)
-                    + "- Virtual - Picked up physical tool and now Loading virtual tool."
-                )
-                self.LoadVirtual()
+        if condition(getattr(start_tool, param), value):
+            return_list.append(start_tool)
 
-        self._ktc.active_tool = self
-        self.log.track_tool_selected_start(self)
+        upper_tool = start_tool.toolchanger.parent_tool
+
+        if upper_tool is not None:
+            return_list += self._get_list_from_tool_traversal_conditional(
+                upper_tool, param, value, condition)
+
+        return return_list
 
     def Pickup(self):
         self.log.track_tool_selecting_start(

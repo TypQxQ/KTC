@@ -226,6 +226,20 @@ ktc_tool.py is initialized for each tool.
 
 
 
+- If final_selected has same changer as active_tool.
+    - Deselect active_tool and continue selecting final_selected.
+- Else
+    - Recursivly check tools from active_tool to ktc if force_deselect_when_parent_change.
+        - Deselect those tools while checking.
+    - Recursivly check all layers from final_selected to ktc If not selected
+        - Add to ordered list?
+        - Select all tools in ordered list one by one.
+
+Function get_list_from_tool_traversal_(checking)(start_tool, parameter_to_check, value_to_check, comparer_to_check)
+
+force_deselect_when_parent_deselects
+final_selected
+
 
 
 # To try to keep terms apart:

@@ -309,7 +309,7 @@ class KtcBaseToolClass(KtcBaseClass):
         self.number = number
         # Is overridden by the tool object.
         self._toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
-        self.toolchanger = self._toolchanger
+        self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
         # TODO: Change to array of fans
         self.fan = None
         self.extruder = None
