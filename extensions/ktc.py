@@ -7,12 +7,15 @@
 #
 import typing
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
-from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass # pylint: disable=relative-beyond-top-level
+from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass, PARAMS_TO_INHERIT # pylint: disable=relative-beyond-top-level
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool
+
+# Constants for the restore_axis_on_toolchange variable.
+XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
@@ -251,7 +254,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def _recursive_configure_inherited_attributes(
         self, tc: 'ktc_toolchanger.KtcToolchanger'):
         '''Recursively configure inherited parameters for all toolchangers and tools.'''
-        # For tools, excluding TOOL_NONE and TOOL_UNKNOWN, in the toolchanger:
         tc.configure_inherited_params()
         for tool in [tool for tool in tc.tools.values() if tool.toolchanger is not None]:
             tool.configure_inherited_params()
@@ -274,6 +276,16 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
+        # Initialize the default inherited parameters as empty strings if not set,
+        # except for the heater parameters that are set to float 0.1.
+        for param in PARAMS_TO_INHERIT:
+            if self.params.get(param) is None:
+                if param.startswith("heater_"):
+                    self.params[param] = 0.1
+                if param == "requires_axis_homed":
+                    self.params[param] = "XYZ"
+                else:
+                    self.params[param] = ""
         self.state = self.StateType.CONFIGURED
 
     @property
@@ -984,12 +996,20 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         }
         return status
 
-    def printer_is_homed_for_toolchange(self, lazy_home_when_parking=0):
+    def printer_is_homed_for_toolchange(self, required_axes: str = ""):
+        # If no axes are required, then return True.
+        if required_axes == "":
+            return True
+        
         curtime = self.printer.get_reactor().monotonic()
         toolhead = self.printer.lookup_object("toolhead")
-        homed = toolhead.get_status(curtime)["homed_axes"].lower()
-        if all(axis in homed for axis in ["x", "y", "z"]):
+        homed = toolhead.get_status(curtime)["homed_axes"].upper()
+
+        if all(axis in homed for axis in list(required_axes)):
             return True
+        
+        return False
+        
         elif lazy_home_when_parking == 0 and not all(
             axis in homed for axis in ["x", "y", "z"]
         ):

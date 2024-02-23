@@ -153,101 +153,73 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         # current_tool_id = int(self._ktc.active_tool_n)
         at = self._ktc.active_tool
 
+        # TODO: Remove when debugged.
         self.log.trace(f"Current KTC Tool is {at.name}.")
+        self.log.trace(f"Selecting KTC Tool {self.name} as final_selected: {final_selected}.")
 
-        # If already selected then exit.
-        if self == at:
+        # None of this is needed if this is not the final tool.
+        if final_selected:
+            # If already selected as final tool then do nothing.
+            if self == at:
+                return
+
+            if at == self.TOOL_UNKNOWN:
+                msg = ("KtcTool.select: Unknown tool already mounted."
+                    + "Can't automatically deselect unknown before "
+                    + "selecting new tool.")
+                self.log.always(msg)
+                raise self.printer.command_error(msg)
+
+            # If the new tool to be selected has an extruder prepare warmup before
+            # actual tool change so all moves will be done while heating up.
+            if self.extruder is not None:
+                self.set_heater(heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE)
+
+            # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
+            # Otherwise do not change either the restore_axis_on_toolchange or saved_position.
+            # This makes it possible to call SAVE_POSITION or SAVE_CURRENT_POSITION
+            # before the actual T command.
+            if restore_mode is not None:
+                self._ktc.SaveCurrentPosition(
+                    restore_mode
+                )  # Sets restore_axis_on_toolchange and saves current position
+
+            # Check if this is final tool and any tool is active.
+            if at is not self.TOOL_NONE:
+                # If the new tool is on the same toolchanger as the current tool.
+                if self.toolchanger == at.toolchanger:
+                    at.deselect()
+                # If on different toolchanger:
+                else:
+                    # First deselect all tools recursively.
+                    tools = self._get_list_from_tool_traversal_conditional(
+                        at, "force_deselect_when_parent_deselects", True)
+                    for t in tools:
+                        t.deselect()
+                    # Then select the new tools recursively in reverse order.
+                    tools = self._get_list_from_tool_traversal_conditional(
+                        self, "state", self.StateType.ENGAGED, operator.ne)
+                    for t in reversed(tools):
+                        t.select()
+
+        # If already selected then do nothing.
+        if self.state == self.StateType.ENGAGED:
             return
 
-        if at == self.TOOL_UNKNOWN:
-            msg = ("KtcTool.select: Unknown tool already mounted." 
-                   + "Can't automatically deselect unknown before "
-                   + "selecting new tool.")
-            self.log.always(msg)
-            raise self.printer.command_error(msg)
-
-        # If the new tool to be selected has an extruder prepare warmup before
-        # actual tool change so all moves will be done while heating up.
-        if final_selected and self.extruder is not None:
-            self.set_heater(heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE)
-
-        # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
-        # Otherwise do not change either the restore_axis_on_toolchange or saved_position.
-        # This makes it possible to call SAVE_POSITION or SAVE_CURRENT_POSITION
-        # before the actual T command.
-        if restore_mode is not None:
-            self._ktc.SaveCurrentPosition(
-                restore_mode
-            )  # Sets restore_axis_on_toolchange and saves current position
-
-        # Check if this is final tool and any tool is selected.
-        if at is not self.TOOL_NONE and final_selected:
-            # If the new tool is on the same toolchanger as the current tool.
-            if self.toolchanger == at.toolchanger:
-                at.deselect_tool()
-            # If on different toolchanger:
-            else:
-                # First deselect all tools recursively.
-                tools = self._get_list_from_tool_traversal_conditional(
-                    at, "force_deselect_when_parent_deselects", True)
-                for t in tools:
-                    t.deselect_tool()
-                # Then select the new tools recursively.
-                tools = self._get_list_from_tool_traversal_conditional(
-                    self, "state", self.StateType.ENGAGED, operator.ne)
-                for t in reversed(tools):
-                    t.select()
-
-        self.log.tool_stats[self.name].selects_started += 1
 
         # Now we asume tool has been dropped if needed be.
-        self.Pickup()
-
-        self.log.tool_stats[self.name].selects_completed += 1
-
-        if final_selected:
-            self._ktc.active_tool = self
-            self.log.track_tool_selected_start(self)
-
-    def _get_list_from_tool_traversal_conditional(
-        self, start_tool: KtcBaseToolClass, param: str, value, condition = operator.eq):
-        return_list = []
-
-        if (start_tool is None or
-            start_tool == self.TOOL_NONE or
-            start_tool == self.TOOL_UNKNOWN or
-            start_tool == self._ktc):
-            return return_list
-
-        if condition(getattr(start_tool, param), value):
-            return_list.append(start_tool)
-
-        upper_tool = start_tool.toolchanger.parent_tool
-
-        if upper_tool is not None:
-            return_list += self._get_list_from_tool_traversal_conditional(
-                upper_tool, param, value, condition)
-
-        return return_list
-
-    def Pickup(self):
-        self.log.track_tool_selecting_start(
-            self
-        )  # Log the time it takes for tool mount.
+        # Increase the number of selects started.
+        self.log.tool_stats[self.name].selects_started += 1
+        # Log the time it takes for tool mount.
+        self.log.track_tool_selecting_start(self)
 
         # Check if homed
-        if not self._ktc.printer_is_homed_for_toolchange():
+        if not self._ktc.printer_is_homed_for_toolchange(self.requires_axis_homed):
             raise self.printer.command_error(
-                "KtcTool.Pickup: Printer not homed and Lazy homing option for tool %s is: "
-                % (self.name)
+                "KtcTool.select: Required axis %s not homed for ktc_tool %s."
+                % (self.requires_axis_homed, self.name)
             )
-
-        # If has an extruder then activate that extruder.
-        if self.extruder is not None:
-            self.gcode.run_script_from_command(
-                "ACTIVATE_EXTRUDER extruder=%s" % (self.extruder)
-            )
-
+######################################## Checked up to here.
         # Run the gcode for pickup.
         try:
             context = self.tool_select_gcode_template.create_template_context()
@@ -275,9 +247,37 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         self.log.track_tool_selecting_end(self)
 
-    def deselect_tool(self):
+############################################################################################################
+        self.log.tool_stats[self.name].selects_completed += 1
+
+        if final_selected:
+            self._ktc.active_tool = self
+            self.log.track_tool_selected_start(self)
+
+    def _get_list_from_tool_traversal_conditional(
+        self, start_tool: KtcBaseToolClass, param: str, value, condition = operator.eq):
+        return_list = []
+
+        if (start_tool is None or
+            start_tool == self.TOOL_NONE or
+            start_tool == self.TOOL_UNKNOWN or
+            start_tool == self._ktc):
+            return return_list
+
+        if condition(getattr(start_tool, param), value):
+            return_list.append(start_tool)
+
+        upper_tool = start_tool.toolchanger.parent_tool
+
+        if upper_tool is not None:
+            return_list += self._get_list_from_tool_traversal_conditional(
+                upper_tool, param, value, condition)
+
+        return return_list
+
+    def deselect(self):
         self.Dropoff()
-        
+
     def Dropoff(self, force_virtual_unload=False):
         # Alsocheck if any tool over this oneshould bedeselected.
         self.log.always("Dropoff: T%s - Running." % str(self.number))
@@ -287,9 +287,11 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         )  # Log that the current tool is to be unmounted.
 
         # Check if homed
-        if not self._ktc.printer_is_homed_for_toolchange():
-            self.log.always("KtcTool.Dropoff: Printer not homed")
-            return None
+        if not self._ktc.printer_is_homed_for_toolchange(self.requires_axis_homed):
+            raise self.printer.command_error(
+                "KtcTool.deselect: Required axis %s not homed for ktc_tool %s."
+                % (self.requires_axis_homed, self.name)
+            )
 
         # Turn off fan if has a fan.
         if self.fan is not None:

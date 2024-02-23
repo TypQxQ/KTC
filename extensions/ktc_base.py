@@ -7,7 +7,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import ast, typing
+import ast, typing, re
 from enum import IntEnum, unique, Enum
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
@@ -16,10 +16,6 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_log, ktc_toolchanger, ktc_tool, ktc, ktc_persisting
 
-# Constants for the restore_axis_on_toolchange variable.
-XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
-INDEX_TO_XYZ = ["X", "Y", "Z"]
-
 # Value of Unknown and None tools.
 TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
@@ -27,6 +23,11 @@ TOOL_NONE_N = -1
 
 DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY = 0.2
 DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
+
+PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
+                        "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
+                        "heater_active_to_standby_delay", "heater_active_to_powerdown_delay",
+                        "force_deselect_when_parent_deselects"]
 
 class KtcConfigurableEnum(Enum):
     @classmethod
@@ -77,17 +78,23 @@ class KtcBaseClass:
         self.offset: dict[float, float, float] = None   # type: ignore
 
         # Get inheritable parameters from the config.
-        # Empty strings are overwritten by the parent object in configure_inherited_params.
-        self._engage_gcode = config.get("engage_gcode", "")  # type: ignore
-        self._disengage_gcode = config.get("disengage_gcode", "")  # type: ignore
-        self._init_gcode = config.get("init_gcode", "")  # type: ignore
-        self.requires_axis_homed = self.config.get("requires_axis_homed", "")   # type: ignore
-        self._tool_select_gcode = config.get("tool_select_gcode", "")     # type: ignore
-        self._tool_deselect_gcode = config.get("tool_deselect_gcode", "") # type: ignore
+        # Empty strings are NOT overwritten by the parent object in configure_inherited_params.
+        # Must be set to None as standard.
+        # Initalized to empty strings in KTC as topmost parent.
+        self._engage_gcode = config.get("engage_gcode", None)  # type: ignore
+        self._disengage_gcode = config.get("disengage_gcode", None)  # type: ignore
+        self._init_gcode = config.get("init_gcode", None)  # type: ignore
+        self.requires_axis_homed: str = self.config.get("requires_axis_homed", None)   # type: ignore
+        self._tool_select_gcode = config.get("tool_select_gcode", None)     # type: ignore
+        self._tool_deselect_gcode = config.get("tool_deselect_gcode", None) # type: ignore
         self.heater_active_to_standby_delay = self.config.getfloat(
             "heater_active_to_standby_delay", None, 0.1)    # type: ignore
         self.heater_active_to_powerdown_delay = self.config.getfloat(
             "heater_active_to_powerdown_delay", None, 0.1)  # type: ignore
+
+        # requires_axis_homed can contain "X", "Y", "Z" or a combination. Remove all other.
+        if self.requires_axis_homed is not None and self.requires_axis_homed != "":
+            self.requires_axis_homed = re.sub(r'[^XYZ]', '', self.requires_axis_homed.upper())
 
         # Get initial values from the config.
         self._initiating_config = {}
@@ -98,7 +105,6 @@ class KtcBaseClass:
             if init == "init_offset":
                 try:
                     v : str = config.get(init)
-                    # t = typing.cast(str,self.config.get("init_offset", None))  # type: ignore
                     if v is not None or v != "":
                         vl = [float(x) for x in v.split(",")]
                         if len(vl) != 3:
@@ -160,12 +166,8 @@ class KtcBaseClass:
             if self.offset is None:
                 self.offset = [0, 0, 0]
 
-        params_to_inherit = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
-                             "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
-                             "heater_active_to_standby_delay", "heater_active_to_powerdown_delay",
-                             "force_deselect_when_parent_deselects"]
         # Set the parameters from the parent object if they are not set.
-        for v in params_to_inherit:
+        for v in PARAMS_TO_INHERIT:
             if getattr(self, v) is None:
                 setattr(self, v, getattr(parent, v))
 
