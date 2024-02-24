@@ -65,7 +65,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 "Toolchanger %s has no parent tool " % self.name
                 + "defined but init_order is set to AFTER_PARENT."
             )
-        
+
         # If tool is anything but configured, log it.
         if self.state != self.StateType.CONFIGURED:
             self.log.debug("Initializing toolchanger %s from state %s." % (self.name, self.state))
@@ -103,7 +103,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         # Run the init gcode template if it is defined.
         if self._init_gcode != "":
             init_gcode_template = self.gcode_macro.load_template(   # type: ignore
-            self.config, "", self._init_gcode)
+                self.config, "", self._init_gcode)
             context = init_gcode_template.create_template_context()
             context['myself'] = self.get_status()
             context['ktc'] = self._ktc.get_status()

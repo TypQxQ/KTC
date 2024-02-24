@@ -7,6 +7,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
+from __future__ import annotations
 import ast, typing, re
 from enum import IntEnum, unique, Enum
 
@@ -21,13 +22,13 @@ TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
 
-DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY = 0.2
 DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
+DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY = 0.2
 
 PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
                         "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
                         "heater_active_to_standby_delay", "heater_active_to_powerdown_delay",
-                        "force_deselect_when_parent_deselects"]
+                        "force_deselect_when_parent_deselects", "heaters", "fan"]
 
 class KtcConfigurableEnum(Enum):
     @classmethod
@@ -52,7 +53,7 @@ class KtcConfigurableEnum(Enum):
 
 class KtcBaseClass:
     """Base class for KTC. Contains common methods and properties."""
-    def __init__(self, config: typing.Optional['configfile.ConfigWrapper'] = None):
+    def __init__(self, config: "configfile.ConfigWrapper" = None): # type: ignore
         self.config = typing.cast('configfile.ConfigWrapper', config)
         self.name: str = ""
 
@@ -84,13 +85,18 @@ class KtcBaseClass:
         self._engage_gcode = config.get("engage_gcode", None)  # type: ignore
         self._disengage_gcode = config.get("disengage_gcode", None)  # type: ignore
         self._init_gcode = config.get("init_gcode", None)  # type: ignore
-        self.requires_axis_homed: str = self.config.get("requires_axis_homed", None)   # type: ignore
+        self.requires_axis_homed: str = self.config.get(
+            "requires_axis_homed", None)   # type: ignore
         self._tool_select_gcode = config.get("tool_select_gcode", None)     # type: ignore
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", None) # type: ignore
         self.heater_active_to_standby_delay = self.config.getfloat(
             "heater_active_to_standby_delay", None, 0.1)    # type: ignore
         self.heater_active_to_powerdown_delay = self.config.getfloat(
             "heater_active_to_powerdown_delay", None, 0.1)  # type: ignore
+        self.heaters = self.config.get("heaters", None)    # type: ignore
+        if self.heaters is not None:
+            self.heaters = self.heaters.replace(" ", "")
+        self.fan = self.config.get("fans", None)            # type: ignore
 
         # requires_axis_homed can contain "X", "Y", "Z" or a combination. Remove all other.
         if self.requires_axis_homed is not None and self.requires_axis_homed != "":
@@ -219,7 +225,6 @@ class KtcBaseClass:
                 )
         return result
 
-    @unique
     class StateType(IntEnum, KtcConfigurableEnum):
         """Constants for the status of the toolchanger.
         Using dataclasses to allow for easy traversal of the values."""
@@ -232,9 +237,12 @@ class KtcBaseClass:
         INITIALIZED = 0         # Toolchanger or tool is initialized but not ready.
         READY = 1               # Toolchanger or tool is ready to be used.
         CHANGING = 2            # Toolchanger or tool is changing tool.
-        ENGAGING = 3            # Toolchanger or tool is engaging.
+        ENGAGING = 3            # Toolchanger is engaging.
+        SELECTING = 3           # Tool is selecting.
         DISENGAGING = 4         # Toolchanger or tool is disengaging.
+        DESELECTING = 4         # Tool is deselecting.
         ENGAGED = 5             # Tollchanger or tool is engaged.
+        SELECTED = 5            # Tool is selected.
         ACTIVE = 10             # Tool is active as main engaged tool for ktc.
 
         @classmethod
@@ -303,7 +311,7 @@ class KtcBaseChangerClass(KtcBaseClass):
 
 class KtcBaseToolClass(KtcBaseClass):
     '''Base class for tools. Contains common methods and properties.'''
-    def __init__(self, config: typing.Optional['configfile.ConfigWrapper'] = None,
+    def __init__(self, config: "configfile.ConfigWrapper" = None,   # type: ignore
                  name: str = "", number: int = TOOL_NUMBERLESS_N):
         super().__init__(config)
 
@@ -314,36 +322,30 @@ class KtcBaseToolClass(KtcBaseClass):
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
         # TODO: Change to array of fans
         self.fan = None
-        self.extruder = None
         # TODO: Change to heater object
         self.heater = None
         # 0 = off, 1 = standby temperature, 2 = active temperature.
         self.heater_state = 0
         # Timer to set temperature to standby temperature
-        # after heater_active_to_standby_delay seconds. Set if this tool has an extruder.
+        # after heater_active_to_standby_delay seconds. Set if this tool has an heaters.
         self.timer_heater_active_to_standby_delay = None
         # Timer to set temperature to 0 after heater_active_to_powerdown_delay seconds.
-        # Set if this tool has an extruder.
+        # Set if this tool has an heaters.
         self.timer_heater_active_to_powerdown_delay = None
         # Temperature to set when in active mode.
-        # Requred on Physical and virtual tool if any has extruder.
+        # Requred on Physical and virtual tool if any has heaters.
         self.heater_active_temp = 0
         # Temperature to set when in standby mode.
-        # Requred on Physical and virtual tool if any has extruder.
+        # Requred on Physical and virtual tool if any has heaters.
         self.heater_standby_temp = 0
-        # Time in seconds from being parked to setting temperature to
-        # standby the temperature above. Use 0.1 to change imediatley
-        # to standby temperature. Requred on Physical tool
-        # self.heater_active_to_standby_delay = 0.1
-        # Time in seconds from being parked to setting temperature to 0.
-        # Use something like 86400 to wait 24h if you want to disable.
-        # Requred on Physical tool.
-        # self.heater_active_to_powerdown_delay = 600
 
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
 
-    def deselect_tool(self):
+    def select(self):
+        return
+
+    def deselect(self):
         return
 
 class KtcConstantsClass:
@@ -354,8 +356,8 @@ class KtcConstantsClass:
     TOOL_NONE_N = TOOL_NONE_N
     TOOL_UNKNOWN = typing.cast(
         'ktc_tool.KtcTool',
-        KtcBaseToolClass(name="tool_unknown", number=TOOL_UNKNOWN_N))
+        KtcBaseToolClass(name="tool_unknown", number=TOOL_UNKNOWN_N))   # type: ignore
     TOOL_NONE = typing.cast(
         'ktc_tool.KtcTool',
-        KtcBaseToolClass(name="tool_none", number=TOOL_NONE_N))
+        KtcBaseToolClass(name="tool_none", number=TOOL_NONE_N))         # type: ignore
     TOOL_NONE.state = TOOL_UNKNOWN.state = KtcBaseClass.StateType.CONFIGURED

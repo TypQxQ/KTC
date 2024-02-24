@@ -12,7 +12,7 @@ from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass, PARAMS_
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile
-    from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool
+    from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
@@ -38,6 +38,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.all_toolchangers: dict[str, 'ktc_toolchanger.KtcToolchanger'] = {}
         self._tools_having_tc: typing.Dict[
             'ktc_tool.KtcTool','ktc_toolchanger.KtcToolchanger'] = {}
+        self.all_heaters: dict[str, 'ktc_heater.KtcHeater'] = {}
 
         self.__active_tool = self.TOOL_UNKNOWN  # The currently active tool.
 
@@ -415,7 +416,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 "cmd_KTC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool."
             )
         if self.active_tool != self.TOOL_NONE:
-            self.active_tool.Dropoff(force_virtual_unload=True)
+            self.active_tool.deselect(force_unload=True)
 
         try:
             # Need to check all tools at least once but reload them after each time.
@@ -436,7 +437,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                         ).cmd_SelectTool()
                         self.printer.lookup_object(
                             "ktc_tool " + str(tool.get_status()["virtual_loaded"])
-                        ).Dropoff(force_virtual_unload=True)
+                        ).deselect(force_unload=True)
                         all_checked_once = False  # Do not exit while loop.
                         break  # Break for loop to start again.
 
@@ -500,11 +501,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     #  Waits for all temperatures, or a specified tool or heater's temperature.
     #  This command can be used without any additional parameters.
-    #  Without parameters it waits for bed and current extruder.
+    #  Without parameters it waits for bed and current heaters.
     #  Only one of either P or H may be used.
     #
     #  TOOL=nnn Tool number.
-    #  HEATER=nnn Heater number. 0="heater_bed", 1="extruder", 2="extruder1", etc.
+    #  HEATER=nnn Heater number. 0="heater_bed", 1="heaters", 2="heaters1", etc.
     #  TOLERANCE=nnn Tolerance in degC. Defaults to 1*C. Wait will wait until heater is between set temperature +/- tolerance.
     def cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE(self, gcmd):
         curtime = self.printer.get_reactor().monotonic()
@@ -521,7 +522,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         elif tool_id is None and heater_id is None:
             tool_id = self.active_tool_n
             if int(self.active_tool_n) > self.TOOL_NONE_N:
-                heater_name = self.active_tool.extruder
+                heater_name = self.active_tool.heaters
             # wait for bed
             self._Temperature_wait_with_tolerance(curtime, "heater_bed", tolerance)
 
@@ -532,24 +533,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 if tool_is_remaped > -1:
                     tool_id = tool_is_remaped
 
-                heater_name = self.printer.lookup_object(  # Set the heater_name to the extruder of the tool.
+                heater_name = self.printer.lookup_object(  # Set the heater_name to the heaters of the tool.
                     "ktc_tool " + str(tool_id)
                 ).get_status(
                     curtime
                 )[
-                    "extruder"
+                    "heaters"
                 ]
             elif heater_id == 0:  # Else If 0, then heater_bed.
                 heater_name = "heater_bed"  # Set heater_name to "heater_bed".
 
-            elif heater_id == 1:  # Else If h is 1 then use for first extruder.
+            elif heater_id == 1:  # Else If h is 1 then use for first heaters.
                 heater_name = (
-                    "extruder"  # Set heater_name to first extruder which has no number.
+                    "heaters"  # Set heater_name to first heaters which has no number.
                 )
             else:  # Else is another heater number.
-                heater_name = "extruder" + str(
+                heater_name = "heaters" + str(
                     heater_id - 1
-                )  # Because bed is heater_number 0 extruders will be numbered one less than H parameter.
+                )  # Because bed is heater_number 0 heaterss will be numbered one less than H parameter.
         if heater_name is not None:
             self._Temperature_wait_with_tolerance(curtime, heater_name, tolerance)
 
@@ -560,15 +561,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ).get_status(curtime)["target"]
         )
 
-        if target_temp > 40:  # Only wait if set temperature is over 40*C
+        if target_temp > 40:  # Only wait if set temperature is over 420*C
             self.log.always(
-                "Wait for heater "
-                + heater_name
-                + " to reach "
-                + str(target_temp)
-                + " with a tolerance of "
-                + str(tolerance)
-                + "."
+                f"Wait for heater {heater_name} to reach {target_temp}"
+                + f" with a tolerance of {tolerance}."
             )
             self.gcode.run_script_from_command(
                 "TEMPERATURE_WAIT SENSOR="
@@ -616,12 +612,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         if (
             self.printer.lookup_object("ktc_tool " + str(tool_id)).get_status()[
-                "extruder"
+                "heaters"
             ]
             is None
         ):
             self.log.trace(
-                "cmd_KTC_SET_TOOL_TEMPERATURE: T%s has no extruder! Nothing to do."
+                "cmd_KTC_SET_TOOL_TEMPERATURE: T%s has no heaters! Nothing to do."
                 % str(tool_id)
             )
             return None
@@ -685,8 +681,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         try:
             for tool_name, tool in all_tools.items():
-                if tool.get_status()["extruder"] is None:
-                    # self.log.trace("set_all_tool_heaters_off: T%s has no extruder! Nothing to do." % str(tool_name))
+                if tool.get_status()["heaters"] is None:
+                    # self.log.trace("set_all_tool_heaters_off: T%s has no heaters! Nothing to do." % str(tool_name))
                     continue
                 if tool.get_status()["heater_state"] == 0:
                     # self.log.trace("set_all_tool_heaters_off: T%s already off! Nothing to do." % str(tool_name))

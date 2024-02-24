@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 import typing, operator
-from .ktc_base import (
+from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcBaseToolClass,
     KtcConstantsClass,
     KtcBaseChangerClass,
-)  # pylint: disable=relative-beyond-top-level, wildcard-import
-from .ktc_heater import KtcHeater
+)
+from .ktc_heater import KtcHeater   # pylint: disable=relative-beyond-top-level
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
@@ -23,29 +23,11 @@ if typing.TYPE_CHECKING:
 
     # from . import ktc_persisting
 
-
 class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     """Class for a single tool in the toolchanger"""
 
     def __init__(self, config: "configfile.ConfigWrapper"):
         super().__init__(config)
-
-        # TODO: Removed from config. Need to be removed from code.
-        self.is_virtual = False
-        # Parent tool is used as a Physical parent for all tools of this group.
-        # Only used if the tool i virtual. None gets remaped to -1.
-        self.parentTool_id = self.TOOL_NONE_N
-        self.parentTool = None  # Initialize physical parent as a dummy object.
-        self.virtual_loaded = -1  # The abstract tool loaded in the physical tool.
-
-        # TODO: Needs moving to regular gcode.
-        self.virtual_toolload_gcode = None
-        self.virtual_toolunload_gcode = None
-        # If it takes long time to unload/load it may be faster to
-        # leave it loaded and force unload at end of print.
-        self.force_unload_when_parent_unloads = False
-        self.unload_virtual_at_dropoff = None
-
         ##### Name #####
         self.name = config.get_name().split(" ", 1)[1]
         if self.name == self.TOOL_NONE.name or self.name == self.TOOL_UNKNOWN.name:
@@ -66,18 +48,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 "ktc_toolchanger.KtcToolchanger",
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name),
             )
-
-        # TODO: Change this to use the ktc_toolchanger instead of parentTool.
-        self.parentTool = None  # Initialize physical parent as a dummy object.
-
-        # TODO: Change to array of extruders.
-        ##### Extruder #####
-        self.extruder = config.get("extruder", None)  # type: ignore
-
-        # TODO: Change to array of fans.
-        ##### Fan #####
-        self.fan = config.get("fan", None)  # type: ignore
-
+        # Heaters and their offsetts
         self.timer_heater_active_to_standby_delay: "ktc_ToolStandbyTempTimer" = None  # type: ignore
         self.timer_heater_active_to_powerdown_delay:"ktc_ToolStandbyTempTimer" = None # type: ignore
 
@@ -87,7 +58,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
     @toolchanger.setter
     def toolchanger(self, value):
-        # TODO: Change this to use the base class instead of the specific class.
         if value is not None and not isinstance(value, KtcBaseChangerClass):
             raise ValueError("Toolchanger must be a KtcToolchanger object.")
         self._toolchanger = value  # type: ignore
@@ -97,16 +67,38 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         if self.config is None:
             return
 
-        ##### Standby settings (if the tool has an extruder) #####
-        if self.extruder is not None:
-            self.timer_heater_active_to_standby_delay = ktc_ToolStandbyTempTimer(
-                self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_STANDBY
-            )
-            self.timer_heater_active_to_powerdown_delay = ktc_ToolStandbyTempTimer(
-                self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN
-            )
-        # If this tool is a subtool of another tool and 
-        # the etruder is not overriden then use the inherited extruder.
+        self.gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro', # type: ignore # pylint: disable=attribute-defined-outside-init
+                                  self.printer.lookup_object("gcode_macro"))    # type: ignore
+
+        ##### Standby settings (if the tool has an heaters) #####
+        if self.heaters != "":
+            heaters = self.heaters.split(",")
+            for heater in heaters:
+                if heater.contains("!"):
+                    heater, offset = heater.split("!")
+                else:
+                    offset = 0
+                # self.heaters[heater] = float(offset)
+                
+                if self._ktc.all_heaters.get(heater) is None:
+                    self._ktc.all_heaters[heater] = KtcHeater()
+                    
+            # if len(self.heaters) > 0:
+                
+            #     # If the heater is not already initialized then do it.
+            #     if self._ktc.all_heaters.get(heater) is None:
+            #         self._ktc.all_heaters[heater] = KtcHeater()
+                    
+            #     self.timer_heater_active_to_standby_delay = ktc_ToolStandbyTempTimer(
+            #         self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_STANDBY
+            #     )
+            #     self.timer_heater_active_to_powerdown_delay = ktc_ToolStandbyTempTimer(
+            #         self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN
+            #     )
+
+
+        # If this tool is a subtool of another tool and
+        # the etruder is not overriden then use the inherited heaters.
         elif self.toolchanger.parent_tool is not None and (
             self.toolchanger.parent_tool.timer_heater_active_to_standby_delay
             is not None
@@ -170,9 +162,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.log.always(msg)
                 raise self.printer.command_error(msg)
 
-            # If the new tool to be selected has an extruder prepare warmup before
+            # If the new tool to be selected has an heaters prepare warmup before
             # actual tool change so all moves will be done while heating up.
-            if self.extruder is not None:
+            if self.heaters is not None:
                 self.set_heater(heater_state=KtcHeater.StateType.HEATER_STATE_ACTIVE)
 
             # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
@@ -219,15 +211,28 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 "KtcTool.select: Required axis %s not homed for ktc_tool %s."
                 % (self.requires_axis_homed, self.name)
             )
-######################################## Checked up to here.
+
         # Run the gcode for pickup.
         try:
-            context = self.tool_select_gcode_template.create_template_context()
-            context["myself"] = self.get_status()
-            context["ktc"] = self._ktc.get_status()
-            self.tool_select_gcode_template.run_gcode_from_command(context)
+            self.state = self.StateType.ENGAGING
+            tool_select_gcode_template = self.gcode_macro.load_template(
+                self.config, "", self._tool_select_gcode)
+            context = tool_select_gcode_template.create_template_context()
+            context['myself'] = self.get_status()
+            context['ktc'] = self._ktc.get_status()
+            context['STATE_TYPE'] = self.StateType
+            tool_select_gcode_template.run_gcode_from_command(context)
+            # Check that the gcode has changed the state.
         except Exception as e:
-            raise Exception("Pickup gcode: Script running error: %s" % (str(e)))
+            raise Exception(f"ktc_tool {self.name} "
+                            + "failed to run tool_select_gcode: " + str(e)) from e
+        if self.state != self.StateType.ENGAGED and self.state != self.StateType.ERROR:
+            raise self.config.error(
+                (f"ktc_tool {self.name} has not changed the state while running "
+                + "code in tool_select_gcode. Use for example "
+                + "'KTC_SET_TOOL_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
+                + "indicate it is selected successfully.")
+            )
 
         # Restore fan if has a fan.
         if self.fan is not None:
@@ -238,24 +243,67 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 + str(self._ktc.get_status()["saved_fan_speed"])
             )
 
-        # Save current picked up tool and print on screen.
-        self._ktc.active_tool = self
-        if self.is_virtual:
-            self.log.always("Physical Tool for T%d picked up." % (self.number))
-        else:
-            self.log.always("T%d picked up." % (self.number))
-
-        self.log.track_tool_selecting_end(self)
-
-############################################################################################################
         self.log.tool_stats[self.name].selects_completed += 1
+        self.log.track_tool_selecting_end(self)
 
         if final_selected:
             self._ktc.active_tool = self
             self.log.track_tool_selected_start(self)
+            self.state = self.StateType.ACTIVE
+
+    def deselect(self, force_unload=False):    # pylint: disable=arguments-differ
+        # TODO: Also check if any tool over this one should be deselected.
+
+        # Check if homed
+        if not self._ktc.printer_is_homed_for_toolchange(self.requires_axis_homed):
+            raise self.printer.command_error(
+                "KtcTool.deselect: Required axis %s not homed for ktc_tool %s."
+                % (self.requires_axis_homed, self.name)
+            )
+
+        self.log.track_tool_selected_end(self)
+        self.log.track_tool_deselecting_start(self)
+
+        # Turn off fan if has a fan.
+        if self.fan is not None:
+            self.gcode.run_script_from_command(
+                "SET_FAN_SPEED FAN=" + self.fan + " SPEED=0"
+            )
+
+        try:
+            self.state = self.StateType.DESELECTING
+            gcode_template = self.gcode_macro.load_template(
+                self.config, "", self._tool_select_gcode)
+            context = gcode_template.create_template_context()
+            context['myself'] = self.get_status()
+            context['ktc'] = self._ktc.get_status()
+            context['STATE_TYPE'] = self.StateType
+            gcode_template.run_gcode_from_command(context)
+        except Exception as e:
+            raise Exception(f"ktc_tool {self.name} "
+                            + "failed to run tool_deselect_gcode: " + str(e)) from e
+        # Check that the gcode has changed the state.
+        if self.state == self.StateType.ENGAGING:
+            raise self.config.error(
+                (f"ktc_tool {self.name} has not changed the state while running "
+                + "code in tool_select_gcode. Use for example "
+                + "'KTC_SET_TOOL_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
+                + "indicate it is selected successfully.")
+            )
+        elif self.state == self.StateType.ERROR:
+            raise self.config.error(
+                (f"ktc_tool {self.name} has changed the state to ERROR while running "
+                + "code in tool_select_gcode.")
+            )
+
+        self._ktc.active_tool = self.TOOL_NONE  # Dropoff successfull
+        self.log.track_tool_deselecting_end(
+            self
+        )  # Log the time it takes for tool change.
 
     def _get_list_from_tool_traversal_conditional(
-        self, start_tool: KtcBaseToolClass, param: str, value, condition = operator.eq):
+        self, start_tool: KtcBaseToolClass, param: str,
+        value, condition = operator.eq) -> typing.List[KtcTool]:
         return_list = []
 
         if (start_tool is None or
@@ -275,180 +323,63 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         return return_list
 
-    def deselect(self):
-        self.Dropoff()
-
-    def Dropoff(self, force_virtual_unload=False):
-        # Alsocheck if any tool over this oneshould bedeselected.
-        self.log.always("Dropoff: T%s - Running." % str(self.number))
-
-        self.log.track_tool_selected_end(
-            self
-        )  # Log that the current tool is to be unmounted.
-
-        # Check if homed
-        if not self._ktc.printer_is_homed_for_toolchange(self.requires_axis_homed):
-            raise self.printer.command_error(
-                "KtcTool.deselect: Required axis %s not homed for ktc_tool %s."
-                % (self.requires_axis_homed, self.name)
-            )
-
-        # Turn off fan if has a fan.
-        if self.fan is not None:
-            self.gcode.run_script_from_command(
-                "SET_FAN_SPEED FAN=" + self.fan + " SPEED=0"
-            )
-
-        # Check if this is a virtual tool.
-        self.log.trace(
-            "Dropoff: T" + str(self.number) + "- is_virtual: " + str(self.is_virtual)
-        )
-        if self.is_virtual:
-            # Only dropoff if it is required.
-            if self.unload_virtual_at_dropoff or force_virtual_unload:
-                self.log.debug(
-                    "T%s: unload_virtual_at_dropoff: %s, force_virtual_unload: %s"
-                    % (
-                        str(self.number),
-                        str(self.unload_virtual_at_dropoff),
-                        str(force_virtual_unload),
-                    )
-                )
-                self.log.info(
-                    "Dropoff: T"
-                    + str(self.number)
-                    + "- Virtual - Running UnloadVirtual"
-                )
-                self.UnloadVirtual()
-
-        self.log.track_tool_deselecting_start(
-            self
-        )  # Log the time it takes for tool change.
-        # Run the gcode for dropoff.
-        try:
-            context = self._tool_deselect_gcode_template.create_template_context()
-            context["myself"] = self.get_status()
-            context["ktc"] = self._ktc.get_status()
-            self._tool_deselect_gcode_template.run_gcode_from_command(context)
-        except Exception as e:
-            raise Exception("Dropoff gcode: Script running error: %s" % (str(e)))
-
-        self._ktc.active_tool = self.TOOL_NONE  # Dropoff successfull
-        self.log.track_tool_deselecting_end(
-            self
-        )  # Log the time it takes for tool change.
-
-    def LoadVirtual(self):
-        self.log.info("Loading virtual tool: T%d." % self.number)
-        self.log.track_tool_selecting_start(
-            self
-        )  # Log the time it takes for tool mount.
-
-        # Run the gcode for Virtual Load.
-        try:
-            context = self.virtual_toolload_gcode_template.create_template_context()
-            context["myself"] = self.get_status()
-            context["ktc"] = self._ktc.get_status()
-            self.virtual_toolload_gcode_template.run_gcode_from_command(context)
-        except Exception as e:
-            raise Exception(
-                "virtual_toolload_gcode: Script running error: %s" % (str(e))
-            )
-
-        # TODO: Change this to use the ktc_toolchanger instead of parentTool.
-        parentTool = self.printer.lookup_object("ktc_tool " + str(self.parentTool_id))
-        parentTool.set_virtual_loaded(self.number)
-
-        # Save current picked up tool and print on screen.
-        self._ktc.active_tool = self
-        self.log.trace("Virtual T%d Loaded" % (self.number))
-        self.log.track_tool_selecting_end(
-            self
-        )  # Log number of toolchanges and the time it takes for tool mounting.
-
-    def set_virtual_loaded(self, value=-1):
-        self.virtual_loaded = value
-        self.log.trace(
-            "Saved VirtualToolLoaded for T%s as: %s" % (str(self.number), str(value))
-        )
-
-    def UnloadVirtual(self):
-        self.log.info("Unloading virtual tool: T%d." % self.number)
-        self.log.track_tool_deselecting_start(
-            self
-        )  # Log the time it takes for tool unload.
-
-        # Run the gcode for Virtual Unload.
-        try:
-            context = self.virtual_toolunload_gcode_template.create_template_context()
-            context["myself"] = self.get_status()
-            context["ktc"] = self._ktc.get_status()
-            self.virtual_toolunload_gcode_template.run_gcode_from_command(context)
-        except Exception as e:
-            raise Exception(
-                "virtual_toolunload_gcode: Script running error:\n%s" % str(e)
-            )
-
-        parentTool = self.printer.lookup_object("ktc_tool " + str(self.parentTool_id))
-        parentTool.set_virtual_loaded(-1)
-
-        # Save current picked up tool and print on screen.
-        self._ktc.active_tool = self
-        self.log.trace("Virtual T%d Unloaded" % (int(self.number)))
-
-        self.log.track_tool_deselecting_end(
-            self
-        )  # Log the time it takes for tool unload.
-
     def set_offset(self, **kwargs):
-        for i in kwargs:
-            if i == "x_pos":
-                self.offset[0] = float(kwargs[i])
-            elif i == "x_adjust":
-                self.offset[0] = float(self.offset[0]) + float(kwargs[i])
-            elif i == "y_pos":
-                self.offset[1] = float(kwargs[i])
-            elif i == "y_adjust":
-                self.offset[1] = float(self.offset[1]) + float(kwargs[i])
-            elif i == "z_pos":
-                self.offset[2] = float(kwargs[i])
-            elif i == "z_adjust":
-                self.offset[2] = float(self.offset[2]) + float(kwargs[i])
+        for arg, value in kwargs.items():
+            if arg == "x_pos":
+                self.offset[0] = float(value)
+            elif arg == "x_adjust":
+                self.offset[0] += float(value)
+            elif arg == "y_pos":
+                self.offset[1] = float(value)
+            elif arg == "y_adjust":
+                self.offset[1] += float(value)
+            elif arg == "z_pos":
+                self.offset[2] = float(value)
+            elif arg == "z_adjust":
+                self.offset[2] += float(value)
 
         self.log.always(
-            "T%d offset now set to: %f, %f, %f."
+            "ktc_tool %s offset now set to: %f, %f, %f."
             % (
-                int(self.number),
+                self.name,
                 float(self.offset[0]),
                 float(self.offset[1]),
                 float(self.offset[2]),
             )
         )
 
-    def _set_state(self, heater_state):
+    def _set_heater_state(self, heater_state):
         self.heater_state = heater_state
 
+    @staticmethod
+    def _get_topmost_tool_for_heater(tool: KtcTool) -> KtcTool:
+        pt = tool.toolchanger.parent_tool
+        if pt is not None:
+            if (pt.heater is not None and
+                pt.heater == tool.heater):
+                return KtcTool._get_topmost_tool_for_heater(pt)
+            else:
+                return tool
+        else:
+            return tool
+
     def set_heater(self, **kwargs):
-        if self.extruder is None:
+        if self.heaters is None:
             self.log.debug(
-                "set_heater: T%d has no extruder! Nothing to do." % self.number
+                "set_heater: KTC Tool %s has no heaters! Nothing to do." % self.name
             )
             return None
 
-        # self.log.info("T%d heater is at begingin %s. %s*C" % (self.name, self.heater_state, self.heater_active_temp ))
+        self.log.trace("set_heater: KTC Tool %s heater is at begingin %s. %s*C"
+                       % (self.name, self.heater_state, self.heater_active_temp ))
 
-        heater = self.printer.lookup_object(self.extruder).get_heater()
+        heater = self.printer.lookup_object(self.heaters).get_heater()
         curtime = self.printer.get_reactor().monotonic()
         changing_timer = False
 
-        # self is always pointing to virtual tool but its timers and extruder are always pointing to the physical tool. When changing multiple virtual tools heaters the statistics can remain open when changing by timers of the parent if another one got in between.
-        # Therefore it's important for all heater statistics to only point to physical parent.
-
-        # TODO: Change this to use the ktc_toolchanger instead of parentTool.
-        if self.is_virtual == True:
-            tool_for_tracking_heater = self.parentTool_id
-        else:
-            tool_for_tracking_heater = self.name
+        # Heater of self can point to the one of parent if it is inherited.
+        # Get topmost tool for heater.
+        tool_for_tracking_heater = KtcTool._get_topmost_tool_for_heater(self)
 
         # First set state if changed, so we set correct temps.
         if "heater_state" in kwargs:
@@ -622,8 +553,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             "name": self.name,
             "number": self.number,
             "toolchanger": self.toolchanger.name,
-            "parentTool_id": self.parentTool_id,
-            "extruder": self.extruder,
+            "heaters": self.heaters,
             "fan": self.fan,
             "offset": self.offset,
             "heater_state": self.heater_state,
@@ -631,8 +561,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             "heater_standby_temp": self.heater_standby_temp,
             "heater_active_to_standby_delay": self.heater_active_to_standby_delay,
             "idle_to_powerdown_next_wake": self.heater_active_to_powerdown_delay,
-            "virtual_loaded": self.virtual_loaded,
-            "unload_virtual_at_dropoff": self.unload_virtual_at_dropoff,
             **self.params,
         }
         return status
@@ -677,10 +605,6 @@ class ktc_ToolStandbyTempTimer:
             tool: KtcTool = self.printer.lookup_object(
                 "ktc_tool " + str(self.last_virtual_tool_using_physical_timer)
             )
-            if tool.is_virtual == True:
-                tool_for_tracking_heater = tool.parentTool_id
-            else:
-                tool_for_tracking_heater = tool.name
 
             self.log.trace(
                 "_standby_tool_temp_timer_event: Running for T%s. temp_type:%s. %s"
@@ -699,7 +623,8 @@ class ktc_ToolStandbyTempTimer:
             )
 
             temperature = 0
-            heater = self.printer.lookup_object(tool.extruder).get_heater()
+            # TODO: This isnot working.
+            heater = self.printer.lookup_object(tool.heaters).get_heater()
             if self.temp_type == self.TIMER_TO_STANDBY:
                 self.log.track_heater_standby_start(
                     self.tool_id
@@ -714,7 +639,7 @@ class ktc_ToolStandbyTempTimer:
                 tool.get_timer_to_standby().set_timer(
                     0, self.last_virtual_tool_using_physical_timer
                 )  # Stop Standby timer.
-                tool._set_state(KtcHeater.StateType.HEATER_STATE_OFF)  # Set off state.
+                tool._set_heater_state(KtcHeater.StateType.HEATER_STATE_OFF)  # Set off state.
                 heater.set_temp(0)  # Set temperature to 0.
 
             self.log.track_heater_active_end(

@@ -60,7 +60,7 @@ Active_heater in ktc? maybe a private one.
 #### Inheritable
 - engage_gcode = "":    Gcode to run at toochanger engage, status from READY to ENGAGED
 - disengage_gcode = "": Gcode to run at toochanger disengage, status from ENGAGED to READY
-- init_gcode = "":      Gcode to run at toolchanger initialization, from CONFIGURED to READY. If used, it is important that the Gcode changes the state of toolchanger.
+- init_gcode = "":      Gcode to run at toolchanger initialization, from CONFIGURED to READY. If used, it is important tha  t the Gcode changes the state of toolchanger.
 - requires_axis_homed = "": Axis in XYZ to be required before tool can be changed, for select
 - tool_select_gcode = "":   Gcode to run whan selecting the tool, from ready to SELECTED
 - tool_deselect_gcode = "": Oposite of above.
@@ -69,6 +69,7 @@ Use something like  86400 to wait 24h if you want to run indefinitly.
 - heater_active_to_powerdown_delay = 0.2: As above but from active to off.
 - init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to initialize to other value.
 - force_deselect_when_parent_deselects = True: 
+- heaters = list of heaterslf.heaters separated with , and each has optional temperature offset as signed float contained inside []. When iterating from inheritance, check if parent already has that heater. This is so that one heater can be inherited multiple levels and a second heater not. 
 
 #### NonInheritable
 
