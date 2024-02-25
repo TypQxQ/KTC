@@ -28,7 +28,7 @@ DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY = 0.2
 PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
                         "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
                         "heater_active_to_standby_delay", "heater_active_to_powerdown_delay",
-                        "force_deselect_when_parent_deselects", "heaters", "fan"]
+                        "force_deselect_when_parent_deselects", "_heaters_config", "fan"]
 
 class KtcConfigurableEnum(Enum):
     @classmethod
@@ -78,7 +78,7 @@ class KtcBaseClass:
         self._ktc: 'ktc.Ktc' = None # type: ignore # We are loading it later.
 
         self.state = self.StateType.NOT_CONFIGURED
-        self.offset: dict[float, float, float] = None   # type: ignore
+        self.offset: list[float, float, float] = None   # type: ignore
 
         # Get inheritable parameters from the config.
         # Empty strings are NOT overwritten by the parent object in configure_inherited_params.
@@ -91,25 +91,20 @@ class KtcBaseClass:
             "requires_axis_homed", None)   # type: ignore
         self._tool_select_gcode = config.get("tool_select_gcode", None)     # type: ignore
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", None) # type: ignore
+
+        # TODO: Delete
         self.heater_active_to_standby_delay = self.config.getfloat(
             "", None, 0.1)    # type: ignore
         self.heater_active_to_powerdown_delay = self.config.getfloat(
             "", None, 0.1)  # type: ignore
-        #self.heaters = self.config.get("heater", None)    # type: ignore
+
+
         self.heaters = []
-        heaters = self.config.get_prefix_options("heater")
-        logging.info(f"Number of heaters for {self.config.get_name()}: {len(heaters)}")
-        for h in heaters:
-            h: str = h.lower().replace(" ", "")
-            h = h.split(",")
-            temp = ["", 0.1, 0.1, 0.0]
-            for i, v in enumerate(h):
-                temp[i] = v
+        self._heaters_config: str = self.config.get("heater", None)    # type: ignore
+        if (self._heaters_config is not None and 
+            self._heaters_config.strip() == ""):
+            self._heaters_config = None  # type: ignore
 
-            # self.heaters[h[0]] = temp
-
-        # if self.heaters is not None:
-        #     self.heaters = self.heaters.replace(" ", "")
         self.fan = self.config.get("fan", None)            # type: ignore
 
         # requires_axis_homed can contain "X", "Y", "Z" or a combination. Remove all other.
@@ -178,13 +173,12 @@ class KtcBaseClass:
         else:
             raise ValueError("Can't configure inherited parameters for object: " + str(type(self)))
 
+        # TODO: Delete
         # If this is the topmost parent.
         if parent == self:
             if self.heater_active_to_powerdown_delay is None:
                 self.heater_active_to_powerdown_delay = DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY
                 self.heater_active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
-            if self.offset is None:
-                self.offset = [0, 0, 0]
 
         # Set the parameters from the parent object if they are not set.
         for v in PARAMS_TO_INHERIT:

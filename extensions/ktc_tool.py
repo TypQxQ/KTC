@@ -70,6 +70,32 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         self.gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro', # type: ignore # pylint: disable=attribute-defined-outside-init
                                   self.printer.lookup_object("gcode_macro"))    # type: ignore
 
+        if self._heaters_config is not None:
+            heaters = self.config.getlists(
+                "", default= self._heaters_config, seps=(',', '\n'), # type: ignore
+                parser=str)
+        else:
+            heaters = []
+        self.log.trace(f"Number of heaters for {self.config.get_name()}: {len(heaters)}")
+        if len(heaters) > 0:
+            self.log.trace(f"Firt heater is of type: {type(heaters[0])}")
+            for h in heaters:
+                # Default as: heater_name, active to standby delay, powerdown from standby time, temperature offset
+                if len(h) > 0:
+                    default = [h[0], 0.1, 0.1, 0.0]
+                    if h[0] == "":
+                        continue
+                    elif len(h) > 1:
+                        for i, v in enumerate(h[1:]):
+                            h[i+1] = float(v)
+                    self.heaters.append(h)
+                    if h[0] not in self._ktc.all_heaters:
+                        self._ktc.all_heaters[h[0]] = KtcHeater()
+                        self.log.trace(f"Added heater {h[0]} to all_heaters.")
+                    else:
+                        self.log.trace(f"Heater {h[0]} already in all_heaters.")
+
+
         ##### Standby settings (if the tool has an heaters) #####
         # if self.heaters != "":
         #     heaters = self.heaters.split(",")

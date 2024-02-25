@@ -235,6 +235,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             tc.tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
             # Fill the _tools_having_tc dict with the tools that have a toolchanger as child.
             self._tools_having_tc[tc.parent_tool] = tc  # type: ignore
+            # TODO: Delete
 
     def register_tool_gcode_commands(self):
         '''Register Gcode commands for all tools having a number.'''
@@ -287,6 +288,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                     self.params[param] = "XYZ"
                 else:
                     self.params[param] = ""
+        if self.offset is None:
+            self.offset = [0.0, 0.0, 0.0]
         self.state = self.StateType.CONFIGURED
 
     @property

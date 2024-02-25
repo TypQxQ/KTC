@@ -70,7 +70,7 @@ Use something like  86400 to wait 24h if you want to run indefinitly.
 - init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to initialize to other value.
 - force_deselect_when_parent_deselects = True: 
 - heater_x : For each heater that is activated on this tool a list of options comma separated:
-heater name, active to standby delay, powerdown from standby time, offset.
+heater name, active to standby delay, powerdown from standby time, temperature offset.
 Most only use one heater, the extruder. More avanced can use filament preheater that could also be shared b multiple tools and then the second one has an offset of -100 degrees celsius for preheating filament.
 
 - heaters = list of heaterslf.heaters separated with , and each has optional temperature offset as signed float contained inside []. When iterating from inheritance, check if parent already has that heater. This is so that one heater can be inherited multiple levels and a second heater not. 
