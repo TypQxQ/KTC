@@ -8,7 +8,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 from __future__ import annotations
-import ast, typing, re
+import ast, typing, re, logging
 from enum import IntEnum, unique, Enum
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
@@ -53,7 +53,7 @@ class KtcConfigurableEnum(Enum):
 
 class KtcBaseClass:
     """Base class for KTC. Contains common methods and properties."""
-    def __init__(self, config: "configfile.ConfigWrapper" = None): # type: ignore
+    def __init__(self, config: "configfile.ConfigWrapper"): # type: ignore
         self.config = typing.cast('configfile.ConfigWrapper', config)
         self.name: str = ""
 
@@ -61,12 +61,14 @@ class KtcBaseClass:
         self.requires_axis_homed: str = ""
         self._state = self.StateType.NOT_CONFIGURED
 
-        self.force_deselect_when_parent_deselects: bool = config.getboolean(
-            "force_deselect_when_parent_deselects", True)  # type: ignore
+        self.force_deselect_when_parent_deselects: bool = None  # type: ignore
 
         # If this is a empty object then don't load the config.
         if config is None:
             return
+
+        self.force_deselect_when_parent_deselects: bool = config.getboolean(
+            "force_deselect_when_parent_deselects", True)  # type: ignore
 
         self.printer : 'klippy.Printer' = config.get_printer()
         self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
@@ -90,13 +92,25 @@ class KtcBaseClass:
         self._tool_select_gcode = config.get("tool_select_gcode", None)     # type: ignore
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", None) # type: ignore
         self.heater_active_to_standby_delay = self.config.getfloat(
-            "heater_active_to_standby_delay", None, 0.1)    # type: ignore
+            "", None, 0.1)    # type: ignore
         self.heater_active_to_powerdown_delay = self.config.getfloat(
-            "heater_active_to_powerdown_delay", None, 0.1)  # type: ignore
-        self.heaters = self.config.get("heaters", None)    # type: ignore
-        if self.heaters is not None:
-            self.heaters = self.heaters.replace(" ", "")
-        self.fan = self.config.get("fans", None)            # type: ignore
+            "", None, 0.1)  # type: ignore
+        #self.heaters = self.config.get("heater", None)    # type: ignore
+        self.heaters = []
+        heaters = self.config.get_prefix_options("heater")
+        logging.info(f"Number of heaters for {self.config.get_name()}: {len(heaters)}")
+        for h in heaters:
+            h: str = h.lower().replace(" ", "")
+            h = h.split(",")
+            temp = ["", 0.1, 0.1, 0.0]
+            for i, v in enumerate(h):
+                temp[i] = v
+
+            # self.heaters[h[0]] = temp
+
+        # if self.heaters is not None:
+        #     self.heaters = self.heaters.replace(" ", "")
+        self.fan = self.config.get("fan", None)            # type: ignore
 
         # requires_axis_homed can contain "X", "Y", "Z" or a combination. Remove all other.
         if self.requires_axis_homed is not None and self.requires_axis_homed != "":
@@ -147,7 +161,7 @@ class KtcBaseClass:
         # Ref. to ktc objects.
         self._ktc = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc"))
         self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object(
-            self.config, "ktc_log"))  # Load the log object.
+            "ktc_log"))  # Load the log object.
 
         # Get Offset from persistent storage
         self.offset = self.persistent_state.get("offset", None)

@@ -132,6 +132,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self._recursive_initialize_toolchangers(
             self.default_toolchanger,
             self.default_toolchanger.__class__.InitModeType.ON_START)
+        self.register_tool_gcode_commands()
+
 
     def _config_default_toolchanger(self):
         '''Set the default toolchanger and validate it. 
@@ -234,8 +236,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             # Fill the _tools_having_tc dict with the tools that have a toolchanger as child.
             self._tools_having_tc[tc.parent_tool] = tc  # type: ignore
 
-        self.register_tool_gcode_commands()
-
     def register_tool_gcode_commands(self):
         '''Register Gcode commands for all tools having a number.'''
         new_toolnumbers: list[int] = []
@@ -245,7 +245,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 if tool.number not in self._registered_toolnumbers:
                     self._registered_toolnumbers.append(tool.number)
                 self.gcode.register_command(
-                    "KTC_T" + str(tool.number), tool.select(), False, 
+                    "KTC_T" + str(tool.number), tool.select, False, 
                     "Select tool " + tool.name + " with number " + str(tool.number)
                 )
         # Get all toolnumbers from self._registered_toolnumbers that are not in new_toolnumbers.
@@ -1006,12 +1006,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         
         return False
         
-        elif lazy_home_when_parking == 0 and not all(
-            axis in homed for axis in ["x", "y", "z"]
-        ):
-            return False
-        elif lazy_home_when_parking == 1 and "z" not in homed:
-            return False
+        # elif lazy_home_when_parking == 0 and not all(
+        #     axis in homed for axis in ["x", "y", "z"]
+        # ):
+        #     return False
+        # elif lazy_home_when_parking == 1 and "z" not in homed:
+        #     return False
 
         axes_to_home = ""
         for axis in ["x", "y", "z"]:

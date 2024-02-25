@@ -71,17 +71,17 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                                   self.printer.lookup_object("gcode_macro"))    # type: ignore
 
         ##### Standby settings (if the tool has an heaters) #####
-        if self.heaters != "":
-            heaters = self.heaters.split(",")
-            for heater in heaters:
-                if heater.contains("!"):
-                    heater, offset = heater.split("!")
-                else:
-                    offset = 0
-                # self.heaters[heater] = float(offset)
+        # if self.heaters != "":
+        #     heaters = self.heaters.split(",")
+        #     for heater in heaters:
+        #         if heater.contains("!"):
+        #             heater, offset = heater.split("!")
+        #         else:
+        #             offset = 0
+        #         # self.heaters[heater] = float(offset)
                 
-                if self._ktc.all_heaters.get(heater) is None:
-                    self._ktc.all_heaters[heater] = KtcHeater()
+        #         if self._ktc.all_heaters.get(heater) is None:
+        #             self._ktc.all_heaters[heater] = KtcHeater()
                     
             # if len(self.heaters) > 0:
                 
@@ -99,7 +99,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         # If this tool is a subtool of another tool and
         # the etruder is not overriden then use the inherited heaters.
-        elif self.toolchanger.parent_tool is not None and (
+        # elif
+        if self.toolchanger.parent_tool is not None and (
             self.toolchanger.parent_tool.timer_heater_active_to_standby_delay
             is not None
             ):
@@ -143,6 +144,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     # # To avoid recursive remaping.
     # def select_tool_actual(self, restore_mode=None):
         # current_tool_id = int(self._ktc.active_tool_n)
+        self.log.always("KTC Tool %s Selecting." % self.name)
         at = self._ktc.active_tool
 
         # TODO: Remove when debugged.
@@ -214,7 +216,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         # Run the gcode for pickup.
         try:
-            self.state = self.StateType.ENGAGING
+            self.state = self.StateType.SELECTING
             tool_select_gcode_template = self.gcode_macro.load_template(
                 self.config, "", self._tool_select_gcode)
             context = tool_select_gcode_template.create_template_context()
@@ -226,7 +228,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         except Exception as e:
             raise Exception(f"ktc_tool {self.name} "
                             + "failed to run tool_select_gcode: " + str(e)) from e
-        if self.state != self.StateType.ENGAGED and self.state != self.StateType.ERROR:
+        if self.state == self.StateType.SELECTING:
             raise self.config.error(
                 (f"ktc_tool {self.name} has not changed the state while running "
                 + "code in tool_select_gcode. Use for example "
