@@ -64,16 +64,17 @@ Active_heater in ktc? maybe a private one.
 - requires_axis_homed = "": Axis in XYZ to be required before tool can be changed, for select
 - tool_select_gcode = "":   Gcode to run whan selecting the tool, from ready to SELECTED
 - tool_deselect_gcode = "": Oposite of above.
-- heater_active_to_standby_delay = 0.1:     Seconds to wait when a tool has been deselected, before changing temperature on heater to standy temperature. 0.1 is a tenth of a second.
+- standby_to_powerdown_time = 0.1:     Seconds to wait when a tool has been deselected, before changing temperature on heater to standy temperature. 0.1 is a tenth of a second.
 Use something like  86400 to wait 24h if you want to run indefinitly.
-- heater_active_to_powerdown_delay = 0.2: As above but from active to off.
+- heater_standby_to_powerdown_delay = 0.2: As above but from active to off.
 - init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to initialize to other value.
 - force_deselect_when_parent_deselects = True: 
-- heater_x : For each heater that is activated on this tool a list of options comma separated:
-heater name, active to standby delay, powerdown from standby time, temperature offset.
+- heater: A list of heaters (one point per line) that this tool uses, if any. Each line is a list:
+heater name, active to standby delay, standby to powerdown time, temperature offset.
+At least heater_name is required for a heater.
+    When the tool is deselected, the heater goes in standby after "active to standby delay" seconds and then to off after "standby to powerdown time". This is so the heater waits in standby for short toolchanges and shuts down if not used for a while. 
+    Speeds up toolchanging while providing security
 Most only use one heater, the extruder. More avanced can use filament preheater that could also be shared b multiple tools and then the second one has an offset of -100 degrees celsius for preheating filament.
-
-- heaters = list of heaterslf.heaters separated with , and each has optional temperature offset as signed float contained inside []. When iterating from inheritance, check if parent already has that heater. This is so that one heater can be inherited multiple levels and a second heater not. 
 
 #### NonInheritable
 

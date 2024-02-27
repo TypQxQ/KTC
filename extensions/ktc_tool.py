@@ -12,14 +12,14 @@ from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcConstantsClass,
     KtcBaseChangerClass,
 )
-from .ktc_heater import KtcHeater   # pylint: disable=relative-beyond-top-level
+from .ktc_heater import KtcHeater, KtcHeaterSettings   # pylint: disable=relative-beyond-top-level
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
     from ...klipper.klippy import klippy
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_toolchanger
+    from . import ktc_toolchanger, ktc_log, ktc, ktc_heater
 
     # from . import ktc_persisting
 
@@ -49,8 +49,16 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name),
             )
         # Heaters and their offsetts
-        self.timer_heater_active_to_standby_delay: "ktc_ToolStandbyTempTimer" = None  # type: ignore
-        self.timer_heater_active_to_powerdown_delay:"ktc_ToolStandbyTempTimer" = None # type: ignore
+        self.timer_heater_active_to_standby_delay: "ktc_heater.ktc_ToolStandbyTempTimer" = None  # type: ignore
+        self.timer_heater_standby_to_powerdown_delay:"ktc_heater.ktc_ToolStandbyTempTimer" = None # type: ignore
+
+        self.heater_state = KtcHeater.StateType.HEATER_STATE_OFF
+        # Temperature to set when in active mode.
+        # Requred on Physical and virtual tool if any has heaters.
+        self._heater_active_temp = 0
+        # Temperature to set when in standby mode.
+        # Requred on Physical and virtual tool if any has heaters.
+        self._heater_standby_temp = 0
 
     @property
     def toolchanger(self) -> "ktc_toolchanger.KtcToolchanger":
@@ -63,38 +71,36 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         self._toolchanger = value  # type: ignore
 
     def configure_inherited_params(self):
-        super().configure_inherited_params()
+        # If this is TOOL_NONE or TOOL_UNKNOWN.
         if self.config is None:
             return
+
+        super().configure_inherited_params()
 
         self.gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro', # type: ignore # pylint: disable=attribute-defined-outside-init
                                   self.printer.lookup_object("gcode_macro"))    # type: ignore
 
         if self._heaters_config is not None:
-            heaters = self.config.getlists(
-                "", default= self._heaters_config, seps=(',', '\n'), # type: ignore
-                parser=str)
-        else:
-            heaters = []
-        self.log.trace(f"Number of heaters for {self.config.get_name()}: {len(heaters)}")
-        if len(heaters) > 0:
-            self.log.trace(f"Firt heater is of type: {type(heaters[0])}")
-            for h in heaters:
-                # Default as: heater_name, active to standby delay, powerdown from standby time, temperature offset
-                if len(h) > 0:
-                    default = [h[0], 0.1, 0.1, 0.0]
-                    if h[0] == "":
-                        continue
-                    elif len(h) > 1:
-                        for i, v in enumerate(h[1:]):
-                            h[i+1] = float(v)
-                    self.heaters.append(h)
-                    if h[0] not in self._ktc.all_heaters:
-                        self._ktc.all_heaters[h[0]] = KtcHeater()
-                        self.log.trace(f"Added heater {h[0]} to all_heaters.")
-                    else:
-                        self.log.trace(f"Heater {h[0]} already in all_heaters.")
-
+            heaters = self._heaters_config.split("\n")
+            for heater_string in heaters:
+                heater_string = heater_string.replace(" ", "")
+                if heater_string == "":
+                    continue
+                heater = KtcHeaterSettings.from_string(heater_string)
+                self.heaters.append(heater)
+                # Initialize the heater if first time used.
+                if heater.name not in self._ktc.all_heaters:
+                    self._ktc.all_heaters[heater.name] = KtcHeater()
+                    self.log.trace(
+                        f"Added heater {heater.name} to all_heaters." +
+                        f" Active to standby delay: {heater.active_to_standby_delay}." +
+                        f" Active to powerdown delay: {heater.standby_to_powerdown_delay}." +
+                        f" Offset: {heater.offset}"
+                        )
+                else:
+                    self.log.trace(
+                        f"Heater {heater.name} already in all_heaters."
+                        )
 
         ##### Standby settings (if the tool has an heaters) #####
         # if self.heaters != "":
@@ -118,7 +124,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             #     self.timer_heater_active_to_standby_delay = ktc_ToolStandbyTempTimer(
             #         self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_STANDBY
             #     )
-            #     self.timer_heater_active_to_powerdown_delay = ktc_ToolStandbyTempTimer(
+            #     self.timer_heater_standby_to_powerdown_delay = ktc_ToolStandbyTempTimer(
             #         self.printer, self.name, ktc_ToolStandbyTempTimer.TIMER_TO_SHUTDOWN
             #     )
 
@@ -133,8 +139,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.timer_heater_active_to_standby_delay = (
                 self.toolchanger.parent_tool.timer_heater_active_to_standby_delay
             )
-            self.timer_heater_active_to_powerdown_delay = (
-                self.toolchanger.parent_tool.timer_heater_active_to_powerdown_delay
+            self.timer_heater_standby_to_powerdown_delay = (
+                self.toolchanger.parent_tool.timer_heater_standby_to_powerdown_delay
             )
 
         self.state = self.StateType.CONFIGURED
@@ -377,7 +383,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         )
 
     def _set_heater_state(self, heater_state):
-        self.heater_state = heater_state
+        for h in self.heaters:
+            self._ktc.all_heaters[h[0]].state = heater_state
 
     @staticmethod
     def _get_topmost_tool_for_heater(tool: KtcTool) -> KtcTool:
@@ -392,6 +399,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             return tool
 
     def set_heater(self, **kwargs):
+        return
         if self.heaters is None:
             self.log.debug(
                 "set_heater: KTC Tool %s has no heaters! Nothing to do." % self.name
@@ -399,7 +407,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             return None
 
         self.log.trace("set_heater: KTC Tool %s heater is at begingin %s. %s*C"
-                       % (self.name, self.heater_state, self.heater_active_temp ))
+                       % (self.name, self.heater_state, self._heater_active_temp ))
 
         heater = self.printer.lookup_object(self.heaters).get_heater()
         curtime = self.printer.get_reactor().monotonic()
@@ -414,18 +422,18 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             chng_state = kwargs["heater_state"]
         for i in kwargs:
             if i == "heater_active_temp":
-                self.heater_active_temp = kwargs[i]
+                self._heater_active_temp = kwargs[i]
                 if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE:
-                    heater.set_temp(self.heater_active_temp)
+                    heater.set_temp(self._heater_active_temp)
             elif i == "heater_standby_temp":
-                self.heater_standby_temp = kwargs[i]
+                self._heater_standby_temp = kwargs[i]
                 if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_STANDBY:
-                    heater.set_temp(self.heater_standby_temp)
+                    heater.set_temp(self._heater_standby_temp)
             elif i == "heater_active_to_standby_delay":
                 self.heater_active_to_standby_delay = kwargs[i]
                 changing_timer = True
-            elif i == "heater_active_to_powerdown_delay":
-                self.heater_active_to_powerdown_delay = kwargs[i]
+            elif i == "heater_standby_to_powerdown_delay":
+                self.heater_standby_to_powerdown_delay = kwargs[i]
                 changing_timer = True
 
         # If already in standby and timers are counting down, i.e. have not triggered since set in standby, then reset the ones counting down.
@@ -434,21 +442,21 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             and changing_timer
         ):
             if (
-                self.timer_heater_active_to_powerdown_delay.get_status()[
+                self.timer_heater_standby_to_powerdown_delay.get_status()[
                     "counting_down"
                 ]
                 == True
             ):
-                self.timer_heater_active_to_powerdown_delay.set_timer(
-                    self.heater_active_to_powerdown_delay, self.name
+                self.timer_heater_standby_to_powerdown_delay.set_timer(
+                    self.heater_standby_to_powerdown_delay, self.name
                 )
-                if self.heater_active_to_powerdown_delay > 2:
+                if self.heater_standby_to_powerdown_delay > 2:
                     self.log.info(
                         "KTC Tool %s: heater will shut down in %s seconds."
                         % (
                             self.name,
                             self.log.seconds_to_human_string(
-                                self.heater_active_to_powerdown_delay
+                                self.heater_standby_to_powerdown_delay
                             ),
                         )
                     )
@@ -480,13 +488,13 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                         "set_heater: KTC Tool %s heater state not changed. Setting active temp."
                         % self.name
                     )
-                    heater.set_temp(self.heater_active_temp)
+                    heater.set_temp(self._heater_active_temp)
                 elif chng_state == KtcHeater.StateType.HEATER_STATE_STANDBY:
                     self.log.trace(
                         "set_heater: KTC Tool %s heater state not changed. Setting standby temp."
                         % self.name
                     )
-                    heater.set_temp(self.heater_standby_temp)
+                    heater.set_temp(self._heater_standby_temp)
                 else:
                     self.log.trace(
                         "set_heater: KTC Tool %s heater state not changed." % self.name
@@ -499,7 +507,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     "set_heater: KTC Tool %s heater state now OFF." % self.name
                 )
                 self.timer_heater_active_to_standby_delay.set_timer(0, self.name)
-                self.timer_heater_active_to_powerdown_delay.set_timer(0.1, self.name)
+                self.timer_heater_standby_to_powerdown_delay.set_timer(0.1, self.name)
                 # self.log.track_heater_standby_end(self)                                                # Set the standby as finishes in statistics.
                 # self.log.track_heater_active_end(self)                                                # Set the active as finishes in statistics.
             elif (
@@ -507,8 +515,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             ):  # Else If Active
                 self.log.trace("set_heater: T%d heater state now ACTIVE." % self.name)
                 self.timer_heater_active_to_standby_delay.set_timer(0, self.name)
-                self.timer_heater_active_to_powerdown_delay.set_timer(0, self.name)
-                heater.set_temp(self.heater_active_temp)
+                self.timer_heater_standby_to_powerdown_delay.set_timer(0, self.name)
+                heater.set_temp(self._heater_active_temp)
                 self.log.track_heater_standby_end(
                     self._ktc.all_tools[tool_for_tracking_heater]
                 )  # Set the standby as finishes in statistics.
@@ -522,15 +530,15 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 if int(
                     self.heater_state
                 ) == KtcHeater.StateType.HEATER_STATE_ACTIVE and int(
-                    self.heater_standby_temp
+                    self._heater_standby_temp
                 ) < int(
                     heater.get_status(curtime)["temperature"]
                 ):
                     self.timer_heater_active_to_standby_delay.set_timer(
                         self.heater_active_to_standby_delay, self.name
                     )
-                    self.timer_heater_active_to_powerdown_delay.set_timer(
-                        self.heater_active_to_powerdown_delay, self.name
+                    self.timer_heater_standby_to_powerdown_delay.set_timer(
+                        self.heater_standby_to_powerdown_delay, self.name
                     )
                     if self.heater_active_to_standby_delay > 2:
                         self.log.always(
@@ -548,47 +556,47 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                         % (
                             self.name,
                             int(self.heater_state),
-                            int(self.heater_standby_temp),
+                            int(self._heater_standby_temp),
                             int(heater.get_status(curtime)["temperature"]),
                         )
                     )
                     self.timer_heater_active_to_standby_delay.set_timer(0.1, self.name)
-                    self.timer_heater_active_to_powerdown_delay.set_timer(
-                        self.heater_active_to_powerdown_delay, self.name
+                    self.timer_heater_standby_to_powerdown_delay.set_timer(
+                        self.heater_standby_to_powerdown_delay, self.name
                     )
-                if self.heater_active_to_powerdown_delay > 2:
+                if self.heater_standby_to_powerdown_delay > 2:
                     self.log.always(
                         "KTC Tool %s heater will shut down in %s seconds."
                         % (
                             self.name,
                             self.log.seconds_to_human_string(
-                                self.heater_active_to_powerdown_delay
+                                self.heater_standby_to_powerdown_delay
                             ),
                         )
                     )
             self.heater_state = chng_state
 
-        # self.log.info("KTC Tool %s heater is at end %s. %s*C" % (self.name, self.heater_state, self.heater_active_temp ))
+        # self.log.info("KTC Tool %s heater is at end %s. %s*C" % (self.name, self.heater_state, self._heater_active_temp ))
 
     def get_timer_to_standby(self):
         return self.timer_heater_active_to_standby_delay
 
     def get_timer_to_powerdown(self):
-        return self.timer_heater_active_to_powerdown_delay
+        return self.timer_heater_standby_to_powerdown_delay
 
     def get_status(self, eventtime=None):  # pylint: disable=unused-argument
         status = {
             "name": self.name,
             "number": self.number,
             "toolchanger": self.toolchanger.name,
-            "heaters": self.heaters,
+            # "heaters": self.heaters,
             "fan": self.fan,
             "offset": self.offset,
             "heater_state": self.heater_state,
-            "heater_active_temp": self.heater_active_temp,
-            "heater_standby_temp": self.heater_standby_temp,
+            "heater_active_temp": self._heater_active_temp,
+            "heater_standby_temp": self._heater_standby_temp,
             "heater_active_to_standby_delay": self.heater_active_to_standby_delay,
-            "idle_to_powerdown_next_wake": self.heater_active_to_powerdown_delay,
+            "idle_to_powerdown_next_wake": self.heater_standby_to_powerdown_delay,
             **self.params,
         }
         return status
@@ -596,146 +604,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     # Based on DelayedGcode.
 
 
-class ktc_ToolStandbyTempTimer:
-    TIMER_TO_SHUTDOWN = 0
-    TIMER_TO_STANDBY = 1
-
-    def __init__(self, printer, tool_id, temp_type):
-        self.printer = printer
-        self.tool_id = tool_id
-        self.last_virtual_tool_using_physical_timer = None
-
-        self.duration = 0.0
-        self.temp_type = temp_type  # 0= Time to shutdown, 1= Time to standby.
-
-        self.reactor = self.printer.get_reactor()
-        self.gcode = self.printer.lookup_object("gcode")
-        self.timer_handler = None
-        self.inside_timer = self.repeat = False
-        self.printer.register_event_handler("klippy:ready", self._handle_ready)
-        self.log = self.printer.lookup_object("ktc_log")
-
-        self.counting_down = False
-        self.nextwake = self.reactor.NEVER
-
-    def _handle_ready(self):
-        self.timer_handler = self.reactor.register_timer(
-            self._standby_tool_temp_timer_event, self.reactor.NEVER
-        )
-
-    def _standby_tool_temp_timer_event(self, eventtime):
-        self.inside_timer = True
-        self.counting_down = False
-        try:
-            if self.last_virtual_tool_using_physical_timer is None:
-                raise Exception("last_virtual_tool_using_physical_timer is < None")
-
-            tool: KtcTool = self.printer.lookup_object(
-                "ktc_tool " + str(self.last_virtual_tool_using_physical_timer)
-            )
-
-            self.log.trace(
-                "_standby_tool_temp_timer_event: Running for T%s. temp_type:%s. %s"
-                % (
-                    str(self.tool_id),
-                    "Time to shutdown" if self.temp_type == 0 else "Time to standby",
-                    (
-                        (
-                            "For virtual tool T%s"
-                            % str(self.last_virtual_tool_using_physical_timer)
-                        )
-                        if self.last_virtual_tool_using_physical_timer != self.tool_id
-                        else ""
-                    ),
-                )
-            )
-
-            temperature = 0
-            # TODO: This isnot working.
-            heater = self.printer.lookup_object(tool.heaters).get_heater()
-            if self.temp_type == self.TIMER_TO_STANDBY:
-                self.log.track_heater_standby_start(
-                    self.tool_id
-                )  # Set the standby as started in statistics.
-                temperature = tool.get_status()["heater_standby_temp"]
-                heater.set_temp(temperature)
-            else:
-                self.log.track_heater_standby_end(
-                    self
-                )  # Set the standby as finishes in statistics.
-
-                tool.get_timer_to_standby().set_timer(
-                    0, self.last_virtual_tool_using_physical_timer
-                )  # Stop Standby timer.
-                tool._set_heater_state(KtcHeater.StateType.HEATER_STATE_OFF)  # Set off state.
-                heater.set_temp(0)  # Set temperature to 0.
-
-            self.log.track_heater_active_end(
-                self
-            )  # Set the active as finishes in statistics.
-
-        except Exception as e:
-            raise Exception(
-                "Failed to set Standby temp for tool T%s: %s. %s"
-                % (
-                    str(self.tool_id),
-                    (
-                        "for virtual T%s"
-                        % str(self.last_virtual_tool_using_physical_timer)
-                    ),
-                    str(e),
-                )
-            )  # if actual_tool_calling != self.tool_id else ""
-
-        self.nextwake = self.reactor.NEVER
-        if self.repeat:
-            self.nextwake = eventtime + self.duration
-            self.counting_down = True
-        self.inside_timer = self.repeat = False
-        return self.nextwake
-
-    def set_timer(self, duration, actual_tool_calling):
-        actual_tool_calling = actual_tool_calling
-        self.log.trace(
-            str(self.timer_handler)
-            + ".set_timer: T%s %s, temp_type:%s, duration:%s."
-            % (
-                str(self.tool_id),
-                (
-                    ("for virtual T%s" % str(actual_tool_calling))
-                    if actual_tool_calling != self.tool_id
-                    else ""
-                ),
-                ("Standby" if self.temp_type == 1 else "OFF"),
-                str(duration),
-            )
-        )
-        self.duration = float(duration)
-        self.last_virtual_tool_using_physical_timer = actual_tool_calling
-        if self.inside_timer:
-            self.repeat = self.duration != 0.0
-        else:
-            waketime = self.reactor.NEVER
-            if self.duration:
-                waketime = self.reactor.monotonic() + self.duration
-                self.nextwake = waketime
-            self.reactor.update_timer(self.timer_handler, waketime)
-            self.counting_down = True
-
-    def get_status(self, eventtime=None):  # pylint: disable=unused-argument
-        status = {
-            "temp_type": self.temp_type,
-            "duration": self.duration,
-            "counting_down": self.counting_down,
-            "next_wake": self._time_left(),
-        }
-        return status
-
-    def _time_left(self):
-        if self.nextwake == self.reactor.NEVER:
-            return "never"
-        else:
-            return str(self.nextwake - self.reactor.monotonic())
 
     ###########################################
     # Dataclassess for KtcTool

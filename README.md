@@ -458,8 +458,8 @@ This command can be used without any additional parameters. Without parameters i
   - `heater_state` - 0 = off, 1 = standby temperature, 2 = active temperature.
   - `heater_active_temp` - Temperature to set when in active mode.
   - `heater_standby_temp` - Temperature to set when in standby mode.
-  - `heater_active_to_standby_delay` - Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature.
-  - `heater_active_to_powerdown_delay` - Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
+  - `standby_to_powerdown_time` - Time in seconds from being parked to setting temperature to standby the temperature above. Use 0.1 to change imediatley to standby temperature.
+  - `heater_standby_to_powerdown_delay` - Time in seconds from being parked to setting temperature to 0. Use something like 86400 to wait 24h if you want to disable. Requred on Physical tool.
 - **ToolGroup**
   - `is_virtual` - As above
   - `physical_parent_id` - As above

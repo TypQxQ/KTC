@@ -22,12 +22,13 @@ TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
 
+# TODO: Delete
 DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
-DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY = 0.2
+DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
 
 PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
                         "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
-                        "heater_active_to_standby_delay", "heater_active_to_powerdown_delay",
+                        "heater_active_to_standby_delay", "heater_standby_to_powerdown_delay",
                         "force_deselect_when_parent_deselects", "_heaters_config", "fan"]
 
 class KtcConfigurableEnum(Enum):
@@ -95,7 +96,7 @@ class KtcBaseClass:
         # TODO: Delete
         self.heater_active_to_standby_delay = self.config.getfloat(
             "", None, 0.1)    # type: ignore
-        self.heater_active_to_powerdown_delay = self.config.getfloat(
+        self.heater_standby_to_powerdown_delay = self.config.getfloat(
             "", None, 0.1)  # type: ignore
 
 
@@ -172,13 +173,6 @@ class KtcBaseClass:
             parent = self
         else:
             raise ValueError("Can't configure inherited parameters for object: " + str(type(self)))
-
-        # TODO: Delete
-        # If this is the topmost parent.
-        if parent == self:
-            if self.heater_active_to_powerdown_delay is None:
-                self.heater_active_to_powerdown_delay = DEFAULT_HEATER_ACTIVE_TO_POWERDOWN_DELAY
-                self.heater_active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
 
         # Set the parameters from the parent object if they are not set.
         for v in PARAMS_TO_INHERIT:
@@ -319,7 +313,7 @@ class KtcBaseChangerClass(KtcBaseClass):
 
 class KtcBaseToolClass(KtcBaseClass):
     '''Base class for tools. Contains common methods and properties.'''
-    def __init__(self, config: "configfile.ConfigWrapper" = None,   # type: ignore
+    def __init__(self, config: "configfile.ConfigWrapper",
                  name: str = "", number: int = TOOL_NUMBERLESS_N):
         super().__init__(config)
 
@@ -330,22 +324,10 @@ class KtcBaseToolClass(KtcBaseClass):
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
         # TODO: Change to array of fans
         self.fan = None
-        # TODO: Change to heater object
+        # TODO: Delete
         self.heater = None
         # 0 = off, 1 = standby temperature, 2 = active temperature.
         self.heater_state = 0
-        # Timer to set temperature to standby temperature
-        # after heater_active_to_standby_delay seconds. Set if this tool has an heaters.
-        self.timer_heater_active_to_standby_delay = None
-        # Timer to set temperature to 0 after heater_active_to_powerdown_delay seconds.
-        # Set if this tool has an heaters.
-        self.timer_heater_active_to_powerdown_delay = None
-        # Temperature to set when in active mode.
-        # Requred on Physical and virtual tool if any has heaters.
-        self.heater_active_temp = 0
-        # Temperature to set when in standby mode.
-        # Requred on Physical and virtual tool if any has heaters.
-        self.heater_standby_temp = 0
 
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
@@ -364,8 +346,12 @@ class KtcConstantsClass:
     TOOL_NONE_N = TOOL_NONE_N
     TOOL_UNKNOWN = typing.cast(
         'ktc_tool.KtcTool',
-        KtcBaseToolClass(name="tool_unknown", number=TOOL_UNKNOWN_N))   # type: ignore
+        KtcBaseToolClass(name="tool_unknown",
+                         number=TOOL_UNKNOWN_N,
+                         config = None))   # type: ignore
     TOOL_NONE = typing.cast(
         'ktc_tool.KtcTool',
-        KtcBaseToolClass(name="tool_none", number=TOOL_NONE_N))         # type: ignore
+        KtcBaseToolClass(name="tool_none",
+                         number=TOOL_NONE_N,
+                         config = None))         # type: ignore
     TOOL_NONE.state = TOOL_UNKNOWN.state = KtcBaseClass.StateType.CONFIGURED
