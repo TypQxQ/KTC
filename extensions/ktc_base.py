@@ -8,27 +8,26 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 from __future__ import annotations
-import ast, typing, re, logging
+import ast, typing, re, dataclasses
 from enum import IntEnum, unique, Enum
+
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode, klippy
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc, ktc_persisting
+    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc, ktc_persisting, ktc_heater
 
 # Value of Unknown and None tools.
 TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
-
-# TODO: Delete
 DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
 DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
 
 PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
                         "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
-                        "heater_active_to_standby_delay", "heater_standby_to_powerdown_delay",
+                        # "heater_active_to_standby_delay", "heater_standby_to_powerdown_delay",
                         "force_deselect_when_parent_deselects", "_heaters_config", "fan"]
 
 class KtcConfigurableEnum(Enum):
@@ -88,31 +87,33 @@ class KtcBaseClass:
         self._engage_gcode = config.get("engage_gcode", None)  # type: ignore
         self._disengage_gcode = config.get("disengage_gcode", None)  # type: ignore
         self._init_gcode = config.get("init_gcode", None)  # type: ignore
-        self.requires_axis_homed: str = self.config.get(
-            "requires_axis_homed", None)   # type: ignore
         self._tool_select_gcode = config.get("tool_select_gcode", None)     # type: ignore
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", None) # type: ignore
+
+        self._heaters_config: str = self.config.get("heater", None)    # type: ignore
+        self.extruder = KtcToolExtruder()
+        self.extruder.active_to_standby_delay = self.config.getfloat(
+            "heater_active_to_standby_delay", None, 0.1)    # type: ignore
+        self.extruder.standby_to_powerdown_delay = self.config.getfloat(
+            "heater_standby_to_powerdown_delay", None, 0.1) # type: ignore
 
         # TODO: Delete
         self.heater_active_to_standby_delay = self.config.getfloat(
             "", None, 0.1)    # type: ignore
         self.heater_standby_to_powerdown_delay = self.config.getfloat(
             "", None, 0.1)  # type: ignore
-
-
         self.heaters = []
-        self._heaters_config: str = self.config.get("heater", None)    # type: ignore
-        if (self._heaters_config is not None and 
-            self._heaters_config.strip() == ""):
-            self._heaters_config = None  # type: ignore
 
         self.fan = self.config.get("fan", None)            # type: ignore
 
         # requires_axis_homed can contain "X", "Y", "Z" or a combination. Remove all other.
+        self.requires_axis_homed: str = self.config.get(
+            "requires_axis_homed", None)   # type: ignore
         if self.requires_axis_homed is not None and self.requires_axis_homed != "":
             self.requires_axis_homed = re.sub(r'[^XYZ]', '', self.requires_axis_homed.upper())
 
-        # Get initial values from the config.
+        # Initiating values are only red once and then saved to the persistent state and
+        # must be removed from the config file to continue.
         self._initiating_config = {}
         # Offset as a list of 3 floats.
         init: str = ""
@@ -182,6 +183,11 @@ class KtcBaseClass:
         for v in parent.params: # type: ignore
             if v not in self.params:
                 self.params[v] = parent.params[v]   # type: ignore
+
+        if self.extruder.active_to_standby_delay is None:
+            self.extruder.active_to_standby_delay = parent.extruder.active_to_standby_delay
+        if self.extruder.standby_to_powerdown_delay is None:
+            self.extruder.standby_to_powerdown_delay = parent.extruder.standby_to_powerdown_delay
 
     @staticmethod
     def get_params_dict_from_config(config: 'configfile.ConfigWrapper'):
@@ -306,7 +312,7 @@ class KtcBaseChangerClass(KtcBaseClass):
         self.name: str = str(config.get_name()).split(" ", 1)[1]
         # The parent tool of the toolchanger if it is not default changer.
         self.parent_tool: 'ktc_tool.KtcTool' = None # type: ignore
-        self.selected_tool = None
+        # self.selected_tool = KtcConstantsClass.TOOL_NONE
         self.tools: dict[str, 'ktc_tool.KtcTool'] = {}
         self._engage_gcode_template: klippy_gcode_macro.GCodeMacro = None # type: ignore
         self._disengage_gcode_template: klippy_gcode_macro.GCodeMacro = None # type: ignore
@@ -355,3 +361,61 @@ class KtcConstantsClass:
                          number=TOOL_NONE_N,
                          config = None))         # type: ignore
     TOOL_NONE.state = TOOL_UNKNOWN.state = KtcBaseClass.StateType.CONFIGURED
+
+@unique
+class HeaterStateType(IntEnum):
+    HEATER_STATE_OFF = 0
+    HEATER_STATE_STANDBY = 1
+    HEATER_STATE_ACTIVE = 2
+
+@unique
+class HeaterTimerType(IntEnum):
+    TIMER_TO_SHUTDOWN = 0
+    TIMER_TO_STANDBY = 1
+
+@dataclasses.dataclass
+class KtcToolExtruder:
+    state = HeaterStateType.HEATER_STATE_OFF
+    active_temp = 0
+    standby_temp = 0
+    active_to_standby_delay = None
+    standby_to_powerdown_delay = None
+    heaters: list["KtcHeaterSettings"] = dataclasses.field(default_factory=list)
+
+    def heater_names(self) -> list[str]:
+        return [heater.name for heater in self.heaters]
+
+# @dataclasses_json.dataclass_json
+@dataclasses.dataclass
+class KtcHeaterSettings:
+    name: str
+    offset: float
+
+    def __init__(self, name: str,
+                 offset: float):
+        self.name = name
+        self.offset = offset
+
+    @classmethod
+    def from_list(cls, list_value: list):
+        temp = [list_value[0],
+                0.0      # Default temperature offset
+                ]
+        for i, val in enumerate(list_value[1:]):
+            temp[i+1] = float(val)
+        return cls(*temp)
+
+    @classmethod
+    def from_string(cls, string_value: str):
+        list_value = string_value.split(':')
+        return cls.from_list(list_value)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(name=data['name'],
+                   offset=data['offset'])
+
+    def to_dict(self):
+        return {'name': self.name,
+                'offset': self.offset}
+

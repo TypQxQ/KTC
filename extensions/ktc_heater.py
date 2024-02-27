@@ -5,7 +5,9 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import typing, dataclasses
-from enum import IntEnum, unique
+from .ktc_base import HeaterStateType, HeaterTimerType          # pylint: disable=relative-beyond-top-level
+from .ktc_base import DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY    # pylint: disable=relative-beyond-top-level
+from .ktc_base import DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY # pylint: disable=relative-beyond-top-level
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
@@ -15,18 +17,24 @@ if typing.TYPE_CHECKING:
     # from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
 class KtcHeater:
+    def __init__(self, config: 'configfile.ConfigWrapper'):
+        self.printer : 'klippy.Printer' = config.get_printer()
+        self.name = config.get_name()
+        self.offset = 0.0
 
-    DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
-    DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
-
-    def __init__(self):
-        self.state = self.StateType.HEATER_STATE_OFF
+        self.state = HeaterStateType.HEATER_STATE_OFF
         # Timer to set temperature to standby temperature
         # after heater_active_to_standby_delay seconds. Set if this tool has an heaters.
-        self.timer_heater_active_to_standby_delay = None
+        self.active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
+        self.timer_heater_active_to_standby_delay = KtcHeaterTimer(
+            self.printer, self.name, HeaterTimerType.TIMER_TO_STANDBY
+        )
         # Timer to set temperature to 0 after heater_standby_to_powerdown_delay seconds.
         # Set if this tool has an heaters.
-        self.timer_heater_standby_to_powerdown_delay = None
+        self.standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
+        self.timer_heater_standby_to_powerdown_delay = KtcHeaterTimer(
+            self.printer, self.name, HeaterTimerType.TIMER_TO_SHUTDOWN
+        )
         # Temperature to set when in active mode.
         # Requred on Physical and virtual tool if any has heaters.
         self._heater_active_temp = 0
@@ -34,18 +42,9 @@ class KtcHeater:
         # Requred on Physical and virtual tool if any has heaters.
         self._heater_standby_temp = 0
 
-    @unique
-    class StateType(IntEnum):
-        HEATER_STATE_OFF = 0
-        HEATER_STATE_STANDBY = 1
-        HEATER_STATE_ACTIVE = 2
-
-class ktc_ToolStandbyTempTimer:
-    TIMER_TO_SHUTDOWN = 0
-    TIMER_TO_STANDBY = 1
-
+class KtcHeaterTimer:
     def __init__(self, printer, tool_id, temp_type):
-        self.printer = printer
+        self.printer : 'klippy.Printer' = printer
         self.tool_id = tool_id
         self.last_virtual_tool_using_physical_timer = None
 
@@ -97,7 +96,7 @@ class ktc_ToolStandbyTempTimer:
             temperature = 0
             # TODO: This isnot working.
             heater = self.printer.lookup_object(tool.heaters).get_heater()
-            if self.temp_type == self.TIMER_TO_STANDBY:
+            if self.temp_type == TimerType.TIMER_TO_STANDBY:
                 self.log.track_heater_standby_start(
                     self.tool_id
                 )  # Set the standby as started in statistics.
@@ -181,48 +180,12 @@ class ktc_ToolStandbyTempTimer:
         else:
             return str(self.nextwake - self.reactor.monotonic())
 
-# @dataclasses_json.dataclass_json
-@dataclasses.dataclass
-class KtcHeaterSettings:
-    name: str
-    active_to_standby_delay: float
-    standby_to_powerdown_delay: float
-    offset: float
 
-    def __init__(self, name: str,
-                 active_to_standby_delay: float,
-                 standby_to_powerdown_delay: float,
-                 offset: float):
-        self.name = name
-        self.active_to_standby_delay = active_to_standby_delay
-        self.standby_to_powerdown_delay = standby_to_powerdown_delay
-        self.offset = offset
+    def get_timer_to_standby(self):
+        return self.timer_heater_active_to_standby_delay
 
-    @classmethod
-    def from_list(cls, list_value: list):
-        temp = [list_value[0],
-                KtcHeater.DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY,
-                KtcHeater.DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY,
-                0.0      # Default temperature offset
-                ]
-        for i, val in enumerate(list_value[1:]):
-            temp[i+1] = float(val)
-        return cls(*temp)
+    def get_timer_to_powerdown(self):
+        return self.timer_heater_standby_to_powerdown_delay
 
-    @classmethod
-    def from_string(cls, string_value: str):
-        list_value = string_value.split(',')
-        return cls.from_list(list_value)
-
-    def to_dict(self):
-        return {'name': self.name,
-                'active_to_standby_delay': self.active_to_standby_delay,
-                'standby_to_powerdown_delay': self.standby_to_powerdown_delay,
-                'offset': self.offset}
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(name=data['name'],
-                   active_to_standby_delay=data['active_to_standby_delay'],
-                   standby_to_powerdown_delay=data['standby_to_powerdown_delay'],
-                   offset=data['offset'])
+def load_config_prefix(config):
+    return KtcHeater(config)

@@ -35,7 +35,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         self.init_order = self.InitOrderType.get_value_from_configuration(
             config, "init_order", self.InitOrderType.INDEPENDENT)
 
-        self.selected_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
+        self._selected_tool = self.TOOL_UNKNOWN  # The currently active tool. Default is unknown.
 
         # Load the parent tool if it is defined.
         parent_tool_name = config.get("parent_tool", None)  # type: ignore
@@ -48,6 +48,15 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                     "parent_tool %s not found for ktc_toolchanger %s."
                     % (parent_tool_name, self.name)
                 )
+                
+    @property
+    def selected_tool(self):
+        return self._selected_tool
+    
+    @selected_tool.setter
+    def selected_tool(self, value: 'ktc_tool.KtcTool'):
+        self._selected_tool = value
+        self.persistent_state["selected_tool"] = value.name
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
@@ -83,14 +92,15 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
         # Restore the active tool from the persistent variables.
         active_tool_name = str.lower(self.persistent_state.get(
-            "active_tool", self.TOOL_UNKNOWN.name
+            "selected_tool", self.TOOL_UNKNOWN.name
         ))
 
         # Set the active tool to the tool with the name from the persistent variables.
         # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
-        self.selected_tool = self.tools.get(active_tool_name, None)
-        if self.selected_tool is None:
-            self.selected_tool = self.TOOL_UNKNOWN
+        self.selected_tool = self.tools.get(active_tool_name, self.TOOL_UNKNOWN)
+        if (self.selected_tool == self.TOOL_UNKNOWN and
+            active_tool_name != self.TOOL_UNKNOWN.name
+            ):
             self.log.always(
                 "ktc_toolchanger.initialize(): Active tool "
                 + "%s not found for ktc_toolchanger %s. Using tool %s."
@@ -139,8 +149,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 )
 
             if self._engage_gcode == "":
-                if self.state != self.StateType.INITIALIZING:
-                    self.state = self.StateType.ENGAGED
+                self.state = self.StateType.ENGAGED
                 return
 
             if not disregard_engaged and self.state == self.StateType.ENGAGED:
@@ -151,29 +160,37 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 )
                 return
 
-            if self._engage_gcode_template is None:
-                self._engage_gcode_template = self.gcode_macro.load_template(   # type: ignore
-                    self.config, "", self._engage_gcode)
-
-            if self.state >= self.StateType.READY:
+            if self.state >= self.StateType.ENGAGING:
                 self.state = self.StateType.ENGAGING
-            context = self._engage_gcode_template.create_template_context()
+
+            engage_gcode_template = self.gcode_macro.load_template(
+                self.config, "", self._engage_gcode)
+            context = engage_gcode_template.create_template_context()
             context['myself'] = self.get_status()
             context['ktc'] = self._ktc.get_status()
             context['STATE_TYPE'] = self.StateType
-            self._engage_gcode_template.run_gcode_from_command(context)
+            engage_gcode_template.run_gcode_from_command(context)
 
-            self.log.changer_stats[self.name].engages += 1
-            if self.state >= self.StateType.ENGAGING:
-                self.state = self.StateType.ENGAGED
+            if (self.state == self.StateType.ENGAGING or
+                self.state == self.StateType.INITIALIZING):
+                raise self.config.error(
+                    ("engage_gcode did not change the state. Use for example "
+                    + "'KTC_SET_TOOLCHANGER_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
+                    + "change the state to ENGAGED. Or ERROR if it failed.")
+                )
+            elif self.state == self.StateType.ERROR:
+                raise self.config.error(
+                    "disengage_gcode failed. Check the logs for more information."
+                )
 
-            # Add engage to statistics.
             self.log.changer_stats[self.name].engages += 1
             self.log.trace("ktc_toolchanger.engage(): Setting state to %s." % self.state)
         except Exception as e:
             self.state = self.StateType.ERROR
             self._ktc.state = self.StateType.ERROR
-            raise self.printer.command_error("ktc_toolchanger.engage(): failed for ktc_toolchanger %s with error: %s" % (self.name, e))
+            raise self.printer.command_error(
+                "ktc_toolchanger.engage(): failed for ktc_toolchanger %s with error: %s" 
+                % (self.name, e)) from e
 
     def disengage(self, disregard_disengaged=True):
         """Disengage the lock on the tool so it can be removed."""
@@ -184,8 +201,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 )
 
             if self._disengage_gcode == "":
-                if self.state != self.StateType.INITIALIZING:
-                    self.state = self.StateType.READY
+                self.state = self.StateType.READY
                 return
 
             if not disregard_disengaged and self.state == self.StateType.READY:
@@ -196,23 +212,30 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 )
                 return
 
-            if self._disengage_gcode_template is None:
-                self._disengage_gcode_template = self.gcode_macro.load_template(    # type: ignore
-                    self.config, "", self._disengage_gcode)
-
-            if self.state >= self.StateType.READY:
+            if self.state >= self.StateType.DISENGAGING:
                 self.state = self.StateType.DISENGAGING
-            self.state = self.StateType.DISENGAGING.value
+
+            disengage_gcode_template = self.gcode_macro.load_template(
+                self.config, "", self._disengage_gcode)
             context = disengage_gcode_template.create_template_context()
             context['myself'] = self.get_status()
             context['ktc'] = self._ktc.get_status()
             context['STATE_TYPE'] = self.StateType
-            self._disengage_gcode_template.run_gcode_from_command(context)
+            disengage_gcode_template.run_gcode_from_command(context)
 
-            if self.state >= self.StateType.DISENGAGING:
-                self.state = self.StateType.READY
+            if (self.state == self.StateType.DISENGAGING or
+                self.state == self.StateType.INITIALIZING):
+                raise self.config.error(
+                    ("disengage_gcode did not "
+                    + "change the state. Use for example "
+                    + "'KTC_SET_TOOLCHANGER_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "change the state to READY. Or ERROR if it failed.")
+                )
+            elif self.state == self.StateType.ERROR:
+                raise self.config.error(
+                    "disengage_gcode failed. Check the logs for more information."
+                )
 
-            # Add disengage to statistics.
             self.log.changer_stats[self.name].disengages += 1
             self.log.trace("ktc_toolchanger.engage(): Setting state to %s." % self.state)
         except Exception as e:

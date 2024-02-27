@@ -6,12 +6,13 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 import typing
+from json import JSONEncoder
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
 from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass, PARAMS_TO_INHERIT # pylint: disable=relative-beyond-top-level
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from ...klipper.klippy import configfile
+    from ...klipper.klippy import configfile, gcode
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
 # Constants for the restore_axis_on_toolchange variable.
@@ -282,15 +283,16 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         # except for the heater parameters that are set to float 0.1.
         for param in PARAMS_TO_INHERIT:
             if self.params.get(param) is None:
-                if param.startswith("heater_"):
+                if (param == "heater_active_to_standby_delay" or
+                    param == "heater_standby_to_powerdown_delay"):
                     self.params[param] = 0.1
                 if param == "requires_axis_homed":
                     self.params[param] = "XYZ"
                 else:
                     self.params[param] = ""
-        if self.offset is None:
-            self.offset = [0.0, 0.0, 0.0]
-        self.state = self.StateType.CONFIGURED
+        if self.offset is None:                 # pylint: disable=access-member-before-definition # inherited
+            self.offset = [0.0, 0.0, 0.0]       # pylint: disable=attribute-defined-outside-init # inherited
+        self.state = self.StateType.CONFIGURED  # pylint: disable=attribute-defined-outside-init # inherited
 
     @property
     def active_tool(self) -> KtcBaseToolClass:
@@ -338,7 +340,16 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     cmd_KTC_SET_TOOLCHANGER_STATE_help = ( "Set the state of the toolchanger."
         + " [TOOLCHANGER: Default_ToolChanger]"
         + " [STATE: STATE.ERROR]")
-    def cmd_KTC_SET_TOOLCHANGER_STATE(self, gcmd=None):
+    def cmd_KTC_SET_TOOLCHANGER_STATE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
+        try:
+            self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get("STATE", None)
+        except Exception as e:
+            raise gcmd.error("Error setting toolchanger state: %s" % str(e)) from e
+
+    cmd_KTC_SET_TOOL_STATE_help = ( "Set the state of the toolchanger."
+        + " [TOOL: Tool_name]"
+        + " [STATE: STATE.ERROR]")
+    def cmd_KTC_SET_TOOL_STATE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         try:
             self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get("STATE", None)
         except Exception as e:
@@ -346,45 +357,48 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     cmd_KTC_TOOLCHANGER_INITIALIZE_help = ( "Initialize the toolchanger before use."
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
-    def cmd_KTC_TOOLCHANGER_INITIALIZE(self, gcmd=None):
+    def cmd_KTC_TOOLCHANGER_INITIALIZE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         self.parse_gcmd_get_toolchanger(gcmd).initialize()
 
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
         "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]"
         + " [DISREGARD_ENGAGED: False]")
-    def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd=None):
-        disregard_engaged = gcmd.get("DISREGARD_ENGAGED", False)
-        if isinstance(disregard_engaged, str):
-            if disregard_engaged.lower() == "true":
-                disregard_engaged = True
+    def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
+        try:
+            disregard_engaged = gcmd.get("DISREGARD_ENGAGED", "False").strip()  # type: ignore
+            if disregard_engaged.isnumeric():
+                if int(disregard_engaged) > 0:
+                    disregard_engaged = True
+                else:
+                    disregard_engaged = False
             else:
-                disregard_engaged = False
-        if isinstance(disregard_engaged, int):
-            if disregard_engaged > 0:
-                disregard_engaged = True
-            else:
-                disregard_engaged = False
-        self.parse_gcmd_get_toolchanger(gcmd).engage(disregard_engaged = disregard_engaged)
+                if disregard_engaged.lower() == "true":
+                    disregard_engaged = True
+                else:
+                    disregard_engaged = False
+            self.parse_gcmd_get_toolchanger(gcmd).engage(disregard_engaged = disregard_engaged)
+        except Exception as e:
+            raise self.printer.command_error("Error engaging toolchanger: %s" % str(e)) from e
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
-    def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd=None):
+    def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd: "gcode.GCodeCommand"):
         try:
             self.parse_gcmd_get_toolchanger(gcmd).disengage()
         except Exception as e:
             raise self.printer.command_error("Error disengaging toolchanger: %s" % str(e)) from e
 
     # Returns the toolchanger object specified in the gcode command or the default toolchanger.
-    def parse_gcmd_get_toolchanger(self, gcmd):
-        tc_name = gcmd.get("TOOLCHANGER", None)
-        
+    def parse_gcmd_get_toolchanger(self, gcmd: "gcode.GCodeCommand"):
+        tc_name = typing.cast(str, gcmd.get("TOOLCHANGER", None))
+        self.log.trace("parse_gcmd_get_toolchanger: tc_name type: " + str(type(tc_name)))
         if tc_name is None:
             tc = self.default_toolchanger
         else:
             tc: 'ktc_toolchanger.KtcToolchanger' = self.printer.lookup_object(
                 "ktc_toolchanger " + tc_name, None
             )
-            
+
             if tc is None:
                 raise self.printer.command_error(
                     "Unknown TOOLCHANGER: %s." % str(tc_name)
@@ -995,33 +1009,48 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         }
         return status
 
-    def printer_is_homed_for_toolchange(self, required_axes: str = ""):
-        # If no axes are required, then return True.
-        if required_axes == "":
-            return True
-        
-        curtime = self.printer.get_reactor().monotonic()
-        toolhead = self.printer.lookup_object("toolhead")
-        homed = toolhead.get_status(curtime)["homed_axes"].upper()
 
-        if all(axis in homed for axis in list(required_axes)):
-            return True
-        
-        return False
-        
-        # elif lazy_home_when_parking == 0 and not all(
-        #     axis in homed for axis in ["x", "y", "z"]
-        # ):
-        #     return False
-        # elif lazy_home_when_parking == 1 and "z" not in homed:
-        #     return False
+    def confirm_ready_for_toolchange(self, tool: KtcBaseToolClass):
+        if tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN:
+            raise ValueError("Tool is TOOL_NONE or TOOL_UNKNOWN")
+        if self.state == self.StateType.ERROR:
+            raise ValueError("KTC is in error state")
+        if tool.state == tool.StateType.ERROR:
+            raise ValueError("Tool is in error state")
+        if not _printer_is_homed_for_toolchange(tool.requires_axis_homed):
+            raise ValueError("Printer is not homed for toolchange" +
+                             "Required axis %s not homed for ktc_tool %s."
+                             % (tool.requires_axis_homed, tool.name)
+                             )
 
-        axes_to_home = ""
-        for axis in ["x", "y", "z"]:
-            if axis not in homed:
-                axes_to_home += axis
-        self.gcode.run_script_from_command("G28 " + axes_to_home.upper())
-        return True
+        def _printer_is_homed_for_toolchange(self, required_axes: str = ""):
+            # If no axes are required, then return True.
+            if required_axes == "":
+                return True
+            
+            curtime = self.printer.get_reactor().monotonic()
+            toolhead = self.printer.lookup_object("toolhead")
+            homed = toolhead.get_status(curtime)["homed_axes"].upper()
+
+            if all(axis in homed for axis in list(required_axes)):
+                return True
+            
+            return False
+            
+            # elif lazy_home_when_parking == 0 and not all(
+            #     axis in homed for axis in ["x", "y", "z"]
+            # ):
+            #     return False
+            # elif lazy_home_when_parking == 1 and "z" not in homed:
+            #     return False
+
+            axes_to_home = ""
+            for axis in ["x", "y", "z"]:
+                if axis not in homed:
+                    axes_to_home += axis
+            self.gcode.run_script_from_command("G28 " + axes_to_home.upper())
+            return True
+
 
     def _get_tool_from_gcmd(self, gcmd):
         tool_name = gcmd.get("TOOL", None)
@@ -1063,6 +1092,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             if c not in XYZ_TO_INDEX:
                 raise Exception("Invalid RESTORE_POSITION_TYPE")
         return restore_type
+
+    class DataClassEncoder(JSONEncoder):
+        def default(self, o):
+            return o.to_dict()
+
 
 def load_config(config):
     return Ktc(config)
