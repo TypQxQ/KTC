@@ -53,8 +53,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name),
             )
 
-        self.extruder = KtcToolExtruder()
-
         # TODO: Delete
         # Heaters and their offsetts
         self.timer_heater_active_to_standby_delay = None  # type: ignore

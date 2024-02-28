@@ -63,6 +63,63 @@ class KtcConfigurableEnum(Enum):
     def __str__(self):
         return f"'{self.name}'"
 
+@unique
+class HeaterStateType(IntEnum):
+    HEATER_STATE_OFF = 0
+    HEATER_STATE_STANDBY = 1
+    HEATER_STATE_ACTIVE = 2
+
+@unique
+class HeaterTimerType(IntEnum):
+    TIMER_TO_SHUTDOWN = 0
+    TIMER_TO_STANDBY = 1
+
+@dataclasses.dataclass
+class KtcToolExtruder:
+    state = HeaterStateType.HEATER_STATE_OFF
+    active_temp = 0
+    standby_temp = 0
+    active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
+    standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
+    heaters: list["KtcHeaterSettings"] = dataclasses.field(default_factory=list)
+
+    def heater_names(self) -> list[str]:
+        return [heater.name for heater in self.heaters]
+
+# @dataclasses_json.dataclass_json
+@dataclasses.dataclass
+class KtcHeaterSettings:
+    name: str
+    temperature_offset: float
+
+    def __init__(self, name: str,
+                 temperature_offset: float):
+        self.name = name
+        self.temperature_offset = temperature_offset
+
+    @classmethod
+    def from_list(cls, list_value: list):
+        temp = [list_value[0],
+                0.0      # Default temperature temperature_offset
+                ]
+        for i, val in enumerate(list_value[1:]):
+            temp[i+1] = float(val)
+        return cls(*temp)
+
+    @classmethod
+    def from_string(cls, string_value: str):
+        list_value = string_value.split(':')
+        return cls.from_list(list_value)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(name=data['name'],
+                   temperature_offset=data['temperature_offset'])
+
+    def to_dict(self):
+        return {'name': self.name,
+                'temperature_offset': self.temperature_offset}
+
 class KtcBaseClass:
     """Base class for KTC. Contains common methods and properties."""
     def __init__(self, config: "configfile.ConfigWrapper"): # type: ignore
@@ -335,6 +392,7 @@ class KtcBaseToolClass(KtcBaseClass):
         # Is overridden by the tool object.
         self._toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
+        self.extruder = KtcToolExtruder()
         # TODO: Change to array of fans
         self.fan = None
         # 0 = off, 1 = standby temperature, 2 = active temperature.
@@ -366,61 +424,3 @@ class KtcConstantsClass:
                          number=TOOL_NONE_N,
                          config = None))         # type: ignore
     TOOL_NONE.state = TOOL_UNKNOWN.state = KtcBaseClass.StateType.CONFIGURED
-
-@unique
-class HeaterStateType(IntEnum):
-    HEATER_STATE_OFF = 0
-    HEATER_STATE_STANDBY = 1
-    HEATER_STATE_ACTIVE = 2
-
-@unique
-class HeaterTimerType(IntEnum):
-    TIMER_TO_SHUTDOWN = 0
-    TIMER_TO_STANDBY = 1
-
-@dataclasses.dataclass
-class KtcToolExtruder:
-    state = HeaterStateType.HEATER_STATE_OFF
-    active_temp = 0
-    standby_temp = 0
-    active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
-    standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
-    heaters: list["KtcHeaterSettings"] = dataclasses.field(default_factory=list)
-
-    def heater_names(self) -> list[str]:
-        return [heater.name for heater in self.heaters]
-
-# @dataclasses_json.dataclass_json
-@dataclasses.dataclass
-class KtcHeaterSettings:
-    name: str
-    temperature_offset: float
-
-    def __init__(self, name: str,
-                 temperature_offset: float):
-        self.name = name
-        self.temperature_offset = temperature_offset
-
-    @classmethod
-    def from_list(cls, list_value: list):
-        temp = [list_value[0],
-                0.0      # Default temperature temperature_offset
-                ]
-        for i, val in enumerate(list_value[1:]):
-            temp[i+1] = float(val)
-        return cls(*temp)
-
-    @classmethod
-    def from_string(cls, string_value: str):
-        list_value = string_value.split(':')
-        return cls.from_list(list_value)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(name=data['name'],
-                   temperature_offset=data['temperature_offset'])
-
-    def to_dict(self):
-        return {'name': self.name,
-                'temperature_offset': self.temperature_offset}
-

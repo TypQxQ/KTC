@@ -106,25 +106,30 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         # Register commands
         handlers = [
-            "KTC_OVERRIDE_CURRENT_TOOL",
             "KTC_DROPOFF",
-            "KTC_SET_AND_SAVE_PARTFAN_SPEED",
             "KTC_TEMPERATURE_WAIT_WITH_TOLERANCE",
-            "KTC_SET_TOOL_TEMPERATURE",
+            "KTC_SET_AND_SAVE_PARTFAN_SPEED",
             "KTC_SET_GLOBAL_OFFSET",
+            "KTC_SET_TOOL_TEMPERATURE",
             "KTC_SET_TOOL_OFFSET",
+            "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL",  # Maybe remove?
+            "KTC_SET_TOOL_STATE",
+
+            "KTC_SET_TOOLCHANGER_STATE",
+            "KTC_SET_TOOLCHANGER_SELECTED_TOOL",
+
+            "KTC_SET_ACTIVE_TOOL",
+            
             "KTC_SAVE_POSITION",
             "KTC_SAVE_CURRENT_POSITION",
             "KTC_RESTORE_POSITION",
-            "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL",  # Maybe remove?
-            "KTC_DISPLAY_TOOL_MAP",
-            "KTC_REMAP_TOOL",
+            # "KTC_DISPLAY_TOOL_MAP",
+            # "KTC_REMAP_TOOL",
             "KTC_TOOLCHANGER_ENGAGE",
             "KTC_TOOLCHANGER_DISENGAGE",
             "KTC_SET_ALL_TOOL_HEATERS_OFF",
             "KTC_RESUME_ALL_TOOL_HEATERS",
             "KTC_TOOLCHANGER_INITIALIZE",
-            "KTC_SET_TOOLCHANGER_STATE",
         ]
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)
@@ -334,23 +339,50 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         + " [STATE: STATE.ERROR]")
     def cmd_KTC_SET_TOOLCHANGER_STATE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         try:
-            self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get("STATE", None)
+            self.get_toolchanger_from_gcmd(gcmd).state = gcmd.get("STATE", None)
         except Exception as e:
             raise gcmd.error("Error setting toolchanger state: %s" % str(e)) from e
 
-    cmd_KTC_SET_TOOL_STATE_help = ( "Set the state of the toolchanger."
-        + " [TOOL: Tool_name]"
+    cmd_KTC_SET_TOOL_STATE_help = ( "Set the state of the toolchanger.\n"
+        + " [TOOL: Tool_name] or [T: Tool_number]\n"
         + " [STATE: STATE.ERROR]")
     def cmd_KTC_SET_TOOL_STATE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
-        try:
-            self.parse_gcmd_get_toolchanger(gcmd).state = gcmd.get("STATE", None)
-        except Exception as e:
-            raise gcmd.error("Error setting toolchanger state: %s" % str(e)) from e
+        tool = self.get_tool_from_gcmd(gcmd)
+        value = gcmd.get("STATE", None)
+        if value is None:
+            raise self.printer.command_error(
+                "KTC_SET_TOOL_STATE: No STATE specified for tool: %s." % str(tool.name)
+            )
+        elif value not in self.StateType.__members__:
+            raise self.printer.command_error(
+                f"KTC_SET_TOOL_STATE: Invalid STATE: {value}." +
+                f" Valid states are: {self.StateType.__members__}"
+            )
+        tool: 'ktc_tool.KtcTool' = self.printer.lookup_object("ktc_tool " + str(tool.name))
+        tool.state = value
+
+    cmd_KTC_SET_ACTIVE_TOOL_help = ( "Set the active tool.\n"
+                                    + "[TOOL: Tool_name] or [T: Tool_number]" )
+    def cmd_KTC_SET_ACTIVE_TOOL(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
+        self.active_tool = self.get_tool_from_gcmd(gcmd)
+
+    cmd_KTC_SET_TOOLCHANGER_SELECTED_TOOL_help = (
+        "Set the selected tool in the toolchanger.\n" +
+        "[TOOLCHANGER: Default_ToolChanger]\n" +
+        "[TOOL: Tool_name] or [T: Tool_number]" )
+    def cmd_KTC_SET_TOOLCHANGER_SELECTED_TOOL(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
+        tool = self.get_tool_from_gcmd(gcmd)
+        toolchanger = self.get_toolchanger_from_gcmd(gcmd)
+        if tool.name not in toolchanger.tools:
+            raise self.printer.command_error(
+                "Tool %s not found in toolchanger %s." % (tool.name, toolchanger.name)
+            )
+        toolchanger.selected_tool = tool
 
     cmd_KTC_TOOLCHANGER_INITIALIZE_help = ( "Initialize the toolchanger before use."
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_INITIALIZE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
-        self.parse_gcmd_get_toolchanger(gcmd).initialize()
+        self.get_toolchanger_from_gcmd(gcmd).initialize()
 
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
         "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]"
@@ -368,55 +400,20 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                     disregard_engaged = True
                 else:
                     disregard_engaged = False
-            self.parse_gcmd_get_toolchanger(gcmd).engage(disregard_engaged = disregard_engaged)
+            self.get_toolchanger_from_gcmd(gcmd).engage(disregard_engaged = disregard_engaged)
         except Exception as e:
             raise self.printer.command_error("Error engaging toolchanger: %s" % str(e)) from e
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
         + "from place. [TOOLCHANGER: Default_ToolChanger]" )
-    def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd: "gcode.GCodeCommand"):
+    def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd: "gcode.GCodeCommand"):    # pylint: disable=invalid-name
         try:
-            self.parse_gcmd_get_toolchanger(gcmd).disengage()
+            self.get_toolchanger_from_gcmd(gcmd).disengage()
         except Exception as e:
             raise self.printer.command_error("Error disengaging toolchanger: %s" % str(e)) from e
 
-    # Returns the toolchanger object specified in the gcode command or the default toolchanger.
-    def parse_gcmd_get_toolchanger(self, gcmd: "gcode.GCodeCommand"):
-        tc_name = typing.cast(str, gcmd.get("TOOLCHANGER", None))
-        self.log.trace("parse_gcmd_get_toolchanger: tc_name type: " + str(type(tc_name)))
-        if tc_name is None:
-            tc = self.default_toolchanger
-        else:
-            tc: 'ktc_toolchanger.KtcToolchanger' = self.printer.lookup_object(
-                "ktc_toolchanger " + tc_name, None
-            )
-
-            if tc is None:
-                raise self.printer.command_error(
-                    "Unknown TOOLCHANGER: %s." % str(tc_name)
-                )
-        return tc
-
-    def parse_gcmd_get_tooln(self, gcmd):
-        tool_id = gcmd.get_int("TOOL", None, minval=0)
-
-        if tool_id is None:
-            tool_id = self.active_tool_n
-        if not int(tool_id) > self.TOOL_NONE_N:
-            self.log.always(
-                "parse_gcmd_get_tooln: Tool " + str(tool_id) + " is not valid."
-            )
-            return None
-        else:
-            # Check if the requested tool has been remaped to another one.
-            tool_is_remaped = self.tool_is_remaped(int(tool_id))
-            if tool_is_remaped > self.TOOL_NONE_N:
-                tool_id = tool_is_remaped
-        return tool_id
-
     cmd_KTC_DROPOFF_help = "Deselect all tools"
-
-    def cmd_KTC_DROPOFF(self, gcmd=None):
+    def cmd_KTC_DROPOFF(self, gcmd = None):   # pylint: disable=invalid-name
         self.log.trace(
             "KTC_TOOL_DROPOFF_ALL running. "
         )  # + gcmd.get_raw_command_parameters())
@@ -452,17 +449,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         except Exception as e:
             raise Exception("cmd_KTC_TOOL_DROPOFF_ALL: Error: %s" % str(e)) from e
-
-    cmd_KTC_OVERRIDE_CURRENT_TOOL_help = (
-        "Override the current tool as to be the specified tool. TOOL=toolname"
-    )
-
-    def cmd_KTC_OVERRIDE_CURRENT_TOOL(self, gcmd):
-        t = gcmd.get("TOOL", None)
-        t = gcmd.get("T", t)
-        if t is not None:
-            self.active_tool = t
-            
 
     cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED_help = (
         "Save the fan speed to be recovered at ToolChange."
@@ -593,9 +579,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     #  SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting off the heater, optional.
     #      Use for example 86400 to wait 24h if you want to disable shutdown timer.
     def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd):
-        tool_id = self.parse_gcmd_get_tooln(gcmd)
-        if tool_id is None:
-            return
+        tool = self.get_tool_from_gcmd(gcmd)
 
         stdb_tmp = gcmd.get_float("STDB_TMP", None, minval=0)
         actv_tmp = gcmd.get_float("ACTV_TMP", None, minval=0)
@@ -606,7 +590,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.log.trace(
             "cmd_KTC_SET_TOOL_TEMPERATURE: T%s: stdb_tmp:%s, actv_tmp:%s, chng_state:%s, stdb_timeout:%s, shtdwn_timeout:%s."
             % (
-                str(tool_id),
+                str(tool.name),
                 str(stdb_tmp),
                 str(actv_tmp),
                 str(chng_state),
@@ -616,18 +600,18 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         )
 
         if (
-            self.printer.lookup_object("ktc_tool " + str(tool_id)).get_status()[
+            self.printer.lookup_object("ktc_tool " + str(tool.name)).get_status()[
                 "heaters"
             ]
             is None
         ):
             self.log.trace(
                 "cmd_KTC_SET_TOOL_TEMPERATURE: T%s has no heaters! Nothing to do."
-                % str(tool_id)
+                % str(tool.name)
             )
             return None
 
-        tool: 'ktc_tool.KtcTool' = self.printer.lookup_object("ktc_tool " + str(tool_id))
+        tool: 'ktc_tool.KtcTool' = self.printer.lookup_object("ktc_tool " + str(tool.name))
         set_heater_cmd = {}
 
         if stdb_tmp is not None:
@@ -645,7 +629,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             tool.set_heater(**set_heater_cmd)
         else:
             # Print out the current set of temperature settings for the tool if no changes are provided.
-            msg = "T%s Current Temperature Settings" % str(tool_id)
+            msg = "T%s Current Temperature Settings" % str(tool.name)
             msg += (
                 "\n Active temperature %s - %d*C - Active to Standby timer: %d seconds"
                 % (
@@ -731,11 +715,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             raise Exception("set_all_tool_heaters_off: Error: %s" % str(e))
 
     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
-
-    def cmd_KTC_SET_TOOL_OFFSET(self, gcmd):
-        tool_id = self.parse_gcmd_get_tooln(gcmd)
-        if tool_id is None:
-            return
+    def cmd_KTC_SET_TOOL_OFFSET(self, gcmd: 'gcode.GCodeCommand'):  # pylint: disable=invalid-name
+        tool = self.get_tool_from_gcmd(gcmd)
+        tool_id = tool.name
 
         x_pos = gcmd.get_float("X", None)
         x_adjust = gcmd.get_float("X_ADJUST", None)
@@ -1040,23 +1022,39 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.gcode.run_script_from_command("G28 " + axes_to_home.upper())
             return True
 
-
-    def _get_tool_from_gcmd(self, gcmd):
-        tool_name = gcmd.get("TOOL", None)
-        tool_nr = gcmd.get_int("T", None)
+    def get_tool_from_gcmd(self, gcmd: 'gcode.GCodeCommand') -> 'ktc_tool.KtcTool':
+        '''Returns the tool object specified in the gcode command or
+        the active tool if none is specified.'''
+        tool_name: str = gcmd.get("TOOL", None)
+        tool_nr: int = gcmd.get_int("T", None)
         if tool_name:
-            tool = self.printer.lookup_object(tool_name)
+            tool = self.all_tools.get(tool_name, None)
+            if not tool:
+                raise gcmd.error("Tool %s not found" % (tool_name))
         elif tool_nr is not None:
+            if tool_nr not in self.all_tools_by_number:
+                raise gcmd.error("T%d not found" % (tool_nr))
             tool = self.all_tools_by_number[tool_nr]
-            if not tool:
-                raise gcmd.error("SET_TOOL_TEMPERATURE: T%d not found" % (tool_nr))
         else:
+            if self.active_tool == self.TOOL_NONE or self.active_tool == self.TOOL_UNKNOWN:
+                raise gcmd.error("No tool specified and no active tool")
             tool = self.active_tool
-            if not tool:
-                raise gcmd.error(
-                    "SET_TOOL_TEMPERATURE: No tool specified and no active tool"
-                )
         return tool
+
+    def get_toolchanger_from_gcmd(
+        self, gcmd: 'gcode.GCodeCommand') -> 'ktc_toolchanger.KtcToolchanger':
+        '''Returns the toolchanger object specified in the gcode command 
+        or the default toolchanger if none is specified and only one is available.'''
+        toolchanger_name = typing.cast(str, gcmd.get("TOOLCHANGER", None))
+        if toolchanger_name:
+            toolchanger = self.printer.lookup_object("ktc_toolchanger " + toolchanger_name, None)
+            if not toolchanger:
+                raise gcmd.error("Toolchanger %s not found" % (toolchanger_name))
+        else:
+            if len(self.all_toolchangers) > 1:
+                raise gcmd.error("No toolchanger specified and more than one available")
+            toolchanger = self.all_toolchangers[0]
+        return toolchanger
 
     ###########################################
     # Static Module methods
