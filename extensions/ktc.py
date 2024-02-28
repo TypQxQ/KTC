@@ -9,10 +9,10 @@ import typing
 from json import JSONEncoder
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
 from .ktc_base import(
-    KtcConstantsClass, 
+    KtcConstantsClass,
     KtcBaseClass,
     KtcBaseToolClass,
-    PARAMS_TO_INHERIT
+    HeaterStateType,
     )
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
@@ -516,11 +516,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     #  TOOL=nnn Tool number.
     #  HEATER=nnn Heater number. 0="heater_bed", 1="heaters", 2="heaters1", etc.
     #  TOLERANCE=nnn Tolerance in degC. Defaults to 1*C. Wait will wait until heater is between set temperature +/- tolerance.
-    def cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE(self, gcmd):
+    def cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE(self, gcmd: "gcode.GCodeCommand"):  # pylint: disable=invalid-name
         curtime = self.printer.get_reactor().monotonic()
-        heater_name = None
+        heater_name = []
         tool_id = gcmd.get_int("TOOL", None, minval=0)
-        heater_id = gcmd.get_int("HEATER", None, minval=0)
+        heater_id = typing.cast(int, gcmd.get_int("HEATER", None, minval=0))
         tolerance = gcmd.get_int("TOLERANCE", 1, minval=0, maxval=50)
 
         if tool_id is not None and heater_id is not None:
@@ -531,7 +531,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         elif tool_id is None and heater_id is None:
             tool_id = self.active_tool_n
             if int(self.active_tool_n) > self.TOOL_NONE_N:
-                heater_name = self.active_tool.heaters
+                heater_name.append(self.active_tool.extruder.heaters)
             # wait for bed
             self._Temperature_wait_with_tolerance(curtime, "heater_bed", tolerance)
 
@@ -542,28 +542,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 if tool_is_remaped > -1:
                     tool_id = tool_is_remaped
 
-                heater_name = self.printer.lookup_object(  # Set the heater_name to the heaters of the tool.
+                # Set the heater_name to the heaters of the tool.
+                heater_name.append(self.printer.lookup_object(
                     "ktc_tool " + str(tool_id)
-                ).get_status(
-                    curtime
-                )[
-                    "heaters"
-                ]
+                ).get_status(curtime)["heaters"])
             elif heater_id == 0:  # Else If 0, then heater_bed.
-                heater_name = "heater_bed"  # Set heater_name to "heater_bed".
+                heater_name.append("heater_bed")  # Set heater_name to "heater_bed".
 
             elif heater_id == 1:  # Else If h is 1 then use for first heaters.
-                heater_name = (
+                heater_name.append(
                     "heaters"  # Set heater_name to first heaters which has no number.
                 )
             else:  # Else is another heater number.
-                heater_name = "heaters" + str(
-                    heater_id - 1
-                )  # Because bed is heater_number 0 heaterss will be numbered one less than H parameter.
-        if heater_name is not None:
-            self._Temperature_wait_with_tolerance(curtime, heater_name, tolerance)
+                heater_name.append("heaters" + str(heater_id - 1))  # Because bed is heater_number 0 heaterss will be numbered one less than H parameter.
+        if heater_name is not None and len(heater_name) > 0:
+            for name in heater_name:
+                self._Temperature_wait_with_tolerance(curtime, name, tolerance)
 
-    def _Temperature_wait_with_tolerance(self, curtime, heater_name, tolerance):
+    def _Temperature_wait_with_tolerance(self, curtime, heater_name, tolerance):    # pylint: disable=invalid-name
         target_temp = int(
             self.printer.lookup_object(  # Get the heaters target temperature.
                 heater_name
@@ -631,7 +627,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
             return None
 
-        tool = self.printer.lookup_object("ktc_tool " + str(tool_id))
+        tool: 'ktc_tool.KtcTool' = self.printer.lookup_object("ktc_tool " + str(tool_id))
         set_heater_cmd = {}
 
         if stdb_tmp is not None:
@@ -653,35 +649,36 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             msg += (
                 "\n Active temperature %s - %d*C - Active to Standby timer: %d seconds"
                 % (
-                    "*" if tool.heater_state == 2 else " ",
-                    tool._heater_active_temp,
-                    tool.heater_active_to_standby_delay,
+                    "*" if tool.extruder.state == HeaterStateType.HEATER_STATE_ACTIVE else " ",
+                    tool.extruder.active_temp,
+                    tool.extruder.active_to_standby_delay
                 )
             )
             msg += (
                 "\n Standby temperature %s - %d*C - Standby to Off timer: %d seconds"
                 % (
-                    "*" if tool.heater_state == 1 else " ",
-                    tool._heater_standby_temp,
-                    tool.heater_standby_to_powerdown_delay,
+                    "*" if tool.extruder.state == HeaterStateType.HEATER_STATE_STANDBY else " ",
+                    tool.extruder.standby_temp,
+                    tool.extruder.standby_to_powerdown_delay,
                 )
             )
-            if tool.heater_state != 3:
-                if tool.timer_heater_active_to_standby_delay.get_status()["next_wake"] == True:
-                    msg += (
-                        "\n Will go to standby temperature in in %s seconds."
-                        % tool.timer_heater_active_to_standby_delay.get_status()["next_wake"]
-                    )
-                if tool.timer_heater_standby_to_powerdown_delay.get_status()["counting_down"] == True:
-                    msg += (
-                        "\n Will power down in %s seconds."
-                        % tool.timer_heater_standby_to_powerdown_delay.get_status()["next_wake"]
-                    )
+            # if tool.timer_heater_active_to_standby_delay.get_status()["next_wake"] == True:
+            #     msg += (
+            #         "\n Will go to standby temperature in in %s seconds."
+            #         % tool.timer_heater_active_to_standby_delay.get_status()["next_wake"]
+            #     )
+            # if tool.timer_heater_standby_to_powerdown_delay.get_status()["counting_down"] == True:
+            #     msg += (
+            #         "\n Will power down in %s seconds."
+            #         % tool.timer_heater_standby_to_powerdown_delay.get_status()["next_wake"]
+            #     )
             gcmd.respond_info(msg)
 
-    cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = "Turns off all heaters and saves changes made to be resumed by KTC_RESUME_ALL_TOOL_HEATERS."
-
-    def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):
+    cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = (
+        "Turns off all heaters and saves changes made to be resumed by " +
+        "KTC_RESUME_ALL_TOOL_HEATERS."
+    )
+    def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):   # pylint: disable=invalid-name
         self.set_all_tool_heaters_off()
 
     def set_all_tool_heaters_off(self):

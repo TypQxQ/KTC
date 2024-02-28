@@ -25,12 +25,6 @@ TOOL_NONE_N = -1
 DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
 DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
 
-# Change to dict with value as default value.
-OLD_PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
-                        "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
-                        # 
-                        "force_deselect_when_parent_deselects", "_heaters_config", "fan"]
-
 # Parameters available for inheritance by all tools and their default values.
 PARAMS_TO_INHERIT = {"_engage_gcode": "",
                      "_disengage_gcode": "",
@@ -42,8 +36,10 @@ PARAMS_TO_INHERIT = {"_engage_gcode": "",
                      "fan": "",
                      "offset": [0.0, 0.0, 0.0],
                      "requires_axis_homed": "XYZ",
-                     "heater_active_to_standby_delay": DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY,
-                     "heater_standby_to_powerdown_delay": DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY,
+                     "_heater_active_to_standby_delay_in_config":
+                         DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY,
+                     "_heater_standby_to_powerdown_delay_in_config":
+                         DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY,
                      }
 
 class KtcConfigurableEnum(Enum):
@@ -107,18 +103,12 @@ class KtcBaseClass:
         self._tool_deselect_gcode = config.get("tool_deselect_gcode", None) # type: ignore
 
         self._heaters_config: str = self.config.get("heater", None)    # type: ignore
-        self.extruder = KtcToolExtruder()
-        self.extruder.active_to_standby_delay = self.config.getfloat(
-            "heater_active_to_standby_delay", None, 0.1)    # type: ignore
-        self.extruder.standby_to_powerdown_delay = self.config.getfloat(
-            "heater_standby_to_powerdown_delay", None, 0.1) # type: ignore
 
-        # TODO: Delete
-        self.heater_active_to_standby_delay = self.config.getfloat(
-            "", None, 0.1)    # type: ignore
-        self.heater_standby_to_powerdown_delay = self.config.getfloat(
-            "", None, 0.1)  # type: ignore
-        self.heaters = []
+        # Minimum time is 0.1 seconds. 0 disables the timer thus never changes the temperature.
+        self._heater_active_to_standby_delay_in_config = self.config.getfloat(
+            "heater_active_to_standby_delay", None, 0.1)    # type: ignore
+        self._heater_standby_to_powerdown_delay_in_config = self.config.getfloat(
+            "heater_standby_to_powerdown_delay", None, 0.1) # type: ignore
 
         self.fan = self.config.get("fan", None)            # type: ignore
 
@@ -205,12 +195,6 @@ class KtcBaseClass:
             for v in parent.params: # type: ignore
                 if v not in self.params:
                     self.params[v] = parent.params[v]   # type: ignore
-
-        # Nested objects
-        if self.extruder.active_to_standby_delay is None:
-            self.extruder.active_to_standby_delay = parent.extruder.active_to_standby_delay
-        if self.extruder.standby_to_powerdown_delay is None:
-            self.extruder.standby_to_powerdown_delay = parent.extruder.standby_to_powerdown_delay
 
     @staticmethod
     def get_params_dict_from_config(config: 'configfile.ConfigWrapper'):
@@ -353,10 +337,8 @@ class KtcBaseToolClass(KtcBaseClass):
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
         # TODO: Change to array of fans
         self.fan = None
-        # TODO: Delete
-        self.heater = None
         # 0 = off, 1 = standby temperature, 2 = active temperature.
-        self.heater_state = 0
+        # self.heater_state = 0
 
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
@@ -401,8 +383,8 @@ class KtcToolExtruder:
     state = HeaterStateType.HEATER_STATE_OFF
     active_temp = 0
     standby_temp = 0
-    active_to_standby_delay = None
-    standby_to_powerdown_delay = None
+    active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
+    standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
     heaters: list["KtcHeaterSettings"] = dataclasses.field(default_factory=list)
 
     def heater_names(self) -> list[str]:

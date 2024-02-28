@@ -4,7 +4,7 @@
 # Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import typing, dataclasses
+import typing
 from .ktc_base import HeaterStateType, HeaterTimerType          # pylint: disable=relative-beyond-top-level
 from .ktc_base import DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY    # pylint: disable=relative-beyond-top-level
 from .ktc_base import DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY # pylint: disable=relative-beyond-top-level
@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from ...klipper.klippy import klippy
-    # from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
+    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
 class KtcHeater:
     def __init__(self, config: 'configfile.ConfigWrapper'):
@@ -73,7 +73,7 @@ class KtcHeaterTimer:
             if self.last_virtual_tool_using_physical_timer is None:
                 raise Exception("last_virtual_tool_using_physical_timer is < None")
 
-            tool: KtcTool = self.printer.lookup_object(
+            tool: 'ktc_tool.KtcTool' = self.printer.lookup_object(
                 "ktc_tool " + str(self.last_virtual_tool_using_physical_timer)
             )
 
@@ -95,7 +95,7 @@ class KtcHeaterTimer:
 
             temperature = 0
             # TODO: This isnot working.
-            heater = self.printer.lookup_object(tool.heaters).get_heater()
+            heater = self.printer.lookup_object(tool.extrude).get_heater()
             if self.temp_type == TimerType.TIMER_TO_STANDBY:
                 self.log.track_heater_standby_start(
                     self.tool_id

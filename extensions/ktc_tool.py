@@ -13,6 +13,7 @@ from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcBaseChangerClass,
     HeaterStateType,
     KtcHeaterSettings,
+    KtcToolExtruder,
 )
 from .ktc_heater import KtcHeater   # pylint: disable=relative-beyond-top-level
 # from . import ktc_heater
@@ -51,13 +52,14 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 "ktc_toolchanger.KtcToolchanger",
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name),
             )
-        
-        
+
+        self.extruder = KtcToolExtruder()
+
         # TODO: Delete
         # Heaters and their offsetts
         self.timer_heater_active_to_standby_delay = None  # type: ignore
         self.timer_heater_standby_to_powerdown_delay = None # type: ignore
-        self.heater_state = HeaterStateType.HEATER_STATE_OFF
+        # self.heater_state = HeaterStateType.HEATER_STATE_OFF
         # Temperature to set when in active mode.
         # Requred on Physical and virtual tool if any has heaters.
         self._heater_active_temp = 0
@@ -85,6 +87,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         self.gcode_macro = typing.cast('klippy_gcode_macro.PrinterGCodeMacro', # type: ignore # pylint: disable=attribute-defined-outside-init
                                   self.printer.lookup_object("gcode_macro"))    # type: ignore
 
+        self.extruder.active_to_standby_delay = self._heater_active_to_standby_delay_in_config
+        self.extruder.standby_to_powerdown_delay = self._heater_standby_to_powerdown_delay_in_config
         # Settings for any heaters.
         if self._heaters_config is not None:
             heaters = self._heaters_config.split(",")
@@ -96,31 +100,14 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.extruder.heaters.append(heater_settings)
                 # Initialize the heater if first time used.
                 if heater_settings.name not in self._ktc.all_heaters:
-                    heater_object: "KtcHeater" = self.printer.load_object(
-                        self.config, "ktc_heater " + heater_settings.name
+                    self._ktc.all_heaters[heater_settings.name] = (
+                        self.printer.load_object(
+                        self.config, "ktc_heater " + heater_settings.name)
                     )
-                    heater_object.standby_to_powerdown_delay = (
-                        self.heater_standby_to_powerdown_delay
-                    )
-                    heater_object.active_to_standby_delay = (
-                        self.heater_active_to_standby_delay
-                    )
-                    heater_object.temperature_offset = heater_settings.temperature_offset
-                    self._ktc.all_heaters[heater_settings.name] = heater_object
-                    self.log.trace(
-                        f"Added heater {heater_settings.name} to all_heaters." +
-                        f" Offset: {heater_object.temperature_offset}" +
-                        f" to tool {self.name}."
-                        )
-                else:
-                    self.log.trace(
-                        f"Heater {heater_settings.name} already in all_heaters." +
-                        f" to tool {self.name}."
-                        )
 
         self.state = self.StateType.CONFIGURED
 
-    def cmd_SelectTool(self, gcmd):
+    def cmd_SelectTool(self, gcmd): # pylint: disable=invalid-name
         self.log.trace("KTC Tool " + str(self.number) + " Selected.")
         # Allow either one.
         restore_mode = self._ktc.ktc_parse_restore_type(gcmd.get("R", None), None)
@@ -382,7 +369,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                             self.extruder.standby_temp))
 
         # TODO: Check that we get the right heater.
-        printer_heater = self.printer.lookup_object(self.heaters).get_heater()
+        # printer_heater = self.printer.lookup_object(self.extruder.heaters[0]).get_heater()
 
         curtime = self.printer.get_reactor().monotonic()
         changing_timer = False
