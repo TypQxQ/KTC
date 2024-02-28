@@ -11,9 +11,8 @@ from .ktc_base import DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY # pylint: disabl
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
-    from ...klipper.klippy import configfile, gcode
-    from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from ...klipper.klippy import klippy
+    from ...klipper.klippy import configfile, gcode, klippy, reactor
+    # from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
 
 class KtcHeater:
@@ -25,16 +24,16 @@ class KtcHeater:
         self.state = HeaterStateType.HEATER_STATE_OFF
         # Timer to set temperature to standby temperature
         # after heater_active_to_standby_delay seconds. Set if this tool has an heaters.
-        self.active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
         self.timer_heater_active_to_standby_delay = KtcHeaterTimer(
-            self.printer, self.name, HeaterTimerType.TIMER_TO_STANDBY
+            self.printer, self, HeaterTimerType.TIMER_TO_STANDBY
         )
+
         # Timer to set temperature to 0 after heater_standby_to_powerdown_delay seconds.
         # Set if this tool has an heaters.
-        self.standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
         self.timer_heater_standby_to_powerdown_delay = KtcHeaterTimer(
-            self.printer, self.name, HeaterTimerType.TIMER_TO_SHUTDOWN
+            self.printer, self, HeaterTimerType.TIMER_TO_SHUTDOWN
         )
+
         # Temperature to set when in active mode.
         # Requred on Physical and virtual tool if any has heaters.
         self._heater_active_temp = 0
@@ -42,17 +41,37 @@ class KtcHeater:
         # Requred on Physical and virtual tool if any has heaters.
         self._heater_standby_temp = 0
 
+        self.__active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
+        self.__standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
+
+    @property
+    def active_to_standby_delay(self):
+        return self.__active_to_standby_delay
+    @active_to_standby_delay.setter
+    def active_to_standby_delay(self, value):
+        self.__active_to_standby_delay = value
+        self.timer_heater_active_to_standby_delay.set_timer(value, self.name)
+
+    @property
+    def standby_to_powerdown_delay(self):
+        return self.__standby_to_powerdown_delay
+    @standby_to_powerdown_delay.setter
+    def standby_to_powerdown_delay(self, value):
+        self.__standby_to_powerdown_delay = value
+        self.timer_heater_standby_to_powerdown_delay.set_timer(value, self.name)
+
 class KtcHeaterTimer:
-    def __init__(self, printer, tool_id, temp_type):
-        self.printer : 'klippy.Printer' = printer
-        self.tool_id = tool_id
-        self.last_virtual_tool_using_physical_timer = None
+    def __init__(self, printer: 'klippy.Printer', heater, timer_type):
+        self.printer = printer
+        self.heater = heater
+
+        # self.last_virtual_tool_using_physical_timer = None
 
         self.duration = 0.0
-        self.temp_type = temp_type  # 0= Time to shutdown, 1= Time to standby.
+        self.timer_type = timer_type  # 0= Time to shutdown, 1= Time to standby.
 
-        self.reactor = self.printer.get_reactor()
-        self.gcode = self.printer.lookup_object("gcode")
+        self.reactor: 'reactor.Reactor' =  self.printer.get_reactor()
+        self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
         self.timer_handler = None
         self.inside_timer = self.repeat = False
         self.printer.register_event_handler("klippy:ready", self._handle_ready)
@@ -78,10 +97,10 @@ class KtcHeaterTimer:
             )
 
             self.log.trace(
-                "_standby_tool_temp_timer_event: Running for T%s. temp_type:%s. %s"
+                "_standby_tool_temp_timer_event: Running for T%s. timer_type:%s. %s"
                 % (
                     str(self.tool_id),
-                    "Time to shutdown" if self.temp_type == 0 else "Time to standby",
+                    "Time to shutdown" if self.timer_type == 0 else "Time to standby",
                     (
                         (
                             "For virtual tool T%s"
@@ -96,7 +115,7 @@ class KtcHeaterTimer:
             temperature = 0
             # TODO: This isnot working.
             heater = self.printer.lookup_object(tool.extrude).get_heater()
-            if self.temp_type == TimerType.TIMER_TO_STANDBY:
+            if self.timer_type == TimerType.TIMER_TO_STANDBY:
                 self.log.track_heater_standby_start(
                     self.tool_id
                 )  # Set the standby as started in statistics.
@@ -141,7 +160,7 @@ class KtcHeaterTimer:
         actual_tool_calling = actual_tool_calling
         self.log.trace(
             str(self.timer_handler)
-            + ".set_timer: T%s %s, temp_type:%s, duration:%s."
+            + ".set_timer: T%s %s, timer_type:%s, duration:%s."
             % (
                 str(self.tool_id),
                 (
@@ -149,7 +168,7 @@ class KtcHeaterTimer:
                     if actual_tool_calling != self.tool_id
                     else ""
                 ),
-                ("Standby" if self.temp_type == 1 else "OFF"),
+                ("Standby" if self.timer_type == 1 else "OFF"),
                 str(duration),
             )
         )
@@ -167,7 +186,7 @@ class KtcHeaterTimer:
 
     def get_status(self, eventtime=None):  # pylint: disable=unused-argument
         status = {
-            "temp_type": self.temp_type,
+            "timer_type": self.timer_type,
             "duration": self.duration,
             "counting_down": self.counting_down,
             "next_wake": self._time_left(),
