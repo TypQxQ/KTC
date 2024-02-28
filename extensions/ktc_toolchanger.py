@@ -48,11 +48,11 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                     "parent_tool %s not found for ktc_toolchanger %s."
                     % (parent_tool_name, self.name)
                 )
-                
+
     @property
     def selected_tool(self):
         return self._selected_tool
-    
+
     @selected_tool.setter
     def selected_tool(self, value: 'ktc_tool.KtcTool'):
         self._selected_tool = value
@@ -184,7 +184,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 )
 
             self.log.changer_stats[self.name].engages += 1
-            self.log.trace("ktc_toolchanger.engage(): Setting state to %s." % self.state)
+            self.log.trace(f"ktc_toolchanger.engage(): Setting state to {self.state}.")
         except Exception as e:
             self.state = self.StateType.ERROR
             self._ktc.state = self.StateType.ERROR
@@ -254,6 +254,8 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             "state": self.state,
             "init_mode": self.init_mode,
             "tool_names": list(self.tools),
+            "offset": self.offset,
+            "params_available": str(self.params.keys()),
             **self.params,
         }
         return status

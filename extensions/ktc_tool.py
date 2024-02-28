@@ -105,11 +105,11 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     heater_object.active_to_standby_delay = (
                         self.heater_active_to_standby_delay
                     )
-                    heater_object.offset = heater_settings.offset
+                    heater_object.temperature_offset = heater_settings.temperature_offset
                     self._ktc.all_heaters[heater_settings.name] = heater_object
                     self.log.trace(
                         f"Added heater {heater_settings.name} to all_heaters." +
-                        f" Offset: {heater_object.offset}" +
+                        f" Offset: {heater_object.temperature_offset}" +
                         f" to tool {self.name}."
                         )
                 else:
@@ -262,6 +262,10 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.toolchanger.selected_tool = self.TOOL_NONE
             if self._ktc.active_tool == self:
                 self._ktc.active_tool = self.TOOL_NONE
+        elif value == self.StateType.ERROR:
+            self.log.always("KTC Tool %s is now in error state." % self.name)
+            self.toolchanger.selected_tool = self.TOOL_UNKNOWN
+            self._ktc.active_tool = self.TOOL_UNKNOWN
 
 
 
@@ -553,16 +557,17 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         status = {
             "name": self.name,
             "number": self.number,
+            "state": self.state,
             "toolchanger": self.toolchanger.name,
-            # "heaters": self._ktc.DataClassEncoder().encode(self.heaters),
-            "heaters": [heater.name for heater in self.extruder.heaters],
             "fan": self.fan,
             "offset": self.offset,
-            "heater_state": self.heater_state,
-            "heater_active_temp": self._heater_active_temp,
-            "heater_standby_temp": self._heater_standby_temp,
-            "heater_active_to_standby_delay": self.heater_active_to_standby_delay,
-            "idle_to_powerdown_next_wake": self.heater_standby_to_powerdown_delay,
+            "heater_names": [heater.name for heater in self.extruder.heaters],
+            "heater_state": self.extruder.state,
+            "heater_active_temp": self.extruder.active_temp,
+            "heater_standby_temp": self.extruder.standby_temp,
+            "heater_active_to_standby_delay": self.extruder.active_to_standby_delay,
+            "idle_to_powerdown_next_wake": self.extruder.standby_to_powerdown_delay,
+            "params_available": str(self.params.keys()),
             **self.params,
         }
         return status

@@ -25,10 +25,26 @@ TOOL_NONE_N = -1
 DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
 DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
 
-PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
+# Change to dict with value as default value.
+OLD_PARAMS_TO_INHERIT = ["_engage_gcode", "_disengage_gcode", "_init_gcode", "offset",
                         "requires_axis_homed", "_tool_select_gcode", "_tool_deselect_gcode",
-                        # "heater_active_to_standby_delay", "heater_standby_to_powerdown_delay",
+                        # 
                         "force_deselect_when_parent_deselects", "_heaters_config", "fan"]
+
+# Parameters available for inheritance by all tools and their default values.
+PARAMS_TO_INHERIT = {"_engage_gcode": "",
+                     "_disengage_gcode": "",
+                     "_init_gcode": "",
+                     "_tool_select_gcode": "",
+                     "_tool_deselect_gcode": "",
+                     "force_deselect_when_parent_deselects": True,
+                     "_heaters_config": "",
+                     "fan": "",
+                     "offset": [0.0, 0.0, 0.0],
+                     "requires_axis_homed": "XYZ",
+                     "heater_active_to_standby_delay": DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY,
+                     "heater_standby_to_powerdown_delay": DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY,
+                     }
 
 class KtcConfigurableEnum(Enum):
     @classmethod
@@ -68,18 +84,18 @@ class KtcBaseClass:
             return
 
         self.force_deselect_when_parent_deselects: bool = config.getboolean(
-            "force_deselect_when_parent_deselects", True)  # type: ignore
+            "force_deselect_when_parent_deselects", None)  # type: ignore
 
         self.printer : 'klippy.Printer' = config.get_printer()
         self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
-        self.params = self.get_params_dict_from_config(config)
         self.log: 'ktc_log.KtcLog' = None # type: ignore # We are loading it later.
         self._ktc: 'ktc.Ktc' = None # type: ignore # We are loading it later.
 
         self.state = self.StateType.NOT_CONFIGURED
         self.offset: list[float, float, float] = None   # type: ignore
 
+        self.params = self.get_params_dict_from_config(config)
         # Get inheritable parameters from the config.
         # Empty strings are NOT overwritten by the parent object in configure_inherited_params.
         # Must be set to None as standard.
@@ -175,15 +191,22 @@ class KtcBaseClass:
         else:
             raise ValueError("Can't configure inherited parameters for object: " + str(type(self)))
 
-        # Set the parameters from the parent object if they are not set.
-        for v in PARAMS_TO_INHERIT:
-            if getattr(self, v) is None:
-                setattr(self, v, getattr(parent, v))
+        if self != parent:
+            # Set the parameters from the parent object if they are not set.
+            for attr, _ in PARAMS_TO_INHERIT.items():
+                if getattr(self, attr) is None:
+                    setattr(self, attr, getattr(parent, attr))
+        else:
+            # For top ktc object initialize unused parameters.
+            for attr, default_value in PARAMS_TO_INHERIT.items():
+                if getattr(self, attr) is None:
+                    setattr(self, attr, default_value)
 
-        for v in parent.params: # type: ignore
-            if v not in self.params:
-                self.params[v] = parent.params[v]   # type: ignore
+            for v in parent.params: # type: ignore
+                if v not in self.params:
+                    self.params[v] = parent.params[v]   # type: ignore
 
+        # Nested objects
         if self.extruder.active_to_standby_delay is None:
             self.extruder.active_to_standby_delay = parent.extruder.active_to_standby_delay
         if self.extruder.standby_to_powerdown_delay is None:
@@ -389,17 +412,17 @@ class KtcToolExtruder:
 @dataclasses.dataclass
 class KtcHeaterSettings:
     name: str
-    offset: float
+    temperature_offset: float
 
     def __init__(self, name: str,
-                 offset: float):
+                 temperature_offset: float):
         self.name = name
-        self.offset = offset
+        self.temperature_offset = temperature_offset
 
     @classmethod
     def from_list(cls, list_value: list):
         temp = [list_value[0],
-                0.0      # Default temperature offset
+                0.0      # Default temperature temperature_offset
                 ]
         for i, val in enumerate(list_value[1:]):
             temp[i+1] = float(val)
@@ -413,9 +436,9 @@ class KtcHeaterSettings:
     @classmethod
     def from_dict(cls, data):
         return cls(name=data['name'],
-                   offset=data['offset'])
+                   temperature_offset=data['temperature_offset'])
 
     def to_dict(self):
         return {'name': self.name,
-                'offset': self.offset}
+                'temperature_offset': self.temperature_offset}
 

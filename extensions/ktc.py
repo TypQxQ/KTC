@@ -8,7 +8,12 @@
 import typing
 from json import JSONEncoder
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
-from .ktc_base import KtcConstantsClass, KtcBaseClass, KtcBaseToolClass, PARAMS_TO_INHERIT # pylint: disable=relative-beyond-top-level
+from .ktc_base import(
+    KtcConstantsClass, 
+    KtcBaseClass,
+    KtcBaseToolClass,
+    PARAMS_TO_INHERIT
+    )
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
@@ -47,7 +52,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         # when all objects are loaded.
         self.default_toolchanger_name: str = config.get("default_toolchanger", "") # type: ignore
         self.default_toolchanger: 'ktc_toolchanger.KtcToolchanger' = None          # type: ignore
-        self.params = self.get_params_dict_from_config(config)
 
         self._tool_map = {}
         self._changes_made_by_set_all_tool_heaters_off = {}
@@ -279,20 +283,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
-        # Initialize the default inherited parameters as empty strings if not set,
-        # except for the heater parameters that are set to float 0.1.
-        for param in PARAMS_TO_INHERIT:
-            if self.params.get(param) is None:
-                if (param == "heater_active_to_standby_delay" or
-                    param == "heater_standby_to_powerdown_delay"):
-                    self.params[param] = 0.1
-                if param == "requires_axis_homed":
-                    self.params[param] = "XYZ"
-                else:
-                    self.params[param] = ""
-        if self.offset is None:                 # pylint: disable=access-member-before-definition # inherited
-            self.offset = [0.0, 0.0, 0.0]       # pylint: disable=attribute-defined-outside-init # inherited
-        self.state = self.StateType.CONFIGURED  # pylint: disable=attribute-defined-outside-init # inherited
+        self.state = self.StateType.CONFIGURED
 
     @property
     def active_tool(self) -> KtcBaseToolClass:
@@ -325,7 +316,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         # Set the active tool in the toolchanger if not TOOL_NONE or TOOL_UNKNOWN.
         if self.__active_tool.toolchanger is not None:
-            self.__active_tool.toolchanger.selected_tool = tool
+            if self.__active_tool.toolchanger.selected_tool != tool:
+                self.__active_tool.toolchanger.selected_tool = tool # type: ignore # subclassing
 
         self.log.trace("ktc.active_tool set to: " + tool.name)
 

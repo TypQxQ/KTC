@@ -20,7 +20,7 @@ class KtcHeater:
     def __init__(self, config: 'configfile.ConfigWrapper'):
         self.printer : 'klippy.Printer' = config.get_printer()
         self.name = config.get_name()
-        self.offset = 0.0
+        self.temperature_offset = 0.0
 
         self.state = HeaterStateType.HEATER_STATE_OFF
         # Timer to set temperature to standby temperature
