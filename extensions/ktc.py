@@ -372,7 +372,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
         toolchanger = self.get_toolchanger_from_gcmd(gcmd)
-        if tool.name not in toolchanger.tools:
+        if (tool not in [self.TOOL_UNKNOWN, self.TOOL_NONE] and
+            tool.name not in toolchanger.tools):
             raise self.printer.command_error(
                 "Tool %s not found in toolchanger %s." % (tool.name, toolchanger.name)
             )
