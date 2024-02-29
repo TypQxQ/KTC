@@ -686,22 +686,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def resume_all_tool_heaters(self):
         try:
-            # Loop it 2 times, first for all heaters standby and then the active.
-
-            for tool_name, v in self._changes_made_by_set_all_tool_heaters_off.items():
-                if v == 1:
-                    self.printer.lookup_object(str(tool_name)).set_heaters(
-                        heater_state=v
-                    )
-
-            for tool_name, v in self._changes_made_by_set_all_tool_heaters_off.items():
-                if v == 2:
-                    self.printer.lookup_object(str(tool_name)).set_heaters(
-                        heater_state=v
-                    )
-
+            for heater_name, state in self._changes_made_by_set_all_tool_heaters_off.items():
+                self.all_heaters[heater_name].state = state
         except Exception as e:
-            raise Exception("set_all_tool_heaters_off: Error: %s" % str(e))
+            raise Exception("set_all_tool_heaters_off: Error: %s" % str(e)) from e
 
     cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
     def cmd_KTC_SET_TOOL_OFFSET(self, gcmd: 'gcode.GCodeCommand'):  # pylint: disable=invalid-name
