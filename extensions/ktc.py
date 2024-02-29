@@ -666,33 +666,22 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.set_all_tool_heaters_off()
 
     def set_all_tool_heaters_off(self):
-        all_tools = dict(self.printer.lookup_objects("ktc_tool"))
         self._changes_made_by_set_all_tool_heaters_off = {}
-
         try:
-            for tool_name, tool in all_tools.items():
-                if tool.get_status()["heaters"] is None:
-                    # self.log.trace("set_all_tool_heaters_off: T%s has no heaters! Nothing to do." % str(tool_name))
-                    continue
-                if tool.get_status()["heater_state"] == 0:
-                    # self.log.trace("set_all_tool_heaters_off: T%s already off! Nothing to do." % str(tool_name))
-                    continue
-                self.log.trace(
-                    "set_all_tool_heaters_off: T%s saved with heater_state: %str."
-                    % (str(tool_name), str(tool.get_status()["heater_state"]))
-                )
-                self._changes_made_by_set_all_tool_heaters_off[
-                    tool_name
-                ] = tool.get_status()["heater_state"]
-                tool.set_heaters(heater_state=0)
+            for heater in self.all_heaters.values():
+                if heater.state > HeaterStateType.HEATER_STATE_OFF:
+                    self._changes_made_by_set_all_tool_heaters_off[
+                        heater.name
+                    ] = heater.state
+                    heater.state = HeaterStateType.HEATER_STATE_OFF
         except Exception as e:
-            raise Exception("set_all_tool_heaters_off: Error: %s" % str(e))
+            raise Exception("set_all_tool_heaters_off: Error: %s" % str(e)) from e
 
     cmd_KTC_RESUME_ALL_TOOL_HEATERS_help = (
         "Resumes all heaters previously turned off by KTC_SET_ALL_TOOL_HEATERS_OFF."
     )
 
-    def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):
+    def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):    # pylint: disable=invalid-name
         self.resume_all_tool_heaters()
 
     def resume_all_tool_heaters(self):

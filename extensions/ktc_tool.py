@@ -13,7 +13,6 @@ from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcBaseChangerClass,
     HeaterStateType,
     KtcHeaterSettings,
-    KtcToolExtruder,
 )
 from .ktc_heater import KtcHeater   # pylint: disable=relative-beyond-top-level
 # from . import ktc_heater
