@@ -284,14 +284,6 @@ class ktc_MeanLayerTime:
         # Method to reset layer times.
         pass
 
-    - KTC_SET_ACTIVE_TOOL
-    - KTC_TOOLCHANGER_SET_SELECTED_TOOL
-    - In macro disengage gcode if ktc.active_tool = this toolchanger.selected tool. set active_tool as tool_none. set this toolchanger to selected none.
-    - In macro engage gcode if ktc.state is not changing then set this toolchangers selected tool to unknown and active tool to unknown.
-
-Problem:
-- KTC_TOOLCHANGER_SET_SELECTED_TOOL doesn't save tool state, ACTIVE_TOOL does.
-
 
 - Extruder -> heater_collection (HeaterCollectionWrapper)
 

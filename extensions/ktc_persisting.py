@@ -82,7 +82,6 @@ class KtcPersisting:
             raise Exception("Unable to parse '%s' as a literal: %s" % (value, e)) from e
 
         if section not in self.content:
-            self.log.trace("Creating section %s" % (section,))
             self.content[section] = {}
 
         self.content[section][varname] = value
@@ -99,12 +98,10 @@ class KtcPersisting:
         try:
             if self.ready_to_save:
                 self.ready_to_save = False
-                self.log.trace("Saving state in logs.")
 
                 # Write file
                 varfile = configparser.ConfigParser()
                 for section, variables in sorted(self.content.items()):
-                    self.log.trace("Saving section %s" % (section,))
                     varfile.add_section(section)
                     for name, val in sorted(variables.items()):
                         varfile.set(section, name, repr(val))

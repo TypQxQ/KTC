@@ -353,6 +353,7 @@ class KtcBaseClass:
 
     @persistent_state.setter
     def persistent_state(self, value):
+        self.log.trace(f"Setting persistent state for {self.name} to {value}")
         if self._ktc_persistent is None:
             self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
                 self.printer.lookup_object("ktc_persisting")

@@ -56,7 +56,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
     @selected_tool.setter
     def selected_tool(self, value: 'ktc_tool.KtcTool'):
         self._selected_tool = value
-        self.persistent_state["selected_tool"] = value.name
+        self.persistent_state = {"selected_tool": value.name}
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
@@ -106,9 +106,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 + "%s not found for ktc_toolchanger %s. Using tool %s."
                 % (active_tool_name, self.name, self.selected_tool.name)
             )
-
-        self.log.trace("ktc_toolchanger[%s].initialize(): Loaded persisted active tool: %s."
-                       % (self.name, self.selected_tool.name))
 
         # Run the init gcode template if it is defined.
         if self._init_gcode != "":
