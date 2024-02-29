@@ -24,7 +24,7 @@ if typing.TYPE_CHECKING:
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
 # Constants for the restore_axis_on_toolchange variable.
-XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
+XYZ_TO_INDEX: dict[str, int] = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
 DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE = 1  # Default tolerance in degC.
 # Don't wait for temperatures below this because they might be ambient.
 LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR = 40
@@ -732,7 +732,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         + "KTC_RESUME_ALL_TOOL_HEATERS."
     )
 
-    def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):  # pylint: disable=invalid-name, unused-argument
         self.set_all_tool_heaters_off()
 
     def set_all_tool_heaters_off(self):
@@ -751,7 +751,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         "Resumes all heaters previously turned off by KTC_SET_ALL_TOOL_HEATERS_OFF."
     )
 
-    def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
         self.resume_all_tool_heaters()
 
     def resume_all_tool_heaters(self):
@@ -762,97 +762,50 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ) in self._changes_made_by_set_all_tool_heaters_off.items():
                 self.all_heaters[heater_name].state = state
         except Exception as e:
-            raise Exception("set_all_tool_heaters_off: Error: %s" % str(e)) from e
+            raise Exception("resume_all_tool_heaters: Error: %s" % str(e)) from e
 
-    cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset"
+    _offset_help = ("\n[X: X position] or [X_ADJUST: X adjust]\n" +
+        "[Y: Y position] or [Y_ADJUST: Y adjust]\n" +
+        "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
+    )
+
+    cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset" + _offset_help
 
     def cmd_KTC_SET_TOOL_OFFSET(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
-        tool_id = tool.name
+        tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
 
-        x_pos = gcmd.get_float("X", None)
-        x_adjust = gcmd.get_float("X_ADJUST", None)
-        y_pos = gcmd.get_float("Y", None)
-        y_adjust = gcmd.get_float("Y_ADJUST", None)
-        z_pos = gcmd.get_float("Z", None)
-        z_adjust = gcmd.get_float("Z_ADJUST", None)
+    def offset_from_gcmd(self, gcmd: "gcode.GCodeCommand", offset: list) -> list[float]:
+        for axis in ["X", "Y", "Z"]:
+            pos = gcmd.get_float(axis, None)
+            adjust = gcmd.get_float(axis + "_ADJUST", None)
+            if pos is not None:
+                offset[XYZ_TO_INDEX[axis]] = pos
+            elif adjust is not None:
+                offset[XYZ_TO_INDEX[axis]] += adjust
+        return offset
 
-        tool = self.printer.lookup_object("ktc_tool " + str(tool_id))
-        set_offset_cmd = {}
+    cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset" + _offset_help
 
-        if x_pos is not None:
-            set_offset_cmd["x_pos"] = x_pos
-        elif x_adjust is not None:
-            set_offset_cmd["x_adjust"] = x_adjust
-        if y_pos is not None:
-            set_offset_cmd["y_pos"] = y_pos
-        elif y_adjust is not None:
-            set_offset_cmd["y_adjust"] = y_adjust
-        if z_pos is not None:
-            set_offset_cmd["z_pos"] = z_pos
-        elif z_adjust is not None:
-            set_offset_cmd["z_adjust"] = z_adjust
-        if len(set_offset_cmd) > 0:
-            tool.set_offset(**set_offset_cmd)
-
-    cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset"
-
-    def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):
-        x_pos = gcmd.get_float("X", None)
-        x_adjust = gcmd.get_float("X_ADJUST", None)
-        y_pos = gcmd.get_float("Y", None)
-        y_adjust = gcmd.get_float("Y_ADJUST", None)
-        z_pos = gcmd.get_float("Z", None)
-        z_adjust = gcmd.get_float("Z_ADJUST", None)
-
-        if x_pos is not None:
-            self.global_offset[0] = float(x_pos)
-        elif x_adjust is not None:
-            self.global_offset[0] = float(self.global_offset[0]) + float(x_adjust)
-        if y_pos is not None:
-            self.global_offset[1] = float(y_pos)
-        elif y_adjust is not None:
-            self.global_offset[1] = float(self.global_offset[1]) + float(y_adjust)
-        if z_pos is not None:
-            self.global_offset[2] = float(z_pos)
-        elif z_adjust is not None:
-            self.global_offset[2] = float(self.global_offset[2]) + float(z_adjust)
-
-        self.log.trace(
-            "Global offset now set to: %f, %f, %f."
-            % (
-                float(self.global_offset[0]),
-                float(self.global_offset[1]),
-                float(self.global_offset[2]),
-            )
-        )
-
-    def SaveFanSpeed(self, fanspeed):
-        self.saved_fan_speed = float(fanspeed)
+    def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):  # pylint: disable=invalid-name
+        self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
 
     cmd_KTC_SAVE_POSITION_help = "Save the specified G-Code position for later restore."
 
     #   Saves the axis positions to be restored.
     #   Without parameters it will set to not restoring axis.
-    def cmd_KTC_SAVE_POSITION(self, gcmd):
-        param_X = gcmd.get_float("X", None)
-        param_Y = gcmd.get_float("Y", None)
-        param_Z = gcmd.get_float("Z", None)
-        self.SavePosition(param_X, param_Y, param_Z)
+    def cmd_KTC_SAVE_POSITION(self, gcmd):  # pylint: disable=invalid-name
+        self.save_position(self.offset_from_gcmd(gcmd, [None, None, None]))
 
-    def SavePosition(self, param_X=None, param_Y=None, param_Z=None):
-        self._saved_position = [param_X, param_Y, param_Z]
+    def save_position(self, position):
+        self._saved_position = position
 
-        restore_axis = ""
-        if param_X is not None:
-            restore_axis += "X"
-        if param_Y is not None:
-            restore_axis += "Y"
-        if param_Z is not None:
-            restore_axis += "Z"
-        self._restore_axis_on_toolchange = restore_axis
+        self._restore_axis_on_toolchange = ""
+        for axis in ["X", "Y", "Z"]:
+            if position[XYZ_TO_INDEX[axis]] is not None:
+                self._restore_axis_on_toolchange += axis
 
     cmd_KTC_SAVE_CURRENT_POSITION_help = "Save the current G-Code position."
     #  Saves current position.
@@ -1066,20 +1019,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 return True
 
             return False
-
-            # elif lazy_home_when_parking == 0 and not all(
-            #     axis in homed for axis in ["x", "y", "z"]
-            # ):
-            #     return False
-            # elif lazy_home_when_parking == 1 and "z" not in homed:
-            #     return False
-
-            axes_to_home = ""
-            for axis in ["x", "y", "z"]:
-                if axis not in homed:
-                    axes_to_home += axis
-            self.gcode.run_script_from_command("G28 " + axes_to_home.upper())
-            return True
 
     def get_tool_from_gcmd(self, gcmd: "gcode.GCodeCommand") -> "ktc_tool.KtcTool":
         """Returns the tool object specified in the gcode command or
