@@ -124,7 +124,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 raise self.config.error(
                     ("ktc_toolchanger %s: init_gcode did not " % self.name)
                     + "change the state. Use for example "
-                    + "'KTC_SET_TOOLCHANGER_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
                     + "change the state to READY."
                 )
         else:
@@ -175,7 +175,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 self.state == self.StateType.INITIALIZING):
                 raise self.config.error(
                     ("engage_gcode did not change the state. Use for example "
-                    + "'KTC_SET_TOOLCHANGER_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
+                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
                     + "change the state to ENGAGED. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -228,7 +228,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 raise self.config.error(
                     ("disengage_gcode did not "
                     + "change the state. Use for example "
-                    + "'KTC_SET_TOOLCHANGER_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
                     + "change the state to READY. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:

@@ -115,8 +115,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL",  # Maybe remove?
             "KTC_SET_TOOL_STATE",
 
-            "KTC_SET_TOOLCHANGER_STATE",
-            "KTC_SET_TOOLCHANGER_SELECTED_TOOL",
+            "KTC_TOOLCHANGER_SET_STATE",
+            "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
 
             "KTC_SET_ACTIVE_TOOL",
             
@@ -334,10 +334,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def active_tool_n(self) -> int:
         return self.__active_tool.number
 
-    cmd_KTC_SET_TOOLCHANGER_STATE_help = ( "Set the state of the toolchanger."
+    cmd_KTC_TOOLCHANGER_SET_STATE_help = ( "Set the state of the toolchanger."
         + " [TOOLCHANGER: Default_ToolChanger]"
         + " [STATE: STATE.ERROR]")
-    def cmd_KTC_SET_TOOLCHANGER_STATE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
+    def cmd_KTC_TOOLCHANGER_SET_STATE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         try:
             self.get_toolchanger_from_gcmd(gcmd).state = gcmd.get("STATE", None)
         except Exception as e:
@@ -366,11 +366,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_SET_ACTIVE_TOOL(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         self.active_tool = self.get_tool_from_gcmd(gcmd)
 
-    cmd_KTC_SET_TOOLCHANGER_SELECTED_TOOL_help = (
+    cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL_help = (
         "Set the selected tool in the toolchanger.\n" +
         "[TOOLCHANGER: Default_ToolChanger]\n" +
         "[TOOL: Tool_name] or [T: Tool_number]" )
-    def cmd_KTC_SET_TOOLCHANGER_SELECTED_TOOL(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
+    def cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
         toolchanger = self.get_toolchanger_from_gcmd(gcmd)
         if tool.name not in toolchanger.tools:
