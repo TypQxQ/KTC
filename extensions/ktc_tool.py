@@ -88,9 +88,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         self.extruder.standby_to_powerdown_delay = self._heater_standby_to_powerdown_delay_in_config
         # Settings for any heaters.
         if self._heaters_config is not None:
-            heaters = self._heaters_config.split(",")
+            heaters = self._heaters_config.replace(" ", "").split(",")
             for heater_string in heaters:
-                heater_string = heater_string.replace(" ", "")
                 if heater_string == "":
                     continue
                 heater_settings = KtcHeaterSettings.from_string(heater_string)

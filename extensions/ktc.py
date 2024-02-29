@@ -5,6 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
+from __future__ import annotations
 import typing
 from json import JSONEncoder
 
@@ -19,11 +20,14 @@ from .ktc_base import (
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
+    from ...klipper.klippy.extras import heaters as klippy_heaters
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
-
+DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE = 1  # Default tolerance in degC.
+# Don't wait for temperatures below this because they might be ambient.
+LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR = 40
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
@@ -537,77 +541,83 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 "SET_FAN_SPEED FAN=%s SPEED=%f" % (tool.fan, fanspeed)
             )
 
-    cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE_help = "Waits for current tool temperature, or a specified (TOOL) tool or (HEATER) heater's temperature within (TOLERANCE) tolerance."
+    cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE_help = (
+        "Waits for current tool temperature, or a specified.\n"
+        + "TOOL= Tool name or T= Tool number or HEATER= Coma separated list of heater names.\n"
+        + "TOLERANCE= Tolerance in degC. Defaults to 1*C."
+    )
 
-    #  Waits for all temperatures, or a specified tool or heater's temperature.
-    #  This command can be used without any additional parameters.
-    #  Without parameters it waits for bed and current heaters.
-    #  Only one of either P or H may be used.
-    #
-    #  TOOL=nnn Tool number.
-    #  HEATER=nnn Heater number. 0="heater_bed", 1="heaters", 2="heaters1", etc.
-    #  TOLERANCE=nnn Tolerance in degC. Defaults to 1*C. Wait will wait until heater is between set temperature +/- tolerance.
     def cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
-        curtime = self.printer.get_reactor().monotonic()
-        heater_name = []
-        tool_id = gcmd.get_int("TOOL", None, minval=0)
-        heater_id = typing.cast(int, gcmd.get_int("HEATER", None, minval=0))
-        tolerance = gcmd.get_int("TOLERANCE", 1, minval=0, maxval=50)
+        '''Waits for current tool temperature, or a specified tool or heater's temperature.
+        This command can be used without any additional parameters.
+        Without parameters it waits for bed and current heaters.
+        Only one of either P or H may be used.
 
-        if tool_id is not None and heater_id is not None:
-            self.log.always(
-                "cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE: Can't use both P and H parameter at the same time."
+        TOOL= Tool name.
+        T= Tool number.
+        HEATER= Coma separated list of heater names.
+        TOLERANCE=nnn Tolerance in degC. Defaults to 1*C.
+        Wait will wait until heater is between set temperature +/- tolerance.'''
+        heater_names = []
+        tolerance = gcmd.get_int("TOLERANCE",
+                                 DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE,
+                                 minval=0, maxval=50)
+        var_heater = typing.cast(str, gcmd.get("HEATER", None))
+        var_tool_name = typing.cast(str, gcmd.get("TOOL", None))
+        var_tool_id = gcmd.get_int("T", None, minval=0)
+
+        if (var_heater is not None and 
+            (var_tool_name is not None or var_tool_id is not None)):
+            raise gcmd.error(
+                "Can't use both TOOL and HEATER parameter at the same time."
             )
-            return None
-        elif tool_id is None and heater_id is None:
-            tool_id = self.active_tool_n
-            if int(self.active_tool_n) > self.TOOL_NONE_N:
-                heater_name.append(self.active_tool.extruder.heaters)
-            # wait for bed
-            self._Temperature_wait_with_tolerance(curtime, "heater_bed", tolerance)
 
-        else:  # Only heater or tool is specified
-            if tool_id is not None:
-                # Check if the requested tool has been remaped to another one.
-                tool_is_remaped = self.tool_is_remaped(int(tool_id))
-                if tool_is_remaped > -1:
-                    tool_id = tool_is_remaped
+        available_heaters = typing.cast(
+            'klippy_heaters.PrinterHeaters',
+            self.printer.lookup_objects("heaters")
+            ).available_heaters
 
-                # Set the heater_name to the heaters of the tool.
-                heater_name.append(
-                    self.printer.lookup_object("ktc_tool " + str(tool_id)).get_status(
-                        curtime
-                    )["heaters"]
-                )
-            elif heater_id == 0:  # Else If 0, then heater_bed.
-                heater_name.append("heater_bed")  # Set heater_name to "heater_bed".
+        # If neither tool or heaters are given, also wait for bed.
+        if var_tool_name is None and var_tool_id is None and var_heater is None:
+            if "heater_bed" in available_heaters:
+                heater_names.append("heater_bed")
 
-            elif heater_id == 1:  # Else If h is 1 then use for first heaters.
-                heater_name.append(
-                    "heaters"  # Set heater_name to first heaters which has no number.
-                )
-            else:  # Else is another heater number.
-                heater_name.append(
-                    "heaters" + str(heater_id - 1)
-                )  # Because bed is heater_number 0 heaterss will be numbered one less than H parameter.
-        if heater_name is not None and len(heater_name) > 0:
-            for name in heater_name:
-                self._Temperature_wait_with_tolerance(curtime, name, tolerance)
+        # If heater names are specified
+        if var_heater is not None:
+            var_heater = var_heater.replace(" ", "").split(",")
+            lcase_heater_names_dict = {
+                heater.lower(): heater for heater in available_heaters}
+            for name in var_heater:
+                if name.lower() not in lcase_heater_names_dict:
+                    raise gcmd.error(
+                        "Heater name %s is not a valid heater name." % name
+                    )
+                heater_names.append(lcase_heater_names_dict[name.lower()])
+        # If tool name is specified or neither tool or heater is specified.
+        else:
+            # Get the tool if valid or active tool.
+            tool = self.get_tool_from_gcmd(gcmd)
+            heater_names.append(
+                [tool_heater.name for tool_heater in tool.extruder.heaters])
 
-    def _Temperature_wait_with_tolerance(
-        self, curtime, heater_name, tolerance
+        for name in heater_names:
+            self._temperature_wait_with_tolerance(name, tolerance)
+
+    def _temperature_wait_with_tolerance(
+        self, heater_name, tolerance
     ):  # pylint: disable=invalid-name
+        curtime = self.printer.get_reactor().monotonic()
         target_temp = int(
-            self.printer.lookup_object(  # Get the heaters target temperature.
+            self.printer.lookup_object(
                 heater_name
             ).get_status(curtime)["target"]
         )
 
-        if target_temp > 40:  # Only wait if set temperature is over 420*C
+        if target_temp > LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR:
             self.log.always(
-                f"Wait for heater {heater_name} to reach {target_temp}"
+                f"Waiting for heater {heater_name} to reach {target_temp}"
                 + f" with a tolerance of {tolerance}."
             )
             self.gcode.run_script_from_command(
@@ -620,7 +630,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
             self.log.always("Wait for heater " + heater_name + " complete.")
 
-    cmd_KTC_SET_TOOL_TEMPERATURE_help = "Waits for all temperatures, or a specified (TOOL) tool or (HEATER) heater's temperature within (TOLERANCE) tolerance."
+    cmd_KTC_SET_TOOL_TEMPERATURE_help = (
+    "Waits for all temperatures, or a specified (TOOL) tool or"
+    + "(HEATER) heater's temperature within (TOLERANCE) tolerance.")
 
     #  Set tool temperature.
     #  TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
@@ -1078,8 +1090,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def get_tool_from_gcmd(self, gcmd: "gcode.GCodeCommand") -> "ktc_tool.KtcTool":
         """Returns the tool object specified in the gcode command or
         the active tool if none is specified."""
-        tool_name: str = gcmd.get("TOOL", None)
-        tool_nr: int = gcmd.get_int("T", None)
+        tool_name: str = gcmd.get("TOOL", None) # type: ignore
+        tool_nr: int = gcmd.get_int("T", None)  # type: ignore
         if tool_name:
             tool = self.all_tools.get(tool_name, None)
             if not tool:
@@ -1095,7 +1107,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ):
                 raise gcmd.error("No tool specified and no active tool")
             tool = self.active_tool
-        return tool
+        return tool # type: ignore
 
     def get_toolchanger_from_gcmd(
         self, gcmd: "gcode.GCodeCommand"
