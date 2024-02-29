@@ -402,11 +402,11 @@ class KtcBaseToolClass(KtcBaseClass):
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
 
-    def select(self):
-        return
+    def select(self, restore_mode=None, final_selected=False):
+        pass
 
-    def deselect(self):
-        return
+    def deselect(self, force_unload=False):
+        pass
 
 class KtcConstantsClass:
     '''Constants for KTC. These are to be inherited by other classes.'''
