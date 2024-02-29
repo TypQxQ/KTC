@@ -286,7 +286,4 @@ class ktc_MeanLayerTime:
 
 
 - Extruder -> heater_collection (HeaterCollectionWrapper)
-
-- when selecting if final selected tool then set heater for thi to active and all other active heaters to standby.
-
 - Add context as constants that are inherited. Add a ktc._run_gcode_from_context()

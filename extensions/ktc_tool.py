@@ -143,7 +143,13 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 # If the new tool to be selected has any heaters prepare warmup before
                 # actual tool change so all moves will be done while heating up.
                 if len(self.extruder.heaters) > 0:
-                    self.set_heater(heater_state=HeaterStateType.HEATER_STATE_ACTIVE)
+                    self.set_heaters(heater_state=HeaterStateType.HEATER_STATE_ACTIVE)
+
+                # Put all other active heaters in standby.
+                for heater in self._ktc.all_heaters.values():
+                    if heater.state == HeaterStateType.HEATER_STATE_ACTIVE:
+                        if heater not in self.extruder.heaters:
+                            heater.state = HeaterStateType.HEATER_STATE_STANDBY
 
                 # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
                 # Otherwise do not change either the restore_axis_on_toolchange or saved_position.
@@ -355,7 +361,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         for heater in self.extruder.heaters:
             self._ktc.all_heaters[heater.name].state = heater_state
 
-    def set_heater(self, **kwargs):
+    def set_heaters(self, **kwargs):
         if len(self.extruder.heaters) < 1:
             self.log.debug(
                 "set_heater: KTC Tool %s has no heaters! Nothing to do." % self.name

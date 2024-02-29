@@ -624,9 +624,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
         if chng_state is not None:
             set_heater_cmd["heater_state"] = chng_state
-            # tool.set_heater(heater_state= chng_state)
+            # tool.set_heaters(heater_state= chng_state)
         if len(set_heater_cmd) > 0:
-            tool.set_heater(**set_heater_cmd)
+            tool.set_heaters(**set_heater_cmd)
         else:
             # Print out the current set of temperature settings for the tool if no changes are provided.
             msg = "T%s Current Temperature Settings" % str(tool.name)
@@ -684,7 +684,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 self._changes_made_by_set_all_tool_heaters_off[
                     tool_name
                 ] = tool.get_status()["heater_state"]
-                tool.set_heater(heater_state=0)
+                tool.set_heaters(heater_state=0)
         except Exception as e:
             raise Exception("set_all_tool_heaters_off: Error: %s" % str(e))
 
@@ -701,13 +701,13 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
             for tool_name, v in self._changes_made_by_set_all_tool_heaters_off.items():
                 if v == 1:
-                    self.printer.lookup_object(str(tool_name)).set_heater(
+                    self.printer.lookup_object(str(tool_name)).set_heaters(
                         heater_state=v
                     )
 
             for tool_name, v in self._changes_made_by_set_all_tool_heaters_off.items():
                 if v == 2:
-                    self.printer.lookup_object(str(tool_name)).set_heater(
+                    self.printer.lookup_object(str(tool_name)).set_heaters(
                         heater_state=v
                     )
 
