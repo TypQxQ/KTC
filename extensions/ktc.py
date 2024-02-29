@@ -568,7 +568,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         var_tool_name = typing.cast(str, gcmd.get("TOOL", None))
         var_tool_id = gcmd.get_int("T", None, minval=0)
 
-        if (var_heater is not None and 
+        if (var_heater is not None and
             (var_tool_name is not None or var_tool_id is not None)):
             raise gcmd.error(
                 "Can't use both TOOL and HEATER parameter at the same time."
@@ -634,104 +634,98 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     "Waits for all temperatures, or a specified (TOOL) tool or"
     + "(HEATER) heater's temperature within (TOLERANCE) tolerance.")
 
-    #  Set tool temperature.
-    #  TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
-    #  STDB_TMP= Standby temperature(s), optional
-    #  ACTV_TMP= Active temperature(s), optional
-    #  CHNG_STATE = Change Heater State, optional: 0 = off, 1 = standby temperature(s), 2 = active temperature(s).
-    #  STDB_TIMEOUT = Time in seconds to wait between changing heater state to standby and setting heater target temperature to standby temperature when standby temperature is lower than tool temperature.
-    #      Use for example 0.1 to change immediately to standby temperature.
-    #  SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting off the heater, optional.
-    #      Use for example 86400 to wait 24h if you want to disable shutdown timer.
-    def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd):
-        tool = self.get_tool_from_gcmd(gcmd)
+    def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd: "gcode.GCodeCommand"): # pylint: disable=invalid-name
+        '''
+        Set tool temperature.
+        TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
+        STDB_TMP= Standby temperature(s), optional
+        ACTV_TMP= Active temperature(s), optional
+        CHNG_STATE = Change Heater State, optional:
+            0/OFF = off
+            1/STANDBY = standby temperature(s)
+            2/ACTIVE = active temperature(s).
+        STDB_TIMEOUT = Time in seconds to wait between changing heater
+            state to standby and setting heater target temperature to standby
+            temperature when standby temperature is lower than tool temperature.
+            Use for example 0 to change immediately to standby temperature.
+        SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting
+        off the heater, optional.
+            Use for example 86400 to wait 24h if you want to disable shutdown timer.
+         '''
+        try:
+            tool = self.get_tool_from_gcmd(gcmd)
 
-        stdb_tmp = gcmd.get_float("STDB_TMP", None, minval=0)
-        actv_tmp = gcmd.get_float("ACTV_TMP", None, minval=0)
-        chng_state = gcmd.get_int("CHNG_STATE", None, minval=0, maxval=2)
-        stdb_timeout = gcmd.get_float("STDB_TIMEOUT", None, minval=0)
-        shtdwn_timeout = gcmd.get_float("SHTDWN_TIMEOUT", None, minval=0)
+            stdb_tmp = gcmd.get_int("STDB_TMP", None, minval=0)
+            actv_tmp = gcmd.get_int("ACTV_TMP", None, minval=0)
+            chng_state = typing.cast(str, gcmd.get("CHNG_STATE", None))
+            stdb_timeout = gcmd.get_float("STDB_TIMEOUT", None, minval=0)
+            shtdwn_timeout = gcmd.get_float("SHTDWN_TIMEOUT", None, minval=0)
 
-        self.log.trace(
-            "cmd_KTC_SET_TOOL_TEMPERATURE: T%s: stdb_tmp:%s, actv_tmp:%s, chng_state:%s, stdb_timeout:%s, shtdwn_timeout:%s."
-            % (
-                str(tool.name),
-                str(stdb_tmp),
-                str(actv_tmp),
-                str(chng_state),
-                str(stdb_timeout),
-                str(shtdwn_timeout),
-            )
-        )
-
-        if (
-            self.printer.lookup_object("ktc_tool " + str(tool.name)).get_status()[
-                "heaters"
-            ]
-            is None
-        ):
             self.log.trace(
-                "cmd_KTC_SET_TOOL_TEMPERATURE: T%s has no heaters! Nothing to do."
-                % str(tool.name)
+                f"cmd_KTC_SET_TOOL_TEMPERATURE: T{tool.name}: stdb_tmp:{stdb_tmp}, " +
+                f"actv_tmp:{actv_tmp}, chng_state:{chng_state}, " +
+                f"stdb_timeout:{stdb_timeout}, shtdwn_timeout:{shtdwn_timeout}."
             )
-            return None
 
-        tool: "ktc_tool.KtcTool" = self.printer.lookup_object(
-            "ktc_tool " + str(tool.name)
-        )
-        set_heater_cmd = {}
+            if len(self.all_tools[tool.name].extruder.heaters) < 1:
+                raise ValueError(f"T{tool.name} has no heaters! Nothing to do.")
 
-        if stdb_tmp is not None:
-            set_heater_cmd["heater_standby_temp"] = int(stdb_tmp)
-        if actv_tmp is not None:
-            set_heater_cmd["heater_active_temp"] = int(actv_tmp)
-        if stdb_timeout is not None:
-            set_heater_cmd["heater_active_to_standby_delay"] = stdb_timeout
-        if shtdwn_timeout is not None:
-            set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
-        if chng_state is not None:
-            set_heater_cmd["heater_state"] = chng_state
-            # tool.set_heaters(heater_state= chng_state)
-        if len(set_heater_cmd) > 0:
-            tool.set_heaters(**set_heater_cmd)
-        else:
-            # Print out the current set of temperature settings for the tool if no changes are provided.
-            msg = "T%s Current Temperature Settings" % str(tool.name)
-            msg += (
-                "\n Active temperature %s - %d*C - Active to Standby timer: %d seconds"
-                % (
-                    (
-                        "*"
-                        if tool.extruder.state == HeaterStateType.HEATER_STATE_ACTIVE
-                        else " "
-                    ),
-                    tool.extruder.active_temp,
-                    tool.extruder.active_to_standby_delay,
+            set_heater_cmd = {}
+
+            if stdb_tmp is not None:
+                set_heater_cmd["heater_standby_temp"] = int(stdb_tmp)
+            if actv_tmp is not None:
+                set_heater_cmd["heater_active_temp"] = int(actv_tmp)
+            if stdb_timeout is not None:
+                set_heater_cmd["heater_active_to_standby_delay"] = stdb_timeout
+            if shtdwn_timeout is not None:
+                set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
+            if chng_state is not None:
+                if chng_state.lower() in ["0", "off"]:
+                    chng_state = HeaterStateType.HEATER_STATE_OFF
+                elif chng_state.lower() in ["1", "standby"]:
+                    chng_state = HeaterStateType.HEATER_STATE_STANDBY
+                elif chng_state.lower() in ["2", "active"]:
+                    chng_state = HeaterStateType.HEATER_STATE_ACTIVE
+                else:
+                    raise ValueError(
+                        f"Invalid value for CHNG_STATE: {chng_state}. "
+                        + "Valid values are: 0/OFF, 1/STANDBY, 2/ACTIVE."
+                    )
+                set_heater_cmd["heater_state"] = chng_state
+
+            if len(set_heater_cmd) > 0:
+                tool.set_heaters(**set_heater_cmd)
+            else:
+                # Print out the current temperature settings.
+                ext = tool.extruder
+                msg = (f"{tool.name} is {ext.state}:\n" +
+                       f"Active temperature: {ext.active_temp}\n" +
+                       f"Standby temperature: {ext.standby_temp}\n" +
+                       f"Active to Standby timer: {ext.active_to_standby_delay} seconds\n" +
+                       f"Standby to Off timer: {ext.standby_to_powerdown_delay} seconds\n"
                 )
-            )
-            msg += (
-                "\n Standby temperature %s - %d*C - Standby to Off timer: %d seconds"
-                % (
-                    (
-                        "*"
-                        if tool.extruder.state == HeaterStateType.HEATER_STATE_STANDBY
-                        else " "
-                    ),
-                    tool.extruder.standby_temp,
-                    tool.extruder.standby_to_powerdown_delay,
-                )
-            )
-            # if tool.timer_heater_active_to_standby_delay.get_status()["next_wake"] == True:
-            #     msg += (
-            #         "\n Will go to standby temperature in in %s seconds."
-            #         % tool.timer_heater_active_to_standby_delay.get_status()["next_wake"]
-            #     )
-            # if tool.timer_heater_standby_to_powerdown_delay.get_status()["counting_down"] == True:
-            #     msg += (
-            #         "\n Will power down in %s seconds."
-            #         % tool.timer_heater_standby_to_powerdown_delay.get_status()["next_wake"]
-            #     )
-            gcmd.respond_info(msg)
+
+                if ext.state == HeaterStateType.HEATER_STATE_STANDBY:
+                    first_heater_object = self.all_heaters[ext.heaters[0].name]
+                    to_standby_timer = first_heater_object.timer_heater_active_to_standby_delay
+                    to_standby_timer_wake = to_standby_timer.get_status()["next_wake"]
+                    if to_standby_timer_wake:
+                        msg += (
+                            "\n Will go to standby temperature in " +
+                            f"{to_standby_timer_wake} seconds."
+                        )
+
+                    to_powerdown_timer = first_heater_object.timer_heater_standby_to_powerdown_delay
+                    to_powerdown_timer_wake = to_powerdown_timer.get_status()["next_wake"]
+                    if to_powerdown_timer_wake:
+                        msg += (
+                            "\n Will power down in " +
+                            f"{to_powerdown_timer_wake} seconds."
+                        )
+                gcmd.respond_info(msg)
+        except Exception as e:
+            raise gcmd.error("KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)) from e
 
     cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = (
         "Turns off all heaters and saves changes made to be resumed by "
