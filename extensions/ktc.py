@@ -74,11 +74,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             raise TypeError("global_offset is not a string")
 
         # Register events
-        self.printer.register_event_handler("klippy:connect", self.handle_connect)
-        self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        self.printer.register_event_handler("klippy:connect", self._handle_connect)
+        self.printer.register_event_handler("klippy:ready", self._handle_ready)
         # self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
 
-    def handle_connect(self):
+    def _handle_connect(self):
         '''This method is called when all objects are loaded, initialized and configured.'''
         # Reference the log object here to avoid circular imports.
         self.log = typing.cast(     #pylint: disable=attribute-defined-outside-init
@@ -136,13 +136,13 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             desc = getattr(self, "cmd_" + cmd + "_help", None)
             self.gcode.register_command(cmd, func, False, desc)
 
-    def handle_ready(self):
+    def _handle_ready(self):
         '''This method is called when the printer is ready to print.'''
         # Initialize all toolchangers that have init_mode == ON_START.
         self._recursive_initialize_toolchangers(
             self.default_toolchanger,
             self.default_toolchanger.__class__.InitModeType.ON_START)
-        self.register_tool_gcode_commands()
+        self._register_tool_gcode_commands()
 
 
     def _config_default_toolchanger(self):
@@ -246,8 +246,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         for tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
             self.all_tools[tool.name] = tool
 
-
-    def register_tool_gcode_commands(self):
+    def _register_tool_gcode_commands(self):
         '''Register Gcode commands for all tools having a number.'''
         new_toolnumbers: list[int] = []
         for tool in self.all_tools.values():
@@ -380,32 +379,23 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         toolchanger.selected_tool = tool
 
     cmd_KTC_TOOLCHANGER_INITIALIZE_help = ( "Initialize the toolchanger before use."
-        + "from place. [TOOLCHANGER: Default_ToolChanger]" )
+        + "[TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_INITIALIZE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         self.get_toolchanger_from_gcmd(gcmd).initialize()
 
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
-        "Engage the toolchanger, lock in place. [TOOLCHANGER: Default_ToolChanger]"
-        + " [DISREGARD_ENGAGED: False]")
+        "Engage the toolchanger, lock in place.\n"
+        + "[TOOLCHANGER: Default_ToolChanger]\n"
+        + "[DISREGARD_ENGAGED: False]")
     def cmd_KTC_TOOLCHANGER_ENGAGE(self, gcmd: "gcode.GCodeCommand"):   # pylint: disable=invalid-name
         try:
-            disregard_engaged = gcmd.get("DISREGARD_ENGAGED", "False").strip()  # type: ignore
-            if disregard_engaged.isnumeric():
-                if int(disregard_engaged) > 0:
-                    disregard_engaged = True
-                else:
-                    disregard_engaged = False
-            else:
-                if disregard_engaged.lower() == "true":
-                    disregard_engaged = True
-                else:
-                    disregard_engaged = False
-            self.get_toolchanger_from_gcmd(gcmd).engage(disregard_engaged = disregard_engaged)
+            de = self.parse_bool(gcmd.get("DISREGARD_ENGAGED", "False"))
+            self.get_toolchanger_from_gcmd(gcmd).engage(disregard_engaged = de)
         except Exception as e:
             raise self.printer.command_error("Error engaging toolchanger: %s" % str(e)) from e
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = ( "Disengage the toolchanger, unlock"
-        + "from place. [TOOLCHANGER: Default_ToolChanger]" )
+        + " from place.\n [TOOLCHANGER: Default_ToolChanger]" )
     def cmd_KTC_TOOLCHANGER_DISENGAGE(self, gcmd: "gcode.GCodeCommand"):    # pylint: disable=invalid-name
         try:
             self.get_toolchanger_from_gcmd(gcmd).disengage()
@@ -414,47 +404,36 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     cmd_KTC_DROPOFF_help = "Deselect all tools"
     def cmd_KTC_DROPOFF(self, gcmd = None):   # pylint: disable=invalid-name, unused-argument
-        self.log.trace(
-            "KTC_TOOL_DROPOFF_ALL running. "
-        )  # + gcmd.get_raw_command_parameters())
         if self.active_tool == self.TOOL_UNKNOWN:
             raise self.printer.command_error(
-                "cmd_KTC_TOOL_DROPOFF_ALL: Unknown tool already mounted Can't park unknown tool."
+                "Unknown tool is active and can't be deselected."
             )
+
+        for tc in self.all_toolchangers.values():
+            if (tc.selected_tool == self.TOOL_UNKNOWN and
+                tc.state == self.StateType.SELECTED):
+                raise self.printer.command_error(
+                    f"Toolchanger {tc.name} has unknown tool selected "
+                    + "and can't be deselected."
+                )
+
         if self.active_tool != self.TOOL_NONE:
             self.active_tool.deselect(force_unload=True)
 
         try:
-            # Need to check all tools at least once but reload them after each time.
-            all_checked_once = False
-            while not all_checked_once:
-                all_tools = dict(self.printer.lookup_objects("ktc_tool"))
-                all_checked_once = True  # If no breaks in next For loop then we can exit the While loop.
-                for tool_name, tool in all_tools.items():
-                    # If there is a virtual tool loaded:
-                    if tool.get_status()["virtual_loaded"] > self.TOOL_NONE.number:
-                        # Pickup and then unload and drop the tool.
-                        self.log.trace(
-                            "cmd_KTC_TOOL_DROPOFF_ALL: Picking up and dropping forced: %s."
-                            % str(tool.get_status()["virtual_loaded"])
-                        )
-                        self.printer.lookup_object(
-                            "ktc_tool " + str(tool.get_status()["virtual_loaded"])
-                        ).cmd_SelectTool()
-                        self.printer.lookup_object(
-                            "ktc_tool " + str(tool.get_status()["virtual_loaded"])
-                        ).deselect(force_unload=True)
-                        all_checked_once = False  # Do not exit while loop.
-                        break  # Break for loop to start again.
+            def deselect(tool: 'ktc_tool.KtcTool'):
+                if tool != self.TOOL_NONE and tool != self.TOOL_UNKNOWN:
+                    if tool.state == self.StateType.SELECTED:
+                        tool.deselect(force_unload=True)
 
+            self.traverse_tools_from_deepest(deselect)
         except Exception as e:
-            raise Exception("cmd_KTC_TOOL_DROPOFF_ALL: Error: %s" % str(e)) from e
+            raise Exception("Failed to deselect all tools: %s" % str(e)) from e
 
     cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED_help = (
         "Save the fan speed to be recovered at ToolChange."
     )
-
-    def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd):
+    def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd):  # pylint: disable=invalid-name
         fanspeed = gcmd.get_float("S", 1, minval=0, maxval=255)
         tool_id = gcmd.get_int("P", int(self.active_tool_n), minval=0)
 
@@ -1033,6 +1012,25 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             toolchanger = self.all_toolchangers[0]
         return toolchanger
 
+    def traverse_tools_from_deepest(self, func):
+        def _get_nested_tools(self: Ktc, toolchanger: 'ktc_toolchanger.KtcToolchanger'):
+            nested_tools = []
+            for tool in toolchanger.tools:
+                if tool in self._tools_having_tc:
+                    nested_tools.append(_get_nested_tools(self, self._tools_having_tc[tool]))
+                nested_tools.append(tool)
+            return nested_tools
+
+        def _recursive_traverse_tools(self: Ktc, item, func):
+            if isinstance(item, list):
+                for i in item:
+                    _recursive_traverse_tools(self, i, func)
+            else:
+                func(item)
+
+        nested_tools = _get_nested_tools(self, self.default_toolchanger)
+        _recursive_traverse_tools(self, nested_tools, func)
+
     ###########################################
     # Static Module methods
     ###########################################
@@ -1060,6 +1058,15 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     class DataClassEncoder(JSONEncoder):
         def default(self, o):
             return o.to_dict()
+
+    @staticmethod
+    def parse_bool(value: str) -> bool:
+        if value.isnumeric():
+            return bool(int(value))
+        return value.strip().lower() in ("true", "1")
+
+
+
 
 
 def load_config(config):

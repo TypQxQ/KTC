@@ -334,7 +334,7 @@ class KtcBaseClass:
     @property
     def persistent_state(self) -> dict:
         '''Return the persistent state from file.
-        Is initialized inside handle_connect.'''
+        Is initialized inside _handle_connect.'''
         if self._ktc_persistent is None:
             self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
                 self.printer.lookup_object("ktc_persisting")

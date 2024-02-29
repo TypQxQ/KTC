@@ -74,13 +74,13 @@ class KtcHeaterTimer:
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
         self.timer_handler = None
         self.inside_timer = self.repeat = False
-        self.printer.register_event_handler("klippy:ready", self._handle_ready)
+        self.printer.register_event_handler("klippy:ready", self.__handle_ready)
         self.log = self.printer.lookup_object("ktc_log")
 
         self.counting_down = False
         self.nextwake = self.reactor.NEVER
 
-    def _handle_ready(self):
+    def __handle_ready(self):
         self.timer_handler = self.reactor.register_timer(
             self._standby_tool_temp_timer_event, self.reactor.NEVER
         )

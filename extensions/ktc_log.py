@@ -51,9 +51,9 @@ class KtcLog:
         self.gcode = typing.cast('gcode.GCodeDispatch', self.printer.lookup_object("gcode"))
 
         # Register event handlers
-        self.printer.register_event_handler("klippy:connect", self.handle_connect)
+        self.printer.register_event_handler("klippy:connect", self._handle_connect)
         self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
-        self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        self.printer.register_event_handler("klippy:ready", self._handle_ready)
 
         # Read and load configuration
         self.log_level = config.getint(
@@ -89,7 +89,7 @@ class KtcLog:
         self.print_changer_stats: typing.Dict[str, ChangerStatisticsClass] = {}
         self.print_tool_stats: typing.Dict[str, ToolStatisticsClass] = {}
 
-    def handle_connect(self):
+    def _handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
         # Load the persistent variables object here to avoid circular dependencies
         self._ktc_persistent = typing.cast(      # pylint: disable=attribute-defined-outside-init
@@ -118,7 +118,7 @@ class KtcLog:
         # Init persihabele print statistics
         self._reset_print_statistics()
 
-    def handle_ready(self):
+    def _handle_ready(self):
         """Handle the ready event. This is called when the printer is ready to receive commands."""
         self.always("KTC Log Ready")
 
