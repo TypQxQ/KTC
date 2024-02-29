@@ -119,7 +119,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
 
             "KTC_SET_ACTIVE_TOOL",
-            
+
             "KTC_SAVE_POSITION",
             "KTC_SAVE_CURRENT_POSITION",
             "KTC_RESTORE_POSITION",
@@ -215,37 +215,37 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 )
 
     def _config_tools(self):
-        '''Add all tools to the list of all tools and validate them.'''
+        '''
+        Add all tools to the list of all tools and validate them.
+        - All objects are loaded and initialized at this point.
+        - All inherited parameters are configured at this point.
+        - All toolchangers are configured at this point.
+        '''
         tool: 'ktc_tool.KtcTool'
         # For each tool that is defined in the config file:
         for tool in dict(self.printer.lookup_objects("ktc_tool")).values():
-            # Add tool to toolchanger or default toolchanger if it has none.
-            if tool.toolchanger is not None:
-                tool.toolchanger.tools[tool.name] = tool
-            else:
-                self.default_toolchanger.tools[tool.name] = tool
+            if tool.toolchanger is None:
                 tool.toolchanger = self.default_toolchanger
-            # If not duplicate tool number, add the tool to the list of all tools by number.
+            tool.toolchanger.tools[tool.name] = tool
+            self.all_tools[tool.name] = tool
+
             if tool.number is not None:
-                if self.all_tools_by_number.get(tool.number) is not None:
+                if tool.number not in self.all_tools_by_number:
+                    self.all_tools_by_number[tool.number] = tool
+                else:
                     raise self.config.error(
                         "Tool number %d is already used by tool %s."
                         % (tool.number, self.all_tools_by_number[tool.number].name)
                     )
-                else:
-                    self.all_tools_by_number[tool.number] = tool
-            # Add tool to the list of all tools.
+
+        for tc in self.all_toolchangers.values():
+            self._tools_having_tc[tc.parent_tool] = tc
+            for tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
+                self.all_tools[tool.name] = tool
+
+        for tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
             self.all_tools[tool.name] = tool
 
-        # Add TOOL_NONE and TOOL_UNKNOWN to the list of tools for ktc and all toolchangers.
-        self.all_tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
-        self.all_tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
-        for tc in self.all_toolchangers.values():
-            tc.tools[self.TOOL_NONE.name.lower()] = self.TOOL_NONE
-            tc.tools[self.TOOL_UNKNOWN.name.lower()] = self.TOOL_UNKNOWN
-            # Fill the _tools_having_tc dict with the tools that have a toolchanger as child.
-            self._tools_having_tc[tc.parent_tool] = tc  # type: ignore
-            # TODO: Delete
 
     def register_tool_gcode_commands(self):
         '''Register Gcode commands for all tools having a number.'''
@@ -413,7 +413,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             raise self.printer.command_error("Error disengaging toolchanger: %s" % str(e)) from e
 
     cmd_KTC_DROPOFF_help = "Deselect all tools"
-    def cmd_KTC_DROPOFF(self, gcmd = None):   # pylint: disable=invalid-name
+    def cmd_KTC_DROPOFF(self, gcmd = None):   # pylint: disable=invalid-name, unused-argument
         self.log.trace(
             "KTC_TOOL_DROPOFF_ALL running. "
         )  # + gcmd.get_raw_command_parameters())
