@@ -20,11 +20,12 @@ from .ktc_base import (
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
-    from ...klipper.klippy.extras import heaters as klippy_heaters
+    from ...klipper.klippy.extras import heaters as klippy_heaters, gcode_move as klippy_gcode_move
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
 # Constants for the restore_axis_on_toolchange variable.
 XYZ_TO_INDEX: dict[str, int] = {"x": 0, "X": 0, "y": 1, "Y": 1, "z": 2, "Z": 2}
+INDEX_TO_XYZ: dict[int, str] = {0: "X", 1: "Y", 2: "Z"}
 DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE = 1  # Default tolerance in degC.
 # Don't wait for temperatures below this because they might be ambient.
 LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR = 40
@@ -63,8 +64,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         self._tool_map = {}
         self._changes_made_by_set_all_tool_heaters_off = {}
-        self._saved_position = None
-        self._restore_axis_on_toolchange = ""  # string of axis to restore: XYZ
+        self._saved_position = [None, None, None]
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
         self.global_offset = config.get("global_offset", "0,0,0")  # type: ignore
@@ -792,82 +792,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
 
-    cmd_KTC_SAVE_POSITION_help = "Save the specified G-Code position for later restore."
-
-    #   Saves the axis positions to be restored.
-    #   Without parameters it will set to not restoring axis.
-    def cmd_KTC_SAVE_POSITION(self, gcmd):  # pylint: disable=invalid-name
-        self.save_position(self.offset_from_gcmd(gcmd, [None, None, None]))
-
-    def save_position(self, position):
-        self._saved_position = position
-
-        self._restore_axis_on_toolchange = ""
-        for axis in ["X", "Y", "Z"]:
-            if position[XYZ_TO_INDEX[axis]] is not None:
-                self._restore_axis_on_toolchange += axis
-
-    cmd_KTC_SAVE_CURRENT_POSITION_help = "Save the current G-Code position."
-    #  Saves current position.
-    #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified,
-    #  restore_position_on_toolchange_type will not be changed.
-    #    0: No restore
-    #    1: Restore XY
-    #    2: Restore XYZ
-    #    XYZ: Restore specified axis
-
-    def cmd_KTC_SAVE_CURRENT_POSITION(self, gcmd):
-        # Save optional RESTORE_POSITION_TYPE parameter to restore_position_on_toolchange_type variable.
-        restore_axis = self.ktc_parse_restore_type(
-            gcmd.get("RESTORE_POSITION_TYPE", None)
-        )
-        self.SaveCurrentPosition(restore_axis)
-
-    def SaveCurrentPosition(self, restore_axis=None):
-        if restore_axis is not None:
-            self._restore_axis_on_toolchange = restore_axis
-        gcode_move = self.printer.lookup_object("gcode_move")
-        self._saved_position = gcode_move._get_gcode_position()
-
-    cmd_KTC_RESTORE_POSITION_help = "Restore a previously saved G-Code position."
-
-    #  Restores the previously saved possition.
-    #   With no parameters it will Restore to previousley saved type.
-    #  RESTORE_POSITION_TYPE= Type of restore, optional. If not specified, previousley saved restore_position_on_toolchange_type will be used.
-    #    0: No restore
-    #    1: Restore XY
-    #    2: Restore XYZ
-    #    XYZ: Restore specified axis
-    def cmd_KTC_RESTORE_POSITION(self, gcmd):
-        self._restore_axis_on_toolchange = self.ktc_parse_restore_type(
-            gcmd.get("RESTORE_POSITION_TYPE", None),
-            default=self._restore_axis_on_toolchange,
-        )
-        self.log.trace(
-            "KTC_RESTORE_POSITION running: " + str(self._restore_axis_on_toolchange)
-        )
-        speed = gcmd.get_int("F", None)
-
-        if not self._restore_axis_on_toolchange:
-            return  # No axis to restore
-
-        if self._saved_position is None:
-            raise gcmd.error("No previously saved g-code position.")
-
-        try:
-            p = self._saved_position
-            cmd = "G1"
-            for t in self._restore_axis_on_toolchange:
-                cmd += " %s%.3f" % (t, p[XYZ_TO_INDEX[t]])
-            if speed:
-                cmd += " F%i" % (speed,)
-
-            # Restore position
-            self.log.trace("KTC_RESTORE_POSITION running: " + cmd)
-            self.gcode.run_script_from_command(cmd)
-        except Exception as e:
-            raise gcmd.error("Could not restore position: %s" % (str(e),))
-
     cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL_help = (
         "Set G-Code offset to the one of current tool."
     )
@@ -968,7 +892,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         else:
             from_tool = gcmd.get_int("TOOL", -1, minval=0)
             to_tool = gcmd.get_int("SET", minval=0)
-            available = 1  # gcmd.get_int('AVAILABLE', -1, minval=0, maxval=1)  #For future endless spool mode.
+            available = 1  # gcmd.get_int('AVAILABLE', -1, minval=0, maxval=1)
             # if available == -1:
             #     available = self.tool_status[to_tool]
             if from_tool != -1:
@@ -983,9 +907,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "active_tool": self.active_tool.name,  # Active tool name for GCode compatibility.
             "active_tool_n": self.active_tool.number,  # Active tool number for GCode compatibility.
             "saved_fan_speed": self.saved_fan_speed,
-            "restore_axis_on_toolchange": self._restore_axis_on_toolchange,
             "saved_position": self._saved_position,
-            "tool_names": list(self.all_tools.keys()),
+            "tools": list(self.all_tools.keys()),
+            "toolchangers": list(self.all_toolchangers.keys()),
             "TOOL_NONE": self.TOOL_NONE.name,
             "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
             **self.params,
