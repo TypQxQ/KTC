@@ -7,6 +7,7 @@
 #
 from __future__ import annotations
 import typing
+import math
 from json import JSONEncoder
 
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
@@ -62,7 +63,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.default_toolchanger_name: str = config.get("default_toolchanger", "")  # type: ignore
         self.default_toolchanger: "ktc_toolchanger.KtcToolchanger" = None  # type: ignore
 
-        self._tool_map = {}
         self._changes_made_by_set_all_tool_heaters_off = {}
         self._saved_position = [None, None, None]
 
@@ -129,13 +129,13 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             # "KTC_SAVE_POSITION",
             # "KTC_SAVE_CURRENT_POSITION",
             # "KTC_RESTORE_POSITION",
-            # "KTC_DISPLAY_TOOL_MAP",
-            # "KTC_REMAP_TOOL",
             "KTC_TOOLCHANGER_ENGAGE",
             "KTC_TOOLCHANGER_DISENGAGE",
             "KTC_SET_ALL_TOOL_HEATERS_OFF",
             "KTC_RESUME_ALL_TOOL_HEATERS",
             "KTC_TOOLCHANGER_INITIALIZE",
+            "KTC_DISPLAY_TOOLS",
+            "KTC_MAP_TOOL",
         ]
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)
@@ -827,72 +827,51 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     # TOOL REMAPING                           #
     ###########################################
 
-    def _set_tool_to_tool(self, from_tool, to_tool):
-        # Check first if to_tool is a valid tool.
-        tools = self.printer.lookup_objects("ktc_tool")
-        if not [item for item in tools if item[0] == ("ktc_tool " + str(to_tool))]:
-            self.log.always("Tool %s not a valid tool" % str(to_tool))
-            return False
-
-        # Set the new tool.
-        self._tool_map[from_tool] = to_tool
-        self.gcode.run_script_from_command(
-            f"SAVE_VARIABLE VARIABLE=ktc_state_tool_remap VALUE='{self._tool_map}'"
-            "SAVE_VARIABLE VARIABLE=%s VALUE='%s'"
-            % ("ktc_state_tool_remap", self._tool_map)
-        )
-
     def _tool_map_to_human_string(self):
-        msg = "Number of tools remaped: " + str(len(self._tool_map))
+        msg = "KTC Tools registered:"
 
-        for from_tool, to_tool in self._tool_map.items():
-            msg += "\nTool %s-> Tool %s" % (str(from_tool), str(to_tool))
+        for tool in self.all_tools.values():
+            if tool.number is None:
+                toolnr = ""
+            else:
+                toolnr = str(tool.number)
+            msg += f"\n(KTC_T{toolnr}"
+            msg += " " * (2 - len(toolnr))
+            msg += f") {tool.name}"
 
         return msg
 
-    def tool_is_remaped(self, tool_to_check):
-        if tool_to_check in self._tool_map:
-            return self._tool_map[tool_to_check]
-        else:
-            return -1
-
-    def _remap_tool(self, tool, gate, available):
-        self._set_tool_to_tool(tool, gate)
-        # self._set_tool_status(gate, available)
-
-    def _reset_tool_mapping(self):
-        self.log.debug("Resetting Tool map")
-        self._tool_map = {}
-        self.gcode.run_script_from_command(
-            "SAVE_VARIABLE VARIABLE=%s VALUE='%s'"
-            % ("ktc_state_tool_remap", self._tool_map)
-        )
-
     ### GCODE COMMANDS FOR TOOL REMAP LOGIC ##################################
 
-    cmd_KTC_DISPLAY_TOOL_MAP_help = "Display the current mapping of tools to other KTC tools."  # Used with endless spool" in the future
+    cmd_KTC_DISPLAY_TOOLS_help = "Display the current mapping of tools to KTC_T# numbers."
 
-    def cmd_KTC_DISPLAY_TOOL_MAP(self, gcmd):
-        summary = gcmd.get_int("SUMMARY", 0, minval=0, maxval=1)
+    def cmd_KTC_DISPLAY_TOOLS(self, gcmd):   # pylint: disable=invalid-name, unused-argument
         self.log.always(self._tool_map_to_human_string())
 
-    cmd_KTC_REMAP_TOOL_help = "Remap a tool to another one."
+    cmd_KTC_MAP_TOOL_help = ("Remap a tool to another one." +
+        "This is not persistent and will be lost on restart." +
+        " [TOOL: Tool name] or [T: Tool number]" +
+        " [SET: Tool number]" +
+        " [OVERWRITE: 0/1] Default 0. If 1, will overwrite existing mapping.")
 
-    def cmd_KTC_REMAP_TOOL(self, gcmd):
-        reset = gcmd.get_int("RESET", 0, minval=0, maxval=1)
-        if reset == 1:
-            self._reset_tool_mapping()
-        else:
-            from_tool = gcmd.get_int("TOOL", -1, minval=0)
-            to_tool = gcmd.get_int("SET", minval=0)
-            available = 1  # gcmd.get_int('AVAILABLE', -1, minval=0, maxval=1)
-            # if available == -1:
-            #     available = self.tool_status[to_tool]
-            if from_tool != -1:
-                self._remap_tool(from_tool, to_tool, available)
-            # else:
-            #     self._set_tool_status(to_tool, available)
-        self.log.info(self._tool_map_to_human_string())
+    def cmd_KTC_MAP_TOOL(self, gcmd):   # pylint: disable=invalid-name
+        overwite = self.parse_bool(gcmd.get("OVERWRITE", "0"))
+        tool = self.get_tool_from_gcmd(gcmd)
+        set_tool = gcmd.get_int("SET", minval=0)
+
+        if set_tool in self.all_tools_by_number:
+            if not overwite:
+                raise gcmd.error(
+                    f"Tool number {set_tool} is already used" +
+                    "by tool {self.all_tools_by_number[set_tool].name}." +
+                    " Use OVERWRITE=1 to overwrite."
+                )
+            else:
+                self.all_tools_by_number[set_tool].number = None
+
+        self.all_tools_by_number.pop(tool.number, None)
+        self.all_tools_by_number[set_tool] = tool
+        tool.number = set_tool
 
     def get_status(self, eventtime=None):  # pylint: disable=unused-argument
         status = {
@@ -909,19 +888,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         return status
 
     def confirm_ready_for_toolchange(self, tool: KtcBaseToolClass):
-        if tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN:
-            raise ValueError("Tool is TOOL_NONE or TOOL_UNKNOWN")
-        if self.state == self.StateType.ERROR:
-            raise ValueError("KTC is in error state")
-        if tool.state == tool.StateType.ERROR:
-            raise ValueError("Tool is in error state")
-        if not _printer_is_homed_for_toolchange(tool.requires_axis_homed):
-            raise ValueError(
-                "Printer is not homed for toolchange"
-                + "Required axis %s not homed for ktc_tool %s."
-                % (tool.requires_axis_homed, tool.name)
-            )
-
         def _printer_is_homed_for_toolchange(self, required_axes: str = ""):
             # If no axes are required, then return True.
             if required_axes == "":
@@ -935,6 +901,20 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 return True
 
             return False
+
+        if tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN:
+            raise ValueError("Tool is TOOL_NONE or TOOL_UNKNOWN")
+        if self.state == self.StateType.ERROR:
+            raise ValueError("KTC is in error state")
+        if tool.state == tool.StateType.ERROR:
+            raise ValueError("Tool is in error state")
+        if not _printer_is_homed_for_toolchange(tool.requires_axis_homed):
+            raise ValueError(
+                "Printer is not homed for toolchange"
+                + "Required axis %s not homed for ktc_tool %s."
+                % (tool.requires_axis_homed, tool.name)
+            )
+
 
     def get_tool_from_gcmd(self, gcmd: "gcode.GCodeCommand") -> "ktc_tool.KtcTool":
         """Returns the tool object specified in the gcode command or
