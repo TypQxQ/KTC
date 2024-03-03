@@ -121,14 +121,14 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_SET_GLOBAL_OFFSET",
             "KTC_SET_TOOL_TEMPERATURE",
             "KTC_SET_TOOL_OFFSET",
-            "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL",  # Maybe remove?
+            "KTC_APPLY_GCODE_OFFSET",  # Maybe remove?
             "KTC_SET_TOOL_STATE",
             "KTC_TOOLCHANGER_SET_STATE",
             "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
             "KTC_SET_ACTIVE_TOOL",
-            "KTC_SAVE_POSITION",
-            "KTC_SAVE_CURRENT_POSITION",
-            "KTC_RESTORE_POSITION",
+            # "KTC_SAVE_POSITION",
+            # "KTC_SAVE_CURRENT_POSITION",
+            # "KTC_RESTORE_POSITION",
             # "KTC_DISPLAY_TOOL_MAP",
             # "KTC_REMAP_TOOL",
             "KTC_TOOLCHANGER_ENGAGE",
@@ -764,19 +764,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         except Exception as e:
             raise Exception("resume_all_tool_heaters: Error: %s" % str(e)) from e
 
-    _offset_help = ("\n[X: X position] or [X_ADJUST: X adjust]\n" +
-        "[Y: Y position] or [Y_ADJUST: Y adjust]\n" +
-        "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
-    )
-
-    cmd_KTC_SET_TOOL_OFFSET_help = "Set an individual tool offset" + _offset_help
-
-    def cmd_KTC_SET_TOOL_OFFSET(
-        self, gcmd: "gcode.GCodeCommand"
-    ):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
-        tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
-
     def offset_from_gcmd(self, gcmd: "gcode.GCodeCommand", offset: list) -> list[float]:
         for axis in ["X", "Y", "Z"]:
             pos = gcmd.get_float(axis, None)
@@ -787,49 +774,54 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 offset[XYZ_TO_INDEX[axis]] += adjust
         return offset
 
+    _offset_help = ("\n[X: X position] or [X_ADJUST: X adjust]\n" +
+        "[Y: Y position] or [Y_ADJUST: Y adjust]\n" +
+        "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
+    )
+
+    _tool_help = "\n [TOOL: Tool name] or [T: Tool number]"
+
+    cmd_KTC_SET_TOOL_OFFSET_help = ("Set and save the tool offset."
+                                    + _tool_help + _offset_help)
+
+    def cmd_KTC_SET_TOOL_OFFSET(
+        self, gcmd: "gcode.GCodeCommand"
+    ):  # pylint: disable=invalid-name
+        tool = self.get_tool_from_gcmd(gcmd)
+        tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
+
     cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset" + _offset_help
 
     def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
 
-    cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL_help = (
-        "Set G-Code offset to the one of current tool."
+    cmd_KTC_APPLY_GCODE_OFFSET_help = (
+        "Set G-Code offset to the one of current tool." +
+        "Global offset is also applied." +
+        "MOVE= If should move the toolhead, optional." +
+        "If not specified, it will not move." +
+        "0/FALSE/NO: No move" +
+        "1/TRUE/YES: Move"
+        + _tool_help +
+        " If not specified, active tool is used."
     )
 
-    #  Sets the G-Code offset to the one of the current tool.
-    #   With no parameters it will not move the toolhead.
-    #  MOVE= If should move the toolhead, optional. If not specified, it will not move.
-    #    0: No move
-    #    1: Move
-    def cmd_KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL(self, gcmd):
-        self.log.trace(
-            "Setting offsets to those of ktc_tool %s." % self.active_tool.name
-        )
+    def cmd_KTC_APPLY_GCODE_OFFSET(self, gcmd):  # pylint: disable=invalid-name
+        tool = self.get_tool_from_gcmd(gcmd)
 
-        if self.active_tool == self.TOOL_UNKNOWN or self.active_tool == self.TOOL_NONE:
-            msg = "KTC_SET_GCODE_OFFSET_FOR_CURRENT_TOOL: Unknown tool mounted. Can't set offsets."
-            raise gcmd.error(msg)
-        else:
-            # If optional MOVE parameter is passed as 0 or 1
-            param_Move = gcmd.get_int("MOVE", 0, minval=0, maxval=1)
-            self.log.trace(
-                "SET_GCODE_OFFSET X=%s Y=%s Z=%s MOVE=%s"
-                % (
-                    str(self.active_tool.offset[0]),
-                    str(self.active_tool.offset[1]),
-                    str(self.active_tool.offset[2]),
-                    str(param_Move),
-                )
-            )
-            self.gcode.run_script_from_command(
-                "SET_GCODE_OFFSET X=%s Y=%s Z=%s MOVE=%s"
-                % (
-                    str(self.active_tool.offset[0]),
-                    str(self.active_tool.offset[1]),
-                    str(self.active_tool.offset[2]),
-                    str(param_Move),
-                )
-            )
+        param_move = self.parse_bool(gcmd.get("MOVE", "0"))
+        run_script = "SET_GCODE_OFFSET "
+        for axis in ["X", "Y", "Z"]:
+            offset = 0.0
+            if tool.offset[XYZ_TO_INDEX[axis]] is not None:
+                offset += tool.offset[XYZ_TO_INDEX[axis]]
+            if self.global_offset[XYZ_TO_INDEX[axis]] is not None:
+                offset += self.global_offset[XYZ_TO_INDEX[axis]]
+            run_script += f"{axis}={offset} "
+        run_script += f"MOVE={param_move}"
+
+        self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
+        self.gcode.run_script_from_command(run_script)
 
     ###########################################
     # TOOL REMAPING                           #
@@ -845,6 +837,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         # Set the new tool.
         self._tool_map[from_tool] = to_tool
         self.gcode.run_script_from_command(
+            f"SAVE_VARIABLE VARIABLE=ktc_state_tool_remap VALUE='{self._tool_map}'"
             "SAVE_VARIABLE VARIABLE=%s VALUE='%s'"
             % ("ktc_state_tool_remap", self._tool_map)
         )
@@ -907,7 +900,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "active_tool": self.active_tool.name,  # Active tool name for GCode compatibility.
             "active_tool_n": self.active_tool.number,  # Active tool number for GCode compatibility.
             "saved_fan_speed": self.saved_fan_speed,
-            "saved_position": self._saved_position,
             "tools": list(self.all_tools.keys()),
             "toolchangers": list(self.all_toolchangers.keys()),
             "TOOL_NONE": self.TOOL_NONE.name,
@@ -1037,7 +1029,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def parse_bool(value: str) -> bool:
         if value.isnumeric():
             return bool(int(value))
-        return value.strip().lower() in ("true", "1")
+        return value.strip().lower() in ("true", "1", "yes")
 
 
 def load_config(config):
