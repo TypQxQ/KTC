@@ -120,6 +120,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_SET_TOOL_TEMPERATURE",
             "KTC_SET_TOOL_OFFSET",
             "KTC_APPLY_GCODE_OFFSET",  # Maybe remove?
+            "KTC_SET_STATE",
             "KTC_SET_TOOL_STATE",
             "KTC_TOOLCHANGER_SET_STATE",
             "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
@@ -353,6 +354,19 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     @property
     def active_tool_n(self) -> int:
         return self.__active_tool.number
+
+    cmd_KTC_SET_STATE_help = (
+        "Set the state of the KTC.\n STATE= Defaut is ERROR."
+        )
+
+    def cmd_KTC_SET_STATE(self, gcmd: "gcode.GCodeCommand"): # pylint: disable=invalid-name
+        value = gcmd.get("STATE", self.StateType.ERROR)
+        if value not in self.StateType.__members__:
+            raise self.printer.command_error(
+                f"KTC_SET_STATE: Invalid STATE: {value}."
+                + f" Valid states are: {self.StateType.__members__}"
+            )
+        self._state = value
 
     cmd_KTC_TOOLCHANGER_SET_STATE_help = (
         "Set the state of the toolchanger."

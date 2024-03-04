@@ -169,8 +169,9 @@ class KtcBaseClass:
 
         # Fans are a list of lists with the first value being the name
         # of the fan and the second value being the speed scaling 0-1.
-        fans_attr = typing.cast(str, self.config.get("fans", "")).replace(" ", "")
-        self.fans = [x.split(":") for x in fans_attr.split(",")]
+        f = typing.cast(str, self.config.get("fans", "")).replace(" ", "")
+        self.fans = [x.split(":") for x in f.split(",")] if f != "" else []
+        fan: list[typing.Any]
         for fan in self.fans:
             errmsg = ("Invalid fan speed scaling for" +
                       f" {self.config.get_name()}: {fan[0]}. " +
@@ -180,7 +181,8 @@ class KtcBaseClass:
             elif not self.is_float(fan[1]):
                 raise config.error(errmsg)
             else:
-                fan[1] = float(fan[1])
+                if fan[1] is not None:
+                    fan[1] = fan[1]
             if fan[1] < 0 or fan[1] > 1:
                 raise config.error(errmsg)
             if len(fan) != 2:
@@ -282,15 +284,8 @@ class KtcBaseClass:
         for option in config.get_prefix_options("params_"):
             try:
                 value : str = config.get(option)
-                # List of Integers:
-                if value.replace("-", "").replace(" ", "").replace(",", "").isdigit():
-                    result[option] = [int(x) for x in value.split(",")]
-                # List of Floats:
-                elif value.replace(".", "").replace("-", "").replace(
-                    " ", "").replace(",", "").isdigit():
-                    result[option] = [float(x) for x in value.split(",")]
                 # Boolean:
-                elif value.lower().strip() in ["true", "false"]:
+                if value.lower().strip() in ["true", "false"]:
                     result[option] = config.getboolean(option)
                 # Integer:
                 elif value.replace("-", "").replace(" ", "").isdigit():
@@ -298,10 +293,17 @@ class KtcBaseClass:
                 # Float:
                 elif value.replace(".", "").replace("-", "").replace(" ", "").isdigit():
                     result[option] = config.getfloat(option)
-                # String:
+                # List of Integers:
+                elif value.replace("-", "").replace(" ", "").replace(",", "").isdigit():
+                    result[option] = [int(x) for x in value.split(",")]
+                # List of Floats:
+                elif value.replace(".", "").replace("-", "").replace(
+                    " ", "").replace(",", "").isdigit():
+                    result[option] = [float(x) for x in value.split(",")]
+                # String with quotes:
                 elif value.startswith('"') and value.endswith('"'):
                     result[option] = ast.literal_eval(value)
-                # String:
+                # String with single quotes:
                 elif value.startswith("'") and value.endswith("'"):
                     result[option] = ast.literal_eval(value)
                 # Check if it is a valid String:
@@ -429,7 +431,7 @@ class KtcBaseToolClass(KtcBaseClass):
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
 
-    def select(self, restore_mode=None, final_selected=False):
+    def select(self, final_selected=False):
         pass
 
     def deselect(self, force_unload=False):

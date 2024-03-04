@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import typing, operator, dataclasses
+import typing, operator
 from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcBaseToolClass,
     KtcConstantsClass,
@@ -52,18 +52,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.printer.load_object(config, "ktc_toolchanger " + toolchanger_name),
             )
 
-        # TODO: Delete
-        # Heaters and their offsetts
-        self.timer_heater_active_to_standby_delay = None  # type: ignore
-        self.timer_heater_standby_to_powerdown_delay = None # type: ignore
-        # self.heater_state = HeaterStateType.HEATER_STATE_OFF
-        # Temperature to set when in active mode.
-        # Requred on Physical and virtual tool if any has heaters.
-        self._heater_active_temp = 0
-        # Temperature to set when in standby mode.
-        # Requred on Physical and virtual tool if any has heaters.
-        self._heater_standby_temp = 0
-
     @property
     def toolchanger(self) -> "ktc_toolchanger.KtcToolchanger":
         return self._toolchanger
@@ -103,7 +91,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         self.state = self.StateType.CONFIGURED
 
-    def cmd_SelectTool(self, gcmd): # pylint: disable=invalid-name
+    def cmd_SelectTool(self, gcmd): # pylint: disable=invalid-name, unused-argument
         self.log.trace("KTC Tool " + str(self.number) + " Selected.")
         self.select(final_selected=True)
 
@@ -114,8 +102,8 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             at = self._ktc.active_tool
 
             # TODO: Remove when debugged.
-            self.log.trace(f"Current KTC Tool is {at.name}.")
-            self.log.trace(f"Selecting KTC Tool {self.name} as final_selected: {final_selected}.")
+            self.log.always(f"Current KTC Tool is {at.name}.")
+            self.log.always(f"Selecting KTC Tool {self.name} as final_selected: {str(final_selected)}.")
 
             # None of this is needed if this is not the final tool.
             if final_selected:
@@ -173,7 +161,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
             # Run the gcode for pickup.
             try:
-                # self.state = self.StateType.SELECTING
+                self.state = self.StateType.SELECTING
+                self.toolchanger.state = self.toolchanger.StateType.CHANGING
+                self._ktc.state = self.StateType.CHANGING
                 tool_select_gcode_template = self.gcode_macro.load_template(
                     self.config, "", self._tool_select_gcode)
                 context = tool_select_gcode_template.create_template_context()
@@ -196,36 +186,44 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     ("tool_select_gcode changed the state to ERROR while running.")
                 )
 
-            # Restore fan if has a fan.
-            for fan in self.fans:
-                self.gcode.run_script_from_command(
-                    "SET_FAN_SPEED FAN="
-                    + fan[0]
-                    + " SPEED="
-                    + str(self._ktc.saved_fan_speed * fan[1])
-                )
-
-            self.log.tool_stats[self.name].selects_completed += 1
-            self.log.track_tool_selecting_end(self)
-
             if final_selected and self.state == self.StateType.SELECTED:
+                # Restore fan if has a fan.
+                for fan in self.fans:
+                    self.gcode.run_script_from_command(
+                        "SET_FAN_SPEED FAN="
+                        + fan[0]
+                        + " SPEED="
+                        + str(self._ktc.saved_fan_speed * float(fan[1]))
+                    )
+
                 self._ktc.active_tool = self
                 self.log.track_tool_selected_start(self)
                 self.state = self.StateType.ACTIVE
+
+            self.log.tool_stats[self.name].selects_completed += 1
 
         except Exception as e:
             self.log.always("KTC Tool %s failed to select: %s" % (self.name, str(e)))
             self.state = self.StateType.ERROR
             self._ktc.state = self.StateType.ERROR
             raise e from e
+        finally:
+            self.log.track_tool_selecting_end(self)
 
     @KtcBaseToolClass.state.setter
     def state(self, value):
-        KtcBaseToolClass.state.fset(self, value)    # Call super class setter.
+        self._state = value
+        # KtcBaseToolClass.state.fset(self, value)    # Call super class setter.
 
-        if value == self.StateType.SELECTED:
+        if value == self.StateType.SELECTING:
+            self.log.always("KTC Tool %s is now selecting." % self.name)
+            self._ktc.state = self.StateType.CHANGING
+            self.toolchanger.state = self.StateType.CHANGING
+        elif value == self.StateType.SELECTED:
             self.log.always("KTC Tool %s is now selected." % self.name)
             self.toolchanger.selected_tool = self
+            self._ktc.state = self.StateType.SELECTED
+            self.toolchanger.state = self.StateType.SELECTED
         elif value == self.StateType.ACTIVE:
             self.log.always("KTC Tool %s is now active." % self.name)
             self.toolchanger.selected_tool = self
@@ -240,7 +238,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.log.always("KTC Tool %s is now in error state." % self.name)
             self.toolchanger.selected_tool = self.TOOL_UNKNOWN
             self._ktc.active_tool = self.TOOL_UNKNOWN
-
 
 
     def deselect(self, force_unload=False):    # pylint: disable=arguments-differ

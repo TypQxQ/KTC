@@ -180,9 +180,9 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             self.log.trace(f"ktc_toolchanger.engage(): Setting state to {self.state}.")
         except Exception as e:
             self.state = self.StateType.ERROR
-            self._ktc.state = self.StateType.ERROR
+            # self._ktc.state = self.StateType.ERROR
             raise self.printer.command_error(
-                "ktc_toolchanger.engage(): failed for ktc_toolchanger %s with error: %s" 
+                "Engage failed for ktc_toolchanger %s with error: %s" 
                 % (self.name, e)) from e
 
     def disengage(self, disregard_disengaged=True):
@@ -233,9 +233,9 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             self.log.trace("ktc_toolchanger.engage(): Setting state to %s." % self.state)
         except Exception as e:
             self.state = self.StateType.ERROR
-            self._ktc.state = self.StateType.ERROR
+            # self._ktc.state = self.StateType.ERROR
             raise self.printer.command_error(
-                "ktc_toolchanger.disengage(): failed for ktc_toolchanger %s with error: %s" %
+                "Disengage failed for ktc_toolchanger %s with error: %s" %
                 (self.name, e))
 
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument
