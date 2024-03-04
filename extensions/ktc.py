@@ -7,8 +7,6 @@
 #
 from __future__ import annotations
 import typing
-import math
-from json import JSONEncoder
 
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
 from .ktc_base import (
@@ -503,43 +501,26 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         "Save the fan speed to be recovered at ToolChange."
     )
 
-    def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd):  # pylint: disable=invalid-name
-        fanspeed = gcmd.get_float("S", 1, minval=0, maxval=255)
-        tool_id = gcmd.get_int("P", int(self.active_tool_n), minval=0)
+    def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd: "gcode.GCodeCommand"): # pylint: disable=invalid-name
+        try:
+            tool = self.get_tool_from_gcmd(gcmd)
+            fanspeed = typing.cast(float, gcmd.get_float("S", 1.0,0.0,255.0))
+            self.set_and_save_fan_speed(tool, fanspeed)
+        except Exception as e:
+            raise gcmd.error(
+                f"KTC_SET_AND_SAVE_PARTFAN_SPEED: Error: {str(e)}"
+            ) from e
 
-        # The minval above doesn't seem to work.
-        if tool_id < 0:
-            self.log.always(
-                "cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED: Invalid tool:" + str(tool_id)
-            )
-            return None
-
-        # If value is >1 asume it is given in 0-255 and convert to percentage.
+    def set_and_save_fan_speed(self, tool:ktc_tool.KtcTool, fanspeed: float):
         if fanspeed > 1:
-            fanspeed = float(fanspeed / 255.0)
+            fanspeed = fanspeed / 255.0
 
-        self.SetAndSaveFanSpeed(tool_id, fanspeed)
-
-    #
-    # Todo:
-    # Implement Fan Scale. Inspired by https://github.com/jschuh/klipper-macros/blob/main/fans.cfg
-    # Can change fan scale for diffrent materials or tools from slicer. Maybe max and min too?
-    #
-    def SetAndSaveFanSpeed(self, tool_id, fanspeed):
-        # Check if the requested tool has been remaped to another one.
-        tool_is_remaped = self.tool_is_remaped(int(tool_id))
-        if tool_is_remaped > -1:
-            tool_id = tool_is_remaped
-
-        tool = self.printer.lookup_object("ktc_tool " + str(tool_id))
-
-        if tool.fan is None:
-            self.log.debug("Ktc.SetAndSaveFanSpeed: Tool %s has no fan." % str(tool_id))
-        else:
-            self.SaveFanSpeed(fanspeed)
+        self.saved_fan_speed = fanspeed
+        for fan in tool.fans:
             self.gcode.run_script_from_command(
-                "SET_FAN_SPEED FAN=%s SPEED=%f" % (tool.fan, fanspeed)
+                f"SET_FAN_SPEED FAN={fan[0]} SPEED={fanspeed * float(fan[1])}"
             )
+        return
 
     cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE_help = (
         "Waits for current tool temperature, or a specified.\n"
@@ -668,7 +649,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
 
             if len(self.all_tools[tool.name].extruder.heaters) < 1:
-                raise ValueError(f"T{tool.name} has no heaters! Nothing to do.")
+                self.log.always(f"T{tool.name} has no heaters! Nothing to do.")
+                return
 
             set_heater_cmd = {}
 
@@ -856,7 +838,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def cmd_KTC_MAP_TOOL(self, gcmd):   # pylint: disable=invalid-name
         overwite = self.parse_bool(gcmd.get("OVERWRITE", "0"))
-        tool = self.get_tool_from_gcmd(gcmd)
+        tool = self.get_tool_from_gcmd(gcmd, allow_none=False)
         set_tool = gcmd.get_int("SET", minval=0)
 
         if set_tool in self.all_tools_by_number:
@@ -916,7 +898,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
 
 
-    def get_tool_from_gcmd(self, gcmd: "gcode.GCodeCommand") -> "ktc_tool.KtcTool":
+    def get_tool_from_gcmd(self,
+                           gcmd: "gcode.GCodeCommand",
+                           allow_none: bool = True) -> "ktc_tool.KtcTool":
         """Returns the tool object specified in the gcode command or
         the active tool if none is specified."""
         tool_name: str = gcmd.get("TOOL", None) # type: ignore
@@ -936,6 +920,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ):
                 raise gcmd.error("No tool specified and no active tool")
             tool = self.active_tool
+        if not allow_none and (tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN):
+            raise gcmd.error("Tool TOOL_NONE or TOOL_UNKNOWN are not allowed.")
         return tool # type: ignore
 
     def get_toolchanger_from_gcmd(
@@ -976,41 +962,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         nested_tools = _get_nested_tools(self, self.default_toolchanger)
         _recursive_traverse_tools(self, nested_tools, func)
-
-    ###########################################
-    # Static Module methods
-    ###########################################
-
-    # parses legacy restore type into string of axis names.
-    # Raises gcode error on fail
-
-    @staticmethod
-    def ktc_parse_restore_type(restore_type: str, default: str = None) -> str:
-        # restore_type = gcmd.get(arg_name, None)
-        if restore_type is None:
-            return default
-        elif restore_type == "0":
-            return ""
-        elif restore_type == "1":
-            return "XY"
-        elif restore_type == "2":
-            return "XYZ"
-        # Validate this is XYZ
-        for c in restore_type:
-            if c not in XYZ_TO_INDEX:
-                raise Exception("Invalid RESTORE_POSITION_TYPE")
-        return restore_type
-
-    class DataClassEncoder(JSONEncoder):
-        def default(self, o):
-            return o.to_dict()
-
-    @staticmethod
-    def parse_bool(value: str) -> bool:
-        if value.isnumeric():
-            return bool(int(value))
-        return value.strip().lower() in ("true", "1", "yes")
-
 
 def load_config(config):
     return Ktc(config)

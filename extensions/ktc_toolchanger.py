@@ -91,20 +91,23 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 self.parent_tool.select()
 
         # Restore the active tool from the persistent variables.
-        active_tool_name = str.lower(self.persistent_state.get(
+        selected_tool_name = str.lower(self.persistent_state.get(
             "selected_tool", self.TOOL_UNKNOWN.name
         ))
 
         # Set the active tool to the tool with the name from the persistent variables.
         # If not found in the tools that are loaded for this changer, set it to TOOL_UNKNOWN.
-        self.selected_tool = self.tools.get(active_tool_name, self.TOOL_UNKNOWN)
+        if selected_tool_name == self.TOOL_NONE.name:
+            self.selected_tool = self.TOOL_NONE
+        else:
+            self.selected_tool = self.tools.get(selected_tool_name, self.TOOL_UNKNOWN)
+
         if (self.selected_tool == self.TOOL_UNKNOWN and
-            active_tool_name != self.TOOL_UNKNOWN.name
+            selected_tool_name != self.TOOL_UNKNOWN.name
             ):
             self.log.always(
-                "ktc_toolchanger.initialize(): Active tool "
-                + "%s not found for ktc_toolchanger %s. Using tool %s."
-                % (active_tool_name, self.name, self.selected_tool.name)
+                "Initial tool %s not found for ktc_toolchanger %s. Using tool %s."
+                % (selected_tool_name, self.name, self.selected_tool.name)
             )
 
         # Run the init gcode template if it is defined.
@@ -129,13 +132,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
         # Set the tool as engaged. Fir tools it is equivalent to selected.
         self.selected_tool.state = self.StateType.ENGAGED
-
-        # TODO: Remove after testing.
-        self.log.trace("ktc_toolchanger[%s].initialize(): Complete." % self.name)
-        self.log.trace("ktc_toolchanger[%s].selected_tool: %s." %
-                       (self.name, self.selected_tool.name))
-        self.log.trace("ktc_toolchanger[%s].state: %s." % (self.name, self.state))
-
 
     def engage(self, disregard_engaged=False):
         '''Engage the lock on the tool so it can be removed.'''

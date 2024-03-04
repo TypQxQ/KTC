@@ -33,7 +33,7 @@ PARAMS_TO_INHERIT = {"_engage_gcode": "",
                      "_tool_deselect_gcode": "",
                      "force_deselect_when_parent_deselects": True,
                      "_heaters_config": "",
-                     "fan": "",
+                     "fans": "",
                      "offset": [0.0, 0.0, 0.0],
                      "requires_axis_homed": "XYZ",
                      "_heater_active_to_standby_delay_in_config":
@@ -167,7 +167,24 @@ class KtcBaseClass:
         self._heater_standby_to_powerdown_delay_in_config = self.config.getfloat(
             "heater_standby_to_powerdown_delay", None, 0.1) # type: ignore
 
-        self.fan = self.config.get("fan", None)            # type: ignore
+        # Fans are a list of lists with the first value being the name
+        # of the fan and the second value being the speed scaling 0-1.
+        fans_attr = typing.cast(str, self.config.get("fans", "")).replace(" ", "")
+        self.fans = [x.split(":") for x in fans_attr.split(",")]
+        for fan in self.fans:
+            errmsg = ("Invalid fan speed scaling for" +
+                      f" {self.config.get_name()}: {fan[0]}. " +
+                      "Fan speed must be a float between 0 and 1.")
+            if len(fan) == 1:
+                fan.append(1.0)
+            elif not self.is_float(fan[1]):
+                raise config.error(errmsg)
+            else:
+                fan[1] = float(fan[1])
+            if fan[1] < 0 or fan[1] > 1:
+                raise config.error(errmsg)
+            if len(fan) != 2:
+                raise config.error(f"Fan settings for {self.config.get_name()} are invalid.")
 
         # requires_axis_homed can contain "X", "Y", "Z" or a combination. Remove all other.
         self.requires_axis_homed: str = self.config.get(
@@ -370,6 +387,20 @@ class KtcBaseClass:
 
         self._ktc_persistent.save_variable(c, str(value), "State", True)
 
+    @staticmethod
+    def is_float(value: str) -> bool:
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def parse_bool(value: str) -> bool:
+        if value.isnumeric():
+            return bool(int(value))
+        return value.strip().lower() in ("true", "1", "yes")
+
 class KtcBaseChangerClass(KtcBaseClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
@@ -394,10 +425,6 @@ class KtcBaseToolClass(KtcBaseClass):
         self._toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
         self.extruder = KtcToolExtruder()
-        # TODO: Change to array of fans
-        self.fan = None
-        # 0 = off, 1 = standby temperature, 2 = active temperature.
-        # self.heater_state = 0
 
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''

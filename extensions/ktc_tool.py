@@ -105,15 +105,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
     def cmd_SelectTool(self, gcmd): # pylint: disable=invalid-name
         self.log.trace("KTC Tool " + str(self.number) + " Selected.")
-        # Allow either one.
-        restore_mode = self._ktc.ktc_parse_restore_type(gcmd.get("R", None), None)
-        restore_mode = self._ktc.ktc_parse_restore_type(
-            gcmd.get("RESTORE_POSITION_TYPE", None), restore_mode
-        )
+        self.select(final_selected=True)
 
-        self.select(restore_mode, True)
-
-    def select(self, restore_mode=None, final_selected=False):
+    def select(self, final_selected=False):
         self.state = self.StateType.SELECTING
         try:
             self.log.always("KTC Tool %s Selecting." % self.name)
@@ -148,15 +142,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     if heater.state == HeaterStateType.HEATER_STATE_ACTIVE:
                         if heater not in self.extruder.heaters:
                             heater.state = HeaterStateType.HEATER_STATE_STANDBY
-
-                # If optional RESTORE_POSITION_TYPE parameter is passed then save current position.
-                # Otherwise do not change either the restore_axis_on_toolchange or saved_position.
-                # This makes it possible to call SAVE_POSITION or SAVE_CURRENT_POSITION
-                # before the actual T command.
-                if restore_mode is not None:
-                    self._ktc.SaveCurrentPosition(
-                        restore_mode
-                    )  # Sets restore_axis_on_toolchange and saves current position
 
                 # If another tool is selected it needs to be deselected first.
                 if at is not self.TOOL_NONE:
@@ -212,12 +197,12 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 )
 
             # Restore fan if has a fan.
-            if self.fan is not None:
+            for fan in self.fans:
                 self.gcode.run_script_from_command(
                     "SET_FAN_SPEED FAN="
-                    + self.fan
+                    + fan[0]
                     + " SPEED="
-                    + str(self._ktc.get_status()["saved_fan_speed"])
+                    + str(self._ktc.saved_fan_speed * fan[1])
                 )
 
             self.log.tool_stats[self.name].selects_completed += 1
@@ -270,10 +255,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.log.tool_stats[self.name].deselects_started += 1
 
             # Turn off fan if has a fan.
-            if self.fan is not None:
+            for fan in self.fans:
                 self.gcode.run_script_from_command(
-                    "SET_FAN_SPEED FAN=" + self.fan + " SPEED=0"
-                )
+                    "SET_FAN_SPEED FAN=" + fan[0] + " SPEED=0")
 
             try:
                 gcode_template = self.gcode_macro.load_template(
@@ -548,7 +532,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             "number": self.number,
             "state": self.state,
             "toolchanger": self.toolchanger.name,
-            "fan": self.fan,
+            "fans": self.fans,
             "offset": self.offset,
             "heater_names": [heater.name for heater in self.extruder.heaters],
             "heater_state": self.extruder.state,
