@@ -8,8 +8,13 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 from __future__ import annotations
-import ast, typing, re, dataclasses
-from enum import IntEnum, unique, Enum
+import ast, typing, re
+from enum import IntEnum, Enum
+from .ktc_heater import (   # pylint: disable=relative-beyond-top-level
+    KtcToolExtruder,
+    DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY,
+    DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY,
+)
 
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
@@ -22,8 +27,6 @@ if typing.TYPE_CHECKING:
 TOOL_NUMBERLESS_N = -3
 TOOL_UNKNOWN_N = -2
 TOOL_NONE_N = -1
-DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
-DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
 
 # Parameters available for inheritance by all tools and their default values.
 PARAMS_TO_INHERIT = {"_engage_gcode": "",
@@ -62,63 +65,6 @@ class KtcConfigurableEnum(Enum):
 
     def __str__(self):
         return f"'{self.name}'"
-
-@unique
-class HeaterStateType(IntEnum):
-    HEATER_STATE_OFF = 0
-    HEATER_STATE_STANDBY = 1
-    HEATER_STATE_ACTIVE = 2
-
-@unique
-class HeaterTimerType(IntEnum):
-    TIMER_TO_SHUTDOWN = 0
-    TIMER_TO_STANDBY = 1
-
-@dataclasses.dataclass
-class KtcToolExtruder:
-    state = HeaterStateType.HEATER_STATE_OFF
-    active_temp = 0
-    standby_temp = 0
-    active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
-    standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
-    heaters: list["KtcHeaterSettings"] = dataclasses.field(default_factory=list)
-
-    def heater_names(self) -> list[str]:
-        return [heater.name for heater in self.heaters]
-
-# @dataclasses_json.dataclass_json
-@dataclasses.dataclass
-class KtcHeaterSettings:
-    name: str
-    temperature_offset: float
-
-    def __init__(self, name: str,
-                 temperature_offset: float):
-        self.name = name
-        self.temperature_offset = temperature_offset
-
-    @classmethod
-    def from_list(cls, list_value: list):
-        temp = [list_value[0],
-                0.0      # Default temperature temperature_offset
-                ]
-        for i, val in enumerate(list_value[1:]):
-            temp[i+1] = float(val)
-        return cls(*temp)
-
-    @classmethod
-    def from_string(cls, string_value: str):
-        list_value = string_value.split(':')
-        return cls.from_list(list_value)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(name=data['name'],
-                   temperature_offset=data['temperature_offset'])
-
-    def to_dict(self):
-        return {'name': self.name,
-                'temperature_offset': self.temperature_offset}
 
 class KtcBaseClass:
     """Base class for KTC. Contains common methods and properties."""

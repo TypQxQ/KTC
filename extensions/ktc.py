@@ -13,8 +13,8 @@ from .ktc_base import (
     KtcConstantsClass,
     KtcBaseClass,
     KtcBaseToolClass,
-    HeaterStateType,
 )
+from .ktc_heater import HeaterStateType
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
@@ -360,11 +360,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     @KtcBaseClass.state.setter
     def state(self, value):
         self._state = value
-
-        # TODO: Remove when debugged.
-        self.log.always(
-            f"KTC  is now {str(self.state).lower()}."
-        )
 
         if value == self.StateType.ENGAGING or value == self.StateType.DISENGAGING:
             self.selected_tool = self.TOOL_UNKNOWN

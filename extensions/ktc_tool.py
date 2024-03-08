@@ -11,10 +11,8 @@ from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcBaseToolClass,
     KtcConstantsClass,
     KtcBaseChangerClass,
-    HeaterStateType,
-    KtcHeaterSettings,
 )
-from .ktc_heater import KtcHeater   # pylint: disable=relative-beyond-top-level
+from .ktc_heater import KtcHeater, HeaterStateType, KtcHeaterSettings   # pylint: disable=relative-beyond-top-level
 # from . import ktc_heater
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
@@ -336,30 +334,36 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         curtime = self.printer.get_reactor().monotonic()
         changing_timer = False
-
-        return
-        # Heater of self can point to the one of parent if it is inherited.
-        # Get topmost tool for heater.
-        tool_for_tracking_heater = KtcTool._get_topmost_tool_for_heater(self)
+        ex = self.extruder
+        HS = HeaterStateType
 
         # First set state if changed, so we set correct temps.
         if "heater_state" in kwargs:
             chng_state = kwargs["heater_state"]
-        for i in kwargs:
+        for i in kwargs:    # pylint: disable=consider-using-dict-items
             if i == "heater_active_temp":
-                self._heater_active_temp = kwargs[i]
-                if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE:
-                    heater.set_temp(self._heater_active_temp)
+                ex.active_temp = kwargs[i]
             elif i == "heater_standby_temp":
-                self._heater_standby_temp = kwargs[i]
-                if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_STANDBY:
-                    heater.set_temp(self._heater_standby_temp)
+                ex.standby_temp = kwargs[i]
             elif i == "heater_active_to_standby_delay":
-                self.heater_active_to_standby_delay = kwargs[i]
+                ex.active_to_standby_delay = kwargs[i]
                 changing_timer = True
             elif i == "heater_standby_to_powerdown_delay":
-                self.heater_standby_to_powerdown_delay = kwargs[i]
+                ex.standby_to_powerdown_delay = kwargs[i]
                 changing_timer = True
+
+            #     if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_ACTIVE:
+            #         heater.set_temp(self._heater_active_temp)
+            # elif i == "heater_standby_temp":
+            #     self._heater_standby_temp = kwargs[i]
+            #     if int(self.heater_state) == KtcHeater.StateType.HEATER_STATE_STANDBY:
+            #         heater.set_temp(self._heater_standby_temp)
+            # elif i == "heater_active_to_standby_delay":
+            #     self.heater_active_to_standby_delay = kwargs[i]
+            #     changing_timer = True
+            # elif i == "heater_standby_to_powerdown_delay":
+            #     self.heater_standby_to_powerdown_delay = kwargs[i]
+            #     changing_timer = True
 
         # If already in standby and timers are counting down, i.e. have not triggered since set in standby, then reset the ones counting down.
         if (

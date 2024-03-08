@@ -4,16 +4,84 @@
 # Copyright (C) 2024 Andrei Ignat <andrei@ignat.se>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import typing
-from .ktc_base import HeaterStateType, HeaterTimerType          # pylint: disable=relative-beyond-top-level
-from .ktc_base import DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY    # pylint: disable=relative-beyond-top-level
-from .ktc_base import DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY # pylint: disable=relative-beyond-top-level
+import typing, dataclasses
+from enum import IntEnum, unique
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode, klippy, reactor
     # from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_log, ktc_toolchanger, ktc_tool, ktc
+
+DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY = 0.1
+DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
+
+@unique
+class HeaterStateType(IntEnum):
+    HEATER_STATE_OFF = 0
+    HEATER_STATE_STANDBY = 1
+    HEATER_STATE_ACTIVE = 2
+
+@unique
+class HeaterTimerType(IntEnum):
+    TIMER_TO_SHUTDOWN = 0
+    TIMER_TO_STANDBY = 1
+
+# @dataclasses_json.dataclass_json
+@dataclasses.dataclass
+class KtcHeaterSettings:
+    name: str
+    temperature_offset: float
+
+    def __init__(self, name: str,
+                 temperature_offset: float):
+        self.name = name
+        self.temperature_offset = temperature_offset
+
+    @classmethod
+    def from_list(cls, list_value: list):
+        temp = [list_value[0],
+                0.0      # Default temperature temperature_offset
+                ]
+        for i, val in enumerate(list_value[1:]):
+            temp[i+1] = float(val)
+        return cls(*temp)
+
+    @classmethod
+    def from_string(cls, string_value: str):
+        list_value = string_value.split(':')
+        return cls.from_list(list_value)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(name=data['name'],
+                   temperature_offset=data['temperature_offset'])
+
+    def to_dict(self):
+        return {'name': self.name,
+                'temperature_offset': self.temperature_offset}
+
+@dataclasses.dataclass
+class KtcToolExtruder:
+    state = HeaterStateType.HEATER_STATE_OFF
+    _active_temp = 0
+    standby_temp = 0
+    active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
+    standby_to_powerdown_delay = DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY
+    heaters: list["KtcHeaterSettings"] = dataclasses.field(default_factory=list)
+
+    def heater_names(self) -> list[str]:
+        return [heater.name for heater in self.heaters]
+    
+    @property
+    def active_temp(self):
+        return self._active_temp
+    @active_temp.setter
+    def active_temp(self, value):
+        self._active_temp = value
+        if self.state == HeaterStateType.HEATER_STATE_ACTIVE:
+            for heater in self.heaters:
+                pass # TODO: Set temperature
 
 class KtcHeater:
     def __init__(self, config: 'configfile.ConfigWrapper'):
