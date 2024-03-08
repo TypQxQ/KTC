@@ -978,7 +978,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def traverse_tools_from_deepest(self, func):
         def _get_nested_tools(self: Ktc, toolchanger: "ktc_toolchanger.KtcToolchanger"):
             nested_tools = []
-            for tool in toolchanger.tools:
+            for tool in toolchanger.tools.values():
                 if tool in self._tools_having_tc:
                     nested_tools.append(
                         _get_nested_tools(self, self._tools_having_tc[tool])
