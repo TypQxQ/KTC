@@ -238,6 +238,26 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 "Disengage failed for ktc_toolchanger %s with error: %s" %
                 (self.name, e))
 
+    @KtcBaseChangerClass.state.setter
+    def state(self, value):
+        self._state = value
+
+        # TODO: Remove when debugged.
+        self.log.always(
+            f"KTC Toolchanger {self.name} is now {str(self.state).lower()}."
+        )
+
+        if self._ktc.propagate_state:
+            self._ktc.state = value
+
+        if value == self.StateType.ENGAGING or value == self.StateType.DISENGAGING:
+            self.selected_tool = self.TOOL_UNKNOWN
+        elif value == self.StateType.READY:
+            self.selected_tool = self.TOOL_NONE
+        elif value == self.StateType.ERROR:
+            self.log.always("KTC Toolchanger %s is now in error state." % self.name)
+            self.selected_tool = self.TOOL_UNKNOWN
+
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument
         status = {
             # "global_offset": self.global_offset,
@@ -246,8 +266,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
             "selected_tool_n": self.selected_tool.number,
             "state": self.state,
             "init_mode": self.init_mode,
-            "tool_names": list(self.tools),
-            "offset": self.offset,
+            "tools": list(self.tools),
             "params_available": str(self.params.keys()),
             **self.params,
         }

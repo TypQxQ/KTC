@@ -62,6 +62,16 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             raise ValueError("Toolchanger must be a KtcToolchanger object.")
         self._toolchanger = value  # type: ignore
 
+    @KtcBaseToolClass.state.setter
+    def state(self, value):
+        super(KtcBaseToolClass, type(self)).state.fset(self, value) # type: ignore
+        # super().state = value
+        # Here because not log object in KtCBaseToolClass and
+        # TOOL_NONE and TOOL_UNKNOWN do not get error state.
+        if value == self.StateType.ERROR:
+            self.log.always("KTC Tool %s is now in error state." % self.name)
+
+
     def configure_inherited_params(self):
         # If this is TOOL_NONE or TOOL_UNKNOWN.
         if self.config is None:
@@ -209,36 +219,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             raise e from e
         finally:
             self.log.track_tool_selecting_end(self)
-
-    @KtcBaseToolClass.state.setter
-    def state(self, value):
-        self._state = value
-        # KtcBaseToolClass.state.fset(self, value)    # Call super class setter.
-
-        if value == self.StateType.SELECTING:
-            self.log.always("KTC Tool %s is now selecting." % self.name)
-            self._ktc.state = self.StateType.CHANGING
-            self.toolchanger.state = self.StateType.CHANGING
-        elif value == self.StateType.SELECTED:
-            self.log.always("KTC Tool %s is now selected." % self.name)
-            self.toolchanger.selected_tool = self
-            self._ktc.state = self.StateType.SELECTED
-            self.toolchanger.state = self.StateType.SELECTED
-        elif value == self.StateType.ACTIVE:
-            self.log.always("KTC Tool %s is now active." % self.name)
-            self.toolchanger.selected_tool = self
-            self._ktc.active_tool = self
-        elif value == self.StateType.READY:
-            self.log.always("KTC Tool %s is now desekected and ready." % self.name)
-            if self.toolchanger.selected_tool == self:
-                self.toolchanger.selected_tool = self.TOOL_NONE
-            if self._ktc.active_tool == self:
-                self._ktc.active_tool = self.TOOL_NONE
-        elif value == self.StateType.ERROR:
-            self.log.always("KTC Tool %s is now in error state." % self.name)
-            self.toolchanger.selected_tool = self.TOOL_UNKNOWN
-            self._ktc.active_tool = self.TOOL_UNKNOWN
-
 
     def deselect(self, force_unload=False):    # pylint: disable=arguments-differ
         # TODO: Also check if any tool over this one should be deselected?

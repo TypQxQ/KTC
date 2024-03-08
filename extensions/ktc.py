@@ -34,6 +34,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def __init__(self, config: "configfile.ConfigWrapper"):
         super().__init__(config)
 
+        self.propagate_state = config.getboolean("propagate_state", True)  # type: ignore
+
         ############################
         # Load the persistent variables object
         self._ktc_persistent = typing.cast(
@@ -354,6 +356,23 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     @property
     def active_tool_n(self) -> int:
         return self.__active_tool.number
+
+    @KtcBaseClass.state.setter
+    def state(self, value):
+        self._state = value
+
+        # TODO: Remove when debugged.
+        self.log.always(
+            f"KTC  is now {str(self.state).lower()}."
+        )
+
+        if value == self.StateType.ENGAGING or value == self.StateType.DISENGAGING:
+            self.selected_tool = self.TOOL_UNKNOWN
+        elif value == self.StateType.READY:
+            self.selected_tool = self.TOOL_NONE
+        elif value == self.StateType.ERROR:
+            self.log.always("KTC Toolchanger %s is now in error state." % self.name)
+            self.selected_tool = self.TOOL_UNKNOWN
 
     cmd_KTC_SET_STATE_help = (
         "Set the state of the KTC.\n STATE= Defaut is ERROR."

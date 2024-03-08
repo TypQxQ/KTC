@@ -56,8 +56,7 @@ Active_heater in ktc? maybe a private one.
 - ktc runs .initialize() on all toolchangers with .init_mode == "ON_START" recursevly.
 
 ## Configuration:
-### KTC (all optional)
-#### Inheritable
+### Inheritable
 - engage_gcode = "":    Gcode to run at toochanger engage, status from READY to ENGAGED
 - disengage_gcode = "": Gcode to run at toochanger disengage, status from ENGAGED to READY
 - init_gcode = "":      Gcode to run at toolchanger initialization, from CONFIGURED to READY. If used, it is important tha  t the Gcode changes the state of toolchanger.
@@ -67,7 +66,7 @@ Active_heater in ktc? maybe a private one.
 - standby_to_powerdown_time = 0.1:     Seconds to wait when a tool has been deselected, before changing temperature on heater to standy temperature. 0.1 is a tenth of a second.
 Use something like  86400 to wait 24h if you want to run indefinitly.
 - heater_standby_to_powerdown_delay = 0.2: As above but from active to off.
-- init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to initialize to other value.
+- init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to overwrite to other value. Or use the KTC_SET_TOOL_OFFSET GCode command.
 - force_deselect_when_parent_deselects = True: 
 - heater: A list of heaters and their offset: Example: "heater0:0, preheater:-100.5"
     This configures heater0 and heater1 where preheater will be set to 100 degrees less than the configured temperature for the tool.
@@ -77,15 +76,18 @@ Use something like  86400 to wait 24h if you want to run indefinitly.
     When the tool is deselected, the heater goes in standby after "active to standby delay" seconds and then to off after "standby to powerdown time". This is so the heater waits in standby for short toolchanges and shuts down if not used for a while. 
     Speeds up toolchanging while providing security
 
-#### NonInheritable
+### NonInheritable
+#### KTC (all optional)
+- propagate_state = True. When state is changed on a tool then it's toolchanger and the ktc object also changes state accordigly. Use False if you need to control the state manually from GCode.
 
-### KtcToolchanger (all optional)
+
+#### KtcToolchanger
 - init_mode = MANUAL:    When is the toolchanger initialized in relation to printer start and homing.
 - init_order = INDEPENDENT:   And in relation to the parent tool.
 - force_deselect_when_parent_deselects = False
 - parent_tool = ""
 
-### KtcTool (all optional)
+### KtcTool
 tool_number = None:     For use with "T#" gcode commands in by slicer. Defaults to not using.
 toolchanger = Default:  Toolchanger this is on, defaults to Default changer.
 

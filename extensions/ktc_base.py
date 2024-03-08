@@ -145,7 +145,7 @@ class KtcBaseClass:
         self.log: 'ktc_log.KtcLog' = None # type: ignore # We are loading it later.
         self._ktc: 'ktc.Ktc' = None # type: ignore # We are loading it later.
 
-        self.state = self.StateType.NOT_CONFIGURED
+        self._state = self.StateType.NOT_CONFIGURED
         self.offset: list[float, float, float] = None   # type: ignore
 
         self.params = self.get_params_dict_from_config(config)
@@ -235,12 +235,12 @@ class KtcBaseClass:
         elif self.state == self.StateType.CONFIGURING:
             raise ValueError("Can't configure inherited parameters while already configuring "
                              + self.config.get_name())
-        self.state = self.StateType.CONFIGURING
-
         # Ref. to ktc objects.
         self._ktc = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc"))
         self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object(
             "ktc_log"))  # Load the log object.
+
+        self.state = self.StateType.CONFIGURING
 
         # Get Offset from persistent storage
         self.offset = self.persistent_state.get("offset", None)
@@ -349,6 +349,10 @@ class KtcBaseClass:
     @state.setter
     def state(self, value):
         self._state = self.StateType[str(value).upper()]
+        if value not in self.StateType:
+            raise ValueError("Invalid state value: " + str(value))
+        self._state = value
+
 
     @property
     def persistent_state(self) -> dict:
@@ -428,6 +432,24 @@ class KtcBaseToolClass(KtcBaseClass):
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
         self.extruder = KtcToolExtruder()
 
+    @KtcBaseClass.state.setter
+    def state(self, value):
+        '''Having it here also applies for TOOL_UNKNOWN and TOOL_NONE state.'''
+        super(KtcBaseToolClass, type(self)).state.fset(self, value) # type: ignore
+
+        # TOOL_UNKNOWN and TOOL_NONE has no _ktc object.
+        if hasattr(self, "_ktc") is False:
+            return
+
+        if self._ktc.propagate_state:
+            self.toolchanger.state = value
+
+        if value == self.StateType.SELECTED and self._ktc.propagate_state:
+            self.toolchanger.selected_tool = self   # type: ignore # Child class
+        elif value == self.StateType.ACTIVE and self._ktc.propagate_state:
+            self.toolchanger.selected_tool = self   # type: ignore # Child class
+            self._ktc.active_tool = self
+
     def set_offset(self, **kwargs):
         '''Set the offset of the tool.'''
 
@@ -453,4 +475,4 @@ class KtcConstantsClass:
         KtcBaseToolClass(name="tool_none",
                          number=TOOL_NONE_N,
                          config = None))         # type: ignore
-    TOOL_NONE.state = TOOL_UNKNOWN.state = KtcBaseClass.StateType.CONFIGURED
+    TOOL_NONE._state = TOOL_UNKNOWN._state = KtcBaseClass.StateType.CONFIGURED  # pylint: disable=protected-access
