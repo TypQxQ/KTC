@@ -240,8 +240,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
     @KtcBaseChangerClass.state.setter
     def state(self, value):
-        self._state = value
-
+        super(KtcBaseChangerClass, type(self)).state.fset(self, value)  # type: ignore
         # TODO: Remove when debugged.
         self.log.always(
             f"KTC Toolchanger {self.name} is now {str(self.state).lower()}."

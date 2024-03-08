@@ -348,10 +348,10 @@ class KtcBaseClass:
         return self._state
     @state.setter
     def state(self, value):
-        self._state = self.StateType[str(value).upper()]
-        if value not in self.StateType:
-            raise ValueError("Invalid state value: " + str(value))
-        self._state = value
+        try:
+            self._state = self.StateType[str(value).upper()]
+        except KeyError as e:
+            raise ValueError("Invalid state value: " + str(value)) from e
 
 
     @property
