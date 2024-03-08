@@ -18,9 +18,9 @@ DEFAULT_HEATER_STANDBY_TO_POWERDOWN_DELAY = 0.2
 
 @unique
 class HeaterStateType(IntEnum):
-    HEATER_STATE_OFF = 0
-    HEATER_STATE_STANDBY = 1
-    HEATER_STATE_ACTIVE = 2
+    OFF = 0
+    STANDBY = 1
+    ACTIVE = 2
 
 @unique
 class HeaterTimerType(IntEnum):
@@ -63,7 +63,7 @@ class KtcHeaterSettings:
 
 @dataclasses.dataclass
 class KtcToolExtruder:
-    state = HeaterStateType.HEATER_STATE_OFF
+    state = HeaterStateType.OFF
     _active_temp = 0
     standby_temp = 0
     active_to_standby_delay = DEFAULT_HEATER_ACTIVE_TO_STANDBY_DELAY
@@ -79,7 +79,7 @@ class KtcToolExtruder:
     @active_temp.setter
     def active_temp(self, value):
         self._active_temp = value
-        if self.state == HeaterStateType.HEATER_STATE_ACTIVE:
+        if self.state == HeaterStateType.ACTIVE:
             for heater in self.heaters:
                 pass # TODO: Set temperature
 
@@ -89,7 +89,7 @@ class KtcHeater:
         self.name = config.get_name()
         self.temperature_offset = 0.0
 
-        self.state = HeaterStateType.HEATER_STATE_OFF
+        self.state = HeaterStateType.OFF
         # Timer to set temperature to standby temperature
         # after heater_active_to_standby_delay seconds. Set if this tool has an heaters.
         self.timer_heater_active_to_standby_delay = KtcHeaterTimer(
@@ -197,7 +197,7 @@ class KtcHeaterTimer:
                 tool.get_timer_to_standby().set_timer(
                     0, self.last_virtual_tool_using_physical_timer
                 )  # Stop Standby timer.
-                tool._set_heater_state(KtcHeater.StateType.HEATER_STATE_OFF)  # Set off state.
+                tool._set_heater_state(KtcHeater.StateType.OFF)  # Set off state.
                 heater.set_temp(0)  # Set temperature to 0.
 
             self.log.track_heater_active_end(

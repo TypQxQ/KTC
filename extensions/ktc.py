@@ -692,11 +692,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
             if chng_state is not None:
                 if chng_state.lower() in ["0", "off"]:
-                    chng_state = HeaterStateType.HEATER_STATE_OFF
+                    chng_state = HeaterStateType.OFF
                 elif chng_state.lower() in ["1", "standby"]:
-                    chng_state = HeaterStateType.HEATER_STATE_STANDBY
+                    chng_state = HeaterStateType.STANDBY
                 elif chng_state.lower() in ["2", "active"]:
-                    chng_state = HeaterStateType.HEATER_STATE_ACTIVE
+                    chng_state = HeaterStateType.ACTIVE
                 else:
                     raise ValueError(
                         f"Invalid value for CHNG_STATE: {chng_state}. "
@@ -716,7 +716,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                        f"Standby to Off timer: {ext.standby_to_powerdown_delay} seconds\n"
                 )
 
-                if ext.state == HeaterStateType.HEATER_STATE_STANDBY:
+                if ext.state == HeaterStateType.STANDBY:
                     first_heater_object = self.all_heaters[ext.heaters[0].name]
                     to_standby_timer = first_heater_object.timer_heater_active_to_standby_delay
                     to_standby_timer_wake = to_standby_timer.get_status()["next_wake"]
@@ -749,11 +749,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self._changes_made_by_set_all_tool_heaters_off = {}
         try:
             for heater in self.all_heaters.values():
-                if heater.state > HeaterStateType.HEATER_STATE_OFF:
+                if heater.state > HeaterStateType.OFF:
                     self._changes_made_by_set_all_tool_heaters_off[heater.name] = (
                         heater.state
                     )
-                    heater.state = HeaterStateType.HEATER_STATE_OFF
+                    heater.state = HeaterStateType.OFF
         except Exception as e:
             raise Exception("set_all_tool_heaters_off: Error: %s" % str(e)) from e
 
