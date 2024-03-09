@@ -335,7 +335,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         # First set state if changed, so we set correct temps.
         if "heater_state" in kwargs:
-            chng_state = kwargs["heater_state"]
+            chng_state = HeaterStateType.parse_heater_state(kwargs["heater_state"])
             ex.state = chng_state
         for i in kwargs:    # pylint: disable=consider-using-dict-items
             if i == "heater_active_temp":
@@ -349,42 +349,23 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 ex.standby_to_powerdown_delay = kwargs[i]
                 changing_timer = True
 
-            #     if int(self.heater_state) == KtcHeater.StateType.ACTIVE:
-            #         heater.set_temp(self._heater_active_temp)
-            # elif i == "heater_standby_temp":
-            #     self._heater_standby_temp = kwargs[i]
-            #     if int(self.heater_state) == KtcHeater.StateType.STANDBY:
-            #         heater.set_temp(self._heater_standby_temp)
-            # elif i == "heater_active_to_standby_delay":
-            #     self.heater_active_to_standby_delay = kwargs[i]
-            #     changing_timer = True
-            # elif i == "heater_standby_to_powerdown_delay":
-            #     self.heater_standby_to_powerdown_delay = kwargs[i]
-            #     changing_timer = True
-
         # If already in standby and timers are counting down,
         # i.e. have not triggered since set in standby,
         # then reset the ones counting down.
         if ex.state == HS.STANDBY and changing_timer:
-            if self._ktc.all_heaters[
-                ex.heaters[0].name].timer_heater_standby_to_powerdown_delay.counting_down:
-                for hn in ex.heaters:
-                    self._ktc.all_heaters[
-                        hn.name].timer_heater_standby_to_powerdown_delay.set_timer(
+            for hn in ex.heaters:
+                ht = self._ktc.all_heaters[hn.name]
+                if ht.timer_heater_standby_to_powerdown_delay.counting_down:
+                    ht.timer_heater_standby_to_powerdown_delay.set_timer(
                         ex.standby_to_powerdown_delay, self.name)
-            if self._ktc.all_heaters[
-                ex.heaters[0].name].timer_heater_active_to_standby_delay.counting_down:
-                for hn in ex.heaters:
-                    self._ktc.all_heaters[hn.name].timer_heater_active_to_standby_delay.set_timer(
+                if ht.timer_heater_active_to_standby_delay.counting_down:
+                    ht.timer_heater_active_to_standby_delay.set_timer(
                         ex.active_to_standby_delay, self.name)
 
-# TODO: Coded until here. Continue from here.
-        return
         # Change Active mode, Continuing with part two of temp changing.:
         if "heater_state" in kwargs:
-            if (
-                self.heater_state == chng_state
-            ):  # If we don't actually change the state don't do anything.
+            # If we don't actually change the state don't do anything.
+            if ex.state == chng_state:
                 if chng_state == KtcHeater.StateType.ACTIVE:
                     self.log.trace(
                         "set_heater: KTC Tool %s heater state not changed. Setting active temp."

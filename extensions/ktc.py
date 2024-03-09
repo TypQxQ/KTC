@@ -691,18 +691,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             if shtdwn_timeout is not None:
                 set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
             if chng_state is not None:
-                if chng_state.lower() in ["0", "off"]:
-                    chng_state = HeaterStateType.OFF
-                elif chng_state.lower() in ["1", "standby"]:
-                    chng_state = HeaterStateType.STANDBY
-                elif chng_state.lower() in ["2", "active"]:
-                    chng_state = HeaterStateType.ACTIVE
-                else:
-                    raise ValueError(
-                        f"Invalid value for CHNG_STATE: {chng_state}. "
-                        + "Valid values are: 0/OFF, 1/STANDBY, 2/ACTIVE."
-                    )
-                set_heater_cmd["heater_state"] = chng_state
+                set_heater_cmd["heater_state"] =  HeaterStateType.parse_heater_state(chng_state)
 
             if len(set_heater_cmd) > 0:
                 tool.set_heaters(**set_heater_cmd)

@@ -46,11 +46,15 @@ All obj having ran configure_inherited_params get state=configured.
 
 
 ## Tool Heaters
-When a tool has a heater it checks if a heater obj exists for it in ktc.heaters[]
+When a tool has a heater it checks if a heater obj exists for it in ktc.all_heaters[]
 If it exists, then link to it.
 If it does not exist, create with own timers. Own object.
 When selecting tool, check if heater changes.
-Active_heater in ktc? maybe a private one.
+- Setting state
+    - State is set on tool.extruder.
+        - For each heater it sets state if ACTIVE
+        - For each heater it checks if active on another tool too
+            - Sets state then.
 
 
 - ktc runs .initialize() on all toolchangers with .init_mode == "ON_START" recursevly.

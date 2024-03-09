@@ -376,7 +376,7 @@ class KtcBaseToolClass(KtcBaseClass):
         # Is overridden by the tool object.
         self._toolchanger: 'ktc_toolchanger.KtcToolchanger' = None   # type: ignore
         self.toolchanger: 'ktc_toolchanger.KtcToolchanger' = self._toolchanger # type: ignore
-        self.extruder = KtcToolExtruder()
+        self.extruder = KtcToolExtruder(self)
 
     @KtcBaseClass.state.setter
     def state(self, value):
