@@ -201,7 +201,7 @@ class KtcToolExtruder:
 class KtcHeater:
     def __init__(self, config: 'configfile.ConfigWrapper'):
         self.printer : 'klippy.Printer' = config.get_printer()
-        self.name = config.get_name()
+        self.name = typing.cast(str, config.get_name().split(" ", 1)[1])
         self.temperature_offset = 0.0
 
         self._state = HeaterStateType.OFF
@@ -229,7 +229,7 @@ class KtcHeater:
 
         self.klippy_heater = typing.cast(
             'klippy_heaters.Heater',
-            self.printer.lookup_object("heaters").lookup_heater(self.name.split(' ')[1])
+            self.printer.lookup_object("heaters").lookup_heater(self.name)
         )
 
     @property

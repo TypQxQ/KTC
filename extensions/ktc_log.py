@@ -245,10 +245,10 @@ class KtcLog:
         try:
             # Save tool statistics for each tool
             for item_name, item in items.items():
-                self.trace(
-                    "_persist_statistics: Saving %s stats for item: %s"
-                    % (section, item_name)
-                )
+                # self.trace(
+                #     "_persist_statistics: Saving %s stats for item: %s"
+                #     % (section, item_name)
+                # )
                 # Convert to dict and remove the start_time_* variables so we don't save them
                 item_dict = dataclasses.asdict(item)
                 item_dict = {
@@ -599,12 +599,27 @@ class KtcLog:
     def track_heater_active_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_heater_active = int(time.time())
         self.track_heater_active_end_for_other_tools(tool)
+        self.debug(
+            f"track_heater_active_start: Tool: {tool.name}")
 
     def track_heater_active_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
         for tool in self._ktc.all_tools.values():
             if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+                # self.debug(
+                #     "track_heater_active_end_for_tools_having_heater: "
+                #     + f"Heater: {heater.name}: Tool: {tool.name} .start_time_heater_active: "
+                #     + f"{self.tool_stats[tool.name].start_time_heater_active}")
                 if self.tool_stats[tool.name].start_time_heater_active:
+                    # self.debug(
+                    #     "track_heater_active_end_for_tools_having_heater: "
+                    #     + f"Tool: {tool.name}: Is in Active mode."
+                    #     + f" Will check if heater: {heater.name} is in heater_names: "
+                    #     + f"{tool.extruder.heater_names()}")
+
                     if heater.name in tool.extruder.heater_names():
+                        self.debug(
+                            "track_heater_active_end_for_tools_having_heater: "
+                            + f"Heater: {heater.name}: Active end called for tool: {tool.name}")
                         self.track_heater_active_end(tool)
 
     def track_heater_active_end_for_other_tools(self, tool_still_active: 'ktc_tool.KtcTool'):
@@ -616,6 +631,10 @@ class KtcLog:
                 if self.tool_stats[tool.name].start_time_heater_active:
                     for heater_name in tool.extruder.heater_names():
                         if heater_name in tool_still_active.extruder.heater_names():
+                            self.debug(
+                                "track_heater_active_end_for_other_tools: "
+                                + f"Tool: {tool_still_active.name}: "
+                                + f"Active end called for tool: {tool.name}")
                             self.track_heater_active_end(tool)
 
     def track_heater_standby_start_for_standby_tools_having_heater(
@@ -623,9 +642,23 @@ class KtcLog:
         '''Called by the HeaterTimer when the heater is set to standby.'''
         for tool in self._ktc.all_tools.values():
             if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+                # self.debug(
+                #     "track_heater_standby_start_for_standby_tools_having_heater: "
+                #     + f"Tool: {tool.name} .extruder.state: {tool.extruder.state}")
                 if tool.extruder.state == 1:
+                    # self.debug(
+                    #     "track_heater_standby_start_for_standby_tools_having_heater: "
+                    #     + f"Tool: {tool.name}: Is in Standby mode."
+                    #     + f" Will check if heater: {heater.name} is in heater_names: "
+                    #     + f"{tool.extruder.heater_names()}")
                     if heater.name in tool.extruder.heater_names():
+                        self.debug(
+                            "track_heater_standby_start_for_standby_tools_having_heater: "
+                            + f"Heater {heater.name} is in tool: {tool.name}")
                         self.track_heater_standby_start(tool)
+                        # self.debug(
+                        #     "track_heater_standby_start_for_standby_tools_having_heater: "
+                        #     + f"Tool: {tool.name}: Standby start called for tool: {tool.name}")
 
     def track_heater_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
         '''Called by the HeaterTimer when the heater is set to off.'''
@@ -633,19 +666,33 @@ class KtcLog:
             if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
                 if self.tool_stats[tool.name].start_time_heater_standby:
                     if heater.name in tool.extruder.heater_names():
-                        self.track_heater_standby_end(tool)
+                        if self.tool_stats[tool.name].start_time_heater_standby:
+                            self.debug(
+                                f"track_heater_end_for_tools_having_heater: "
+                                + f"Heater: {heater.name}: Standby end called for tool: {tool.name}")
+                            self.track_heater_standby_end(tool)
                 if self.tool_stats[tool.name].start_time_heater_active:
                     if heater.name in tool.extruder.heater_names():
-                        self.track_heater_active_end(tool)
+                        if self.tool_stats[tool.name].start_time_heater_active:
+                            self.debug(
+                                f"track_heater_end_for_tools_having_heater: "
+                                + f"Heater: {heater.name}: Active end called for tool: {tool.name}")
+                            self.track_heater_active_end(tool)
 
     def track_heater_active_end(self, tool: 'ktc_tool.KtcTool'):
+        self.debug(
+            f"track_heater_active_end: Tool: {tool.name}")
         self._increase_tool_time_diff(tool, "time_heater_active")
         self._persist_statistics()
 
     def track_heater_standby_start(self, tool: 'ktc_tool.KtcTool'):
+        self.debug(
+            f"track_heater_standby_start: Tool: {tool.name}")
         self.tool_stats[tool.name].start_time_heater_standby = int(time.time())
 
     def track_heater_standby_end(self, tool: 'ktc_tool.KtcTool'):
+        self.debug(
+            f"track_heater_standby_end: Tool: {tool.name}")
         self._increase_tool_time_diff(tool, "time_heater_standby")
         self._persist_statistics()
 
@@ -662,18 +709,18 @@ class KtcLog:
 
             final_time = getattr(self.tool_stats[tool.name], final_time_key, 0)
             final_time += time_spent
-            start_time = 0
 
             # TODO Delete when confirmed working
-            self.trace(
-                f"_increase_tool_time_diff for Tool: {tool.name}: start_time: "
-                + f"{start_time}, self.tool_stats[tool.name].start_time: "
+            self.debug(
+                f"increase_tool_time_diff for Tool: {tool.name}.{final_time_key}: "
+                + f"start_time: {start_time}, self.tool_stats[tool.name].start_time: "
                 + f"{getattr(self.tool_stats[tool.name], 'start_' + final_time_key, 'Not found')}"
                 )
 
+            setattr(self.tool_stats[tool.name], "start_" + final_time_key, 0)
         except Exception as e:
             # Handle any exceptions that occur during the process
-            print(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
+            self.always(f"An error occurred in KTC_Log._increase_tool_time_diff(): {e}")
 
     ####################################
     # STATIC METHODS: data to string   #
