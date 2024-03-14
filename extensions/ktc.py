@@ -723,8 +723,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                             f"{to_powerdown_timer_wake} seconds."
                         )
                 gcmd.respond_info(msg)
-        except Exception as e:
-            raise gcmd.error("KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)) from e
+        except ValueError as e:
+            raise gcmd.error("KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)) from e.with_traceback(e.__traceback__)
 
     cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = (
         "Turns off all heaters and saves changes made to be resumed by "

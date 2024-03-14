@@ -13,16 +13,12 @@ import logging, logging.handlers, re
 import threading, queue, time, dataclasses
 import math, os.path, copy, operator
 import typing
-from .ktc_base import *
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
     from ...klipper.klippy import klippy
-    from . import ktc_toolchanger, ktc_tool, ktc_persisting, ktc
-
-class KtcBase3Class:
-    pass
+    from . import ktc_toolchanger, ktc_tool, ktc_persisting, ktc, ktc_heater
 
 LINE_SEPARATOR = "\n--------------------------------------------------------\n"
 SECTION_SEPARATOR = (
@@ -91,6 +87,8 @@ class KtcLog:
 
     def _handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
+        self._ktc = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc"))
+        
         # Load the persistent variables object here to avoid circular dependencies
         self._ktc_persistent = typing.cast(      # pylint: disable=attribute-defined-outside-init
             'ktc_persisting.KtcPersisting', self.printer.lookup_object( "ktc_persisting"))
@@ -586,8 +584,59 @@ class KtcLog:
         self._increase_tool_time_diff(tool, "time_selected")
         self._persist_statistics()
 
+    # Heater tracking
+    # Active start is called when the extruder state changes to ACTIVE.
+    # Will call actve end for all other tools having any of the same heaters and
+    # having running active timers.
+
+    # Standby start is called when the heater timer is run for standby
+    # and will set the active end for any tool having any of the same heaters and being in 
+    # standby mode.
+
+    # Active end and Standby end is also tracked when the extruder state changes to OFF
+    # and will set the active end and standby end for any tool having any of the same
+    # heaters and being in off or standby and having running statistics timers.
     def track_heater_active_start(self, tool: 'ktc_tool.KtcTool'):
         self.tool_stats[tool.name].start_time_heater_active = int(time.time())
+        self.track_heater_active_end_for_other_tools(tool)
+
+    def track_heater_active_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
+        for tool in self._ktc.all_tools.values():
+            if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+                if self.tool_stats[tool.name].start_time_heater_active:
+                    if heater.name in tool.extruder.heater_names():
+                        self.track_heater_active_end(tool)
+
+    def track_heater_active_end_for_other_tools(self, tool_still_active: 'ktc_tool.KtcTool'):
+        '''Called when a tool changes state to active. 
+        Will call active end for all other tools having any of the same heaters and
+        having running active timers.'''
+        for tool in tool_still_active._ktc.all_tools.values():  # pylint: disable=protected-access
+            if tool not in [tool_still_active, self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+                if self.tool_stats[tool.name].start_time_heater_active:
+                    for heater_name in tool.extruder.heater_names():
+                        if heater_name in tool_still_active.extruder.heater_names():
+                            self.track_heater_active_end(tool)
+
+    def track_heater_standby_start_for_standby_tools_having_heater(
+        self, heater: 'ktc_heater.KtcHeater'):
+        '''Called by the HeaterTimer when the heater is set to standby.'''
+        for tool in self._ktc.all_tools.values():
+            if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+                if tool.extruder.state == 1:
+                    if heater.name in tool.extruder.heater_names():
+                        self.track_heater_standby_start(tool)
+
+    def track_heater_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
+        '''Called by the HeaterTimer when the heater is set to off.'''
+        for tool in self._ktc.all_tools.values():
+            if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+                if self.tool_stats[tool.name].start_time_heater_standby:
+                    if heater.name in tool.extruder.heater_names():
+                        self.track_heater_standby_end(tool)
+                if self.tool_stats[tool.name].start_time_heater_active:
+                    if heater.name in tool.extruder.heater_names():
+                        self.track_heater_active_end(tool)
 
     def track_heater_active_end(self, tool: 'ktc_tool.KtcTool'):
         self._increase_tool_time_diff(tool, "time_heater_active")

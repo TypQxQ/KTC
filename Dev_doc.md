@@ -53,8 +53,13 @@ When selecting tool, check if heater changes.
 - Setting state
     - State is set on tool.extruder.
         - For each heater it sets state if ACTIVE
+            - Sets timers and ACTIVE temperatures with offset.
         - For each heater it checks if active on another tool too
-            - Sets state then.
+            - If STANDBY
+                - Set to STANDBY
+                - Sets timers and STANDBY temperatures with offset.
+            - If OFF
+                - just set to OFF
 
 
 - ktc runs .initialize() on all toolchangers with .init_mode == "ON_START" recursevly.
