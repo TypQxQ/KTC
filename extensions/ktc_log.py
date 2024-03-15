@@ -604,7 +604,7 @@ class KtcLog:
 
     def track_heater_active_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
         for tool in self._ktc.all_tools.values():
-            if tool not in (self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None):
+            if tool not in self._ktc.INVALID_TOOLS:
                 # self.debug(
                 #     "track_heater_active_end_for_tools_having_heater: "
                 #     + f"Heater: {heater.name}: Tool: {tool.name} .start_time_heater_active: "

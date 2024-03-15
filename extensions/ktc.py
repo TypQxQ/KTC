@@ -516,9 +516,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         try:
             # Traverse all tools and deselect them from the deepest towards the top.
             def deselect(tool: "ktc_tool.KtcTool"):
-                if tool not in self.INVALID_TOOLS:
-                    if tool.state == self.StateType.SELECTED:
-                        tool.deselect(force_unload=True)
+                if (tool not in self.INVALID_TOOLS and
+                    tool.state == self.StateType.SELECTED):
+                    tool.deselect()
 
             self.traverse_tools_from_deepest(deselect)
         except Exception as e:
@@ -945,12 +945,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             toolhead = self.printer.lookup_object("toolhead")
             homed = toolhead.get_status(curtime)["homed_axes"].upper()
 
-            if all(axis in homed for axis in list(required_axes)):
+            if all(axis in homed for axis in tuple(required_axes)):
                 return True
 
             return False
 
-        if tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN:
+        if tool in self.INVALID_TOOLS:
             raise ValueError("Tool is TOOL_NONE or TOOL_UNKNOWN")
         if self.state == self.StateType.ERROR:
             raise ValueError("KTC is in error state")

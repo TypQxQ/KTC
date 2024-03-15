@@ -35,6 +35,7 @@ PARAMS_TO_INHERIT = {"_engage_gcode": "",
                      "_tool_select_gcode": "",
                      "_tool_deselect_gcode": "",
                      "force_deselect_when_parent_deselects": True,
+                     "parent_must_be_selected_on_deselect": True,
                      "_heaters_config": "",
                      "fans": "",
                      "offset": [0.0, 0.0, 0.0],
@@ -77,6 +78,7 @@ class KtcBaseClass:
         self._state = self.StateType.NOT_CONFIGURED
 
         self.force_deselect_when_parent_deselects: bool = None  # type: ignore
+        self.parent_must_be_selected_on_deselect: bool = None  # type: ignore
 
         # If this is a empty object then don't load the config.
         if config is None:
@@ -84,6 +86,9 @@ class KtcBaseClass:
 
         self.force_deselect_when_parent_deselects: bool = config.getboolean(
             "force_deselect_when_parent_deselects", None)  # type: ignore
+
+        self.parent_must_be_selected_on_deselect: bool = config.getboolean(
+            "parent_must_be_selected_on_deselect", None)  # type: ignore
 
         self.printer : 'klippy.Printer' = config.get_printer()
         self.reactor: 'klippy.reactor.Reactor' = self.printer.get_reactor()
@@ -406,7 +411,7 @@ class KtcBaseToolClass(KtcBaseClass):
     def select(self, final_selected=False):
         pass
 
-    def deselect(self, force_unload=False):
+    def deselect(self):
         pass
 
 class KtcConstantsClass:

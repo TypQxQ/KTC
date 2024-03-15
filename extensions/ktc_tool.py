@@ -126,10 +126,10 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     self.set_heaters(heater_state=HeaterStateType.ACTIVE)
 
                 # Put all other active heaters in standby.
-                for heater in self._ktc.all_heaters.values():
-                    if heater.state == HeaterStateType.ACTIVE:
-                        if heater not in self.extruder.heaters:
-                            heater.state = HeaterStateType.STANDBY
+                for heater in ( heater for heater in self._ktc.all_heaters.values()
+                                if heater.state == HeaterStateType.ACTIVE
+                                and heater not in self.extruder.heaters):
+                    heater.state = HeaterStateType.STANDBY
 
                 # If another tool is selected it needs to be deselected first.
                 if at is not self.TOOL_NONE:
@@ -139,13 +139,19 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                     # If on different toolchanger:
                     else:
                         # First deselect all tools recursively.
+                        # Only if force_deselect_when_parent_deselects is True for the tool.
                         tools = self._get_list_from_tool_traversal_conditional(
                             at, "force_deselect_when_parent_deselects", True)
                         for t in tools:
                             t.deselect()
-                        # Then select the new tools recursively in reverse order.
+                            # Check if the tool to be deselected is on the same toolchanger.
+                            # Then don't deselect beyond that tool.
+                            if t.toolchanger == self.toolchanger:
+                                break
+                        # Then select the new tools recursively in reverse order
+                        # by getting the list of tools not already selected.
                         tools = self._get_list_from_tool_traversal_conditional(
-                            self, "state", self.StateType.ENGAGED, operator.ne)
+                            self, "state", self.StateType.SELECTED, operator.ne)
                         for t in reversed(tools):
                             t.select()
 
@@ -210,8 +216,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         finally:
             self.log.track_tool_selecting_end(self)
 
-    def deselect(self, force_unload=False):    # pylint: disable=arguments-differ
-        # TODO: Also check if any tool over this one should be deselected?
+    def deselect(self):    # pylint: disable=arguments-differ
         self.state = self.StateType.DESELECTING
         try:
             # Check if homed
@@ -226,6 +231,19 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 self.gcode.run_script_from_command(
                     "SET_FAN_SPEED FAN=" + fan[0] + " SPEED=0")
 
+            # Check if toolchanger is not topmost and
+            # parent tool must be selected on deselect and
+            # parent tool is not selected.
+            if (
+                self.toolchanger.parent_tool is not None and
+                self.parent_must_be_selected_on_deselect and
+                self.toolchanger.parent_tool.state != self.StateType.SELECTED
+                ):
+                tools_to_select = self._get_list_from_tool_traversal_conditional(
+                    self, "parent_must_be_selected_on_deselect", True)
+                for t in reversed(tools_to_select):
+                    t.select()
+
             try:
                 gcode_template = self.gcode_macro.load_template(
                     self.config, "", self._tool_deselect_gcode)
@@ -237,7 +255,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             except Exception as e:
                 raise Exception("Failed to run tool_deselect_gcode: " + str(e)) from e
             # Check that the gcode has changed the state.
-            if self.state == self.StateType.ENGAGING:
+            if self.state == self.StateType.DESELECTING:
                 raise self.config.error(
                     ("tool_deselect_gcode has not changed the state while running "
                     + "code in tool_select_gcode. Use for example "
@@ -264,10 +282,12 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         value, condition = operator.eq) -> typing.List[KtcTool]:
         return_list = []
 
-        if (start_tool is None or
-            start_tool == self.TOOL_NONE or
-            start_tool == self.TOOL_UNKNOWN or
-            start_tool == self._ktc):
+        if start_tool in (
+            self.TOOL_NONE,
+            self.TOOL_UNKNOWN,
+            self._ktc,
+            None
+        ):
             return return_list
 
         if condition(getattr(start_tool, param), value):

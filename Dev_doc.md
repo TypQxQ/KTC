@@ -77,6 +77,13 @@ Use something like  86400 to wait 24h if you want to run indefinitly.
 - heater_standby_to_powerdown_delay = 0.2: As above but from active to off.
 - init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to overwrite to other value. Or use the KTC_SET_TOOL_OFFSET GCode command.
 - force_deselect_when_parent_deselects = True: 
+    Does nothing for tools on default toolchanger.
+    When deselecting the parent tool, deselect this tool first. Otherwise it will be left
+    selected on the toolchanger but not active on ktc.
+- parent_must_be_selected_on_deselect = True:
+    Does nothing for tools on default toolchanger or tools having force_deselect_when_parent_deselects True.
+    Used to speed up multilayer toolchanging when False.
+    When deselecting the tool and the parent tool for this tools toolchanger is not selected, select it recursivley for all tools also having this as True, before deselecting.
 - heater: A list of heaters and their offset: Example: "heater0:0, preheater:-100.5"
     This configures heater0 and heater1 where preheater will be set to 100 degrees less than the configured temperature for the tool.
     At least heater_name is required if tool has a heater.
