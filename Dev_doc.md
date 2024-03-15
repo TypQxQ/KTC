@@ -308,6 +308,11 @@ class ktc_MeanLayerTime:
 
 - Add context as constants that are inherited. Add a ktc._run_gcode_from_context()
 
+- cmd_KTC_SET_ALL_TOOL_HEATERS_OFF -> cmd_KTC_HEATERS_PAUSE
+
+- cmd_KTC_SET_TOOL_OFFSET -> cmd_KTC_TOOL_OFFSET_SAVE
+cmd_KTC_TOOL_OFFSET_APPLY
+
 - Idea for preprocessing to get time of toolchange is using a module that has a opiton named time before ToolChange.
     - CMD in GCODE before waiting for bed to reach temperature.
     - The cmd is searching for T# commands that do toolchange.

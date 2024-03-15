@@ -28,6 +28,13 @@ INDEX_TO_XYZ: dict[int, str] = {0: "X", 1: "Y", 2: "Z"}
 DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE = 1  # Default tolerance in degC.
 # Don't wait for temperatures below this because they might be ambient.
 LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR = 40
+_OFFSET_HELP = ("\n[X: X position] or [X_ADJUST: X adjust]\n" +
+    "[Y: Y position] or [Y_ADJUST: Y adjust]\n" +
+    "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
+)
+
+_TOOL_HELP = "\n [TOOL: Tool name] or [T: Tool number]"
+
 
 class Ktc(KtcBaseClass, KtcConstantsClass):
 
@@ -511,7 +518,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 )
 
         if self.active_tool != self.TOOL_NONE:
-            self.active_tool.deselect(force_unload=True)
+            self.active_tool.deselect()
 
         try:
             # Traverse all tools and deselect them from the deepest towards the top.
@@ -774,15 +781,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 offset[XYZ_TO_INDEX[axis]] += adjust
         return offset
 
-    _offset_help = ("\n[X: X position] or [X_ADJUST: X adjust]\n" +
-        "[Y: Y position] or [Y_ADJUST: Y adjust]\n" +
-        "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
-    )
-
-    _tool_help = "\n [TOOL: Tool name] or [T: Tool number]"
-
     cmd_KTC_SET_TOOL_OFFSET_help = ("Set and save the tool offset."
-                                    + _tool_help + _offset_help)
+                                    + _TOOL_HELP + _OFFSET_HELP)
 
     def cmd_KTC_SET_TOOL_OFFSET(
         self, gcmd: "gcode.GCodeCommand"
@@ -790,7 +790,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         tool = self.get_tool_from_gcmd(gcmd)
         tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
 
-    cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset" + _offset_help
+    cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset" + _OFFSET_HELP
 
     def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
@@ -802,7 +802,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         "If not specified, it will not move." +
         "0/FALSE/NO: No move" +
         "1/TRUE/YES: Move"
-        + _tool_help +
+        + _TOOL_HELP +
         " If not specified, active tool is used."
     )
 
