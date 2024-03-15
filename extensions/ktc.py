@@ -723,7 +723,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                         )
                 gcmd.respond_info(msg)
         except ValueError as e:
-            raise gcmd.error("KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)) from e.with_traceback(e.__traceback__)
+            raise gcmd.error(
+                "KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)
+                )from e.with_traceback(e.__traceback__)
 
     cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = (
         "Turns off all heaters and saves changes made to be resumed by "
@@ -824,7 +826,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     ###########################################
     # DEBUGGING                               #
     ###########################################
-    def cmd_KTC_DEBUG_HEATERS(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_DEBUG_HEATERS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
         self.log.always("KTC Debugging Heaters:")
         for heater in self.all_heaters.values():
             self.log.always(
@@ -833,13 +835,17 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 + f"- Standby temp: {heater.standby_temp}\n"
                 + f"- Active to Standby delay: {heater.active_to_standby_delay}\n"
                 + f"- Standby to Powerdown delay: {heater.standby_to_powerdown_delay}\n"
-                + f"- Timer Active to Standby counting: {heater.timer_heater_active_to_standby_delay.counting_down}\n"
-                + f"- Timer Active to Standby duration: {heater.timer_heater_active_to_standby_delay.duration}\n"
-                + f"- Timer Standby to Powerdown counting: {heater.timer_heater_standby_to_powerdown_delay.counting_down}\n"
-                + f"- Timer Standby to Powerdown duration: {heater.timer_heater_standby_to_powerdown_delay.duration}"
+                + "- Timer Active to Standby counting: "
+                + f"{heater.timer_heater_active_to_standby_delay.counting_down}\n"
+                + "- Timer Active to Standby duration: "
+                + f"{heater.timer_heater_active_to_standby_delay.duration}\n"
+                + "- Timer Standby to Powerdown counting: "
+                + f"{heater.timer_heater_standby_to_powerdown_delay.counting_down}\n"
+                + "- Timer Standby to Powerdown duration: "
+                + f"{heater.timer_heater_standby_to_powerdown_delay.duration}"
             )
 
-    def cmd_KTC_DEBUG_TOOLS(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_DEBUG_TOOLS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
         self.log.always("KTC Debugging Heaters:")
         for tool in self.all_tools.values():
             if tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
