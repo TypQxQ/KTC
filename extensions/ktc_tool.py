@@ -21,8 +21,6 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_toolchanger
 
-    # from . import ktc_persisting
-
 class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     """Class for a single tool in the toolchanger"""
 
@@ -62,12 +60,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
     @KtcBaseToolClass.state.setter
     def state(self, value):
         super(KtcBaseToolClass, type(self)).state.fset(self, value) # type: ignore
-        # super().state = value
-        # Here because not log object in KtCBaseToolClass and
-        # TOOL_NONE and TOOL_UNKNOWN do not get error state.
-        if value == self.StateType.ERROR:
-            self.log.always("KTC Tool %s is now in error state." % self.name)
-
 
     def configure_inherited_params(self):
         # If this is TOOL_NONE or TOOL_UNKNOWN.
@@ -186,7 +178,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 raise self.config.error(
                     ("tool_select_gcode has not changed the state while running "
                     + "code in tool_select_gcode. Use for example "
-                    + "'KTC_SET_TOOL_STATE TOOL={myself.name} STATE=SELECTED' to "
+                    + "'KTC_TOOL_SET_STATE TOOL={myself.name} STATE=SELECTED' to "
                     + "indicate it is selected successfully. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -249,7 +241,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 raise self.config.error(
                     ("tool_deselect_gcode has not changed the state while running "
                     + "code in tool_select_gcode. Use for example "
-                    + "'KTC_SET_TOOL_STATE TOOL={myself.name} STATE=SELECTED' to "
+                    + "'KTC_TOOL_SET_STATE TOOL={myself.name} STATE=SELECTED' to "
                     + "indicate it is selected successfully. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -289,30 +281,30 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         return return_list
 
-    def set_offset(self, **kwargs):
-        for arg, value in kwargs.items():
-            if arg == "x_pos":
-                self.offset[0] = float(value)
-            elif arg == "x_adjust":
-                self.offset[0] += float(value)
-            elif arg == "y_pos":
-                self.offset[1] = float(value)
-            elif arg == "y_adjust":
-                self.offset[1] += float(value)
-            elif arg == "z_pos":
-                self.offset[2] = float(value)
-            elif arg == "z_adjust":
-                self.offset[2] += float(value)
+    # def set_offset(self, **kwargs):
+    #     for arg, value in kwargs.items():
+    #         if arg == "x_pos":
+    #             self.offset[0] = float(value)
+    #         elif arg == "x_adjust":
+    #             self.offset[0] += float(value)
+    #         elif arg == "y_pos":
+    #             self.offset[1] = float(value)
+    #         elif arg == "y_adjust":
+    #             self.offset[1] += float(value)
+    #         elif arg == "z_pos":
+    #             self.offset[2] = float(value)
+    #         elif arg == "z_adjust":
+    #             self.offset[2] += float(value)
 
-        self.log.always(
-            "ktc_tool %s offset now set to: %f, %f, %f."
-            % (
-                self.name,
-                float(self.offset[0]),
-                float(self.offset[1]),
-                float(self.offset[2]),
-            )
-        )
+    #     self.log.always(
+    #         "ktc_tool %s offset now set to: %f, %f, %f."
+    #         % (
+    #             self.name,
+    #             float(self.offset[0]),
+    #             float(self.offset[1]),
+    #             float(self.offset[2]),
+    #         )
+    #     )
 
     def set_heaters(self, **kwargs) -> None:
         if len(self.extruder.heaters) < 1:
@@ -325,12 +317,10 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                        f"{self.extruder.state}. {self.extruder.active_temp}*C, " +
                        f"{self.extruder.standby_temp}*C")
 
-        # TODO: Check that we get the right heater.
-        curtime = self.printer.get_reactor().monotonic()
         changing_timer = False
         ex = self.extruder
 
-        if self in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
+        if self in self.INVALID_TOOLS:
             self.log.always("KTC Tool %s is not a valid tool to set heaters for." % self.name)
             return
 

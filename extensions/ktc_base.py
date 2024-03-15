@@ -231,7 +231,7 @@ class KtcBaseClass:
             try:
                 value : str = config.get(option)
                 # Boolean:
-                if value.lower().strip() in ["true", "false"]:
+                if value.lower().strip() in ("true", "false"):
                     result[option] = config.getboolean(option)
                 # Integer:
                 elif value.replace("-", "").replace(" ", "").isdigit():
@@ -396,8 +396,12 @@ class KtcBaseToolClass(KtcBaseClass):
             self.toolchanger.selected_tool = self   # type: ignore # Child class
             self._ktc.active_tool = self
 
-    def set_offset(self, **kwargs):
-        '''Set the offset of the tool.'''
+        if value == self.StateType.ERROR:
+            self.log.always("KTC Tool %s is now in error state." % self.name)
+
+
+    # def set_offset(self, **kwargs):
+    #     '''Set the offset of the tool.'''
 
     def select(self, final_selected=False):
         pass
@@ -406,7 +410,8 @@ class KtcBaseToolClass(KtcBaseClass):
         pass
 
 class KtcConstantsClass:
-    '''Constants for KTC. These are to be inherited by other classes.'''
+    '''Constants for KTC. These are to be inherited by other classes.
+    '''
     # Value of Unknown and None tools are set in module scope.
     TOOL_NUMBERLESS_N = TOOL_NUMBERLESS_N
     TOOL_UNKNOWN_N = TOOL_UNKNOWN_N
@@ -422,3 +427,4 @@ class KtcConstantsClass:
                          number=TOOL_NONE_N,
                          config = None))         # type: ignore
     TOOL_NONE._state = TOOL_UNKNOWN._state = KtcBaseClass.StateType.CONFIGURED  # pylint: disable=protected-access
+    INVALID_TOOLS = (TOOL_UNKNOWN, TOOL_NONE, None)

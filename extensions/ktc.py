@@ -123,7 +123,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_SET_TOOL_OFFSET",
             "KTC_APPLY_GCODE_OFFSET",  # Maybe remove?
             "KTC_SET_STATE",
-            "KTC_SET_TOOL_STATE",
+            "KTC_TOOL_SET_STATE",
             "KTC_TOOLCHANGER_SET_STATE",
             "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
             "KTC_SET_ACTIVE_TOOL",
@@ -252,10 +252,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         for tc in self.all_toolchangers.values():
             self._tools_having_tc[tc.parent_tool] = tc
-            for tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
+            for tool in (self.TOOL_NONE, self.TOOL_UNKNOWN):
                 self.all_tools[tool.name] = tool
 
-        for tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
+        for tool in (self.TOOL_NONE, self.TOOL_UNKNOWN):
             self.all_tools[tool.name] = tool
 
     def _register_tool_gcode_commands(self):
@@ -273,9 +273,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                     "Select tool " + tool.name + " with number " + str(tool.number),
                 )
         # Get all toolnumbers from self._registered_toolnumbers that are not in new_toolnumbers.
-        for toolnumber in [
+        for toolnumber in (
             x for x in self._registered_toolnumbers if x not in new_toolnumbers
-        ]:
+        ):
             self.gcode.register_command("KTC_T" + str(toolnumber), None)
 
     def _recursive_configure_inherited_attributes(
@@ -283,9 +283,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     ):
         """Recursively configure inherited parameters for all toolchangers and tools."""
         tc.configure_inherited_params()
-        for tool in [
+        for tool in (
             tool for tool in tc.tools.values() if tool.toolchanger is not None
-        ]:
+        ):
             tool.configure_inherited_params()
             # If this tool is a parent for a toolchanger
             if tool in self._tools_having_tc:
@@ -305,9 +305,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             tc.initialize()
 
         # Check if any toolchangers exist on next level and run this method for them.
-        for tool in [
+        for tool in (
             tool for tool in tc.tools.values() if tool in self._tools_having_tc
-        ]:
+        ):
             self._recursive_initialize_toolchangers(
                 self._tools_having_tc[tool], init_mode
             )
@@ -395,24 +395,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         except Exception as e:
             raise gcmd.error("Error setting toolchanger state: %s" % str(e)) from e
 
-    cmd_KTC_SET_TOOL_STATE_help = (
+    cmd_KTC_TOOL_SET_STATE_help = (
         "Set the state of the toolchanger.\n"
         + " [TOOL: Tool_name] or [T: Tool_number]\n"
         + " [STATE: STATE.ERROR]"
     )
 
-    def cmd_KTC_SET_TOOL_STATE(
+    def cmd_KTC_TOOL_SET_STATE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
         value = gcmd.get("STATE", None)
         if value is None:
             raise self.printer.command_error(
-                "KTC_SET_TOOL_STATE: No STATE specified for tool: %s." % str(tool.name)
+                "KTC_TOOL_SET_STATE: No STATE specified for tool: %s." % str(tool.name)
             )
         elif value not in self.StateType.__members__:
             raise self.printer.command_error(
-                f"KTC_SET_TOOL_STATE: Invalid STATE: {value}."
+                f"KTC_TOOL_SET_STATE: Invalid STATE: {value}."
                 + f" Valid states are: {self.StateType.__members__}"
             )
         tool: "ktc_tool.KtcTool" = self.printer.lookup_object(
@@ -441,7 +441,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         tool = self.get_tool_from_gcmd(gcmd)
         toolchanger = self.get_toolchanger_from_gcmd(gcmd)
         if (
-            tool not in [self.TOOL_UNKNOWN, self.TOOL_NONE]
+            tool not in self.INVALID_TOOLS
             and tool.name not in toolchanger.tools
         ):
             raise self.printer.command_error(
@@ -514,9 +514,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.active_tool.deselect(force_unload=True)
 
         try:
-
+            # Traverse all tools and deselect them from the deepest towards the top.
             def deselect(tool: "ktc_tool.KtcTool"):
-                if tool != self.TOOL_NONE and tool != self.TOOL_UNKNOWN:
+                if tool not in self.INVALID_TOOLS:
                     if tool.state == self.StateType.SELECTED:
                         tool.deselect(force_unload=True)
 
@@ -765,7 +765,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             raise Exception("resume_all_tool_heaters: Error: %s" % str(e)) from e
 
     def offset_from_gcmd(self, gcmd: "gcode.GCodeCommand", offset: list) -> list[float]:
-        for axis in ["X", "Y", "Z"]:
+        for axis in ("X", "Y", "Z"):
             pos = gcmd.get_float(axis, None)
             adjust = gcmd.get_float(axis + "_ADJUST", None)
             if pos is not None:
@@ -811,7 +811,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         param_move = self.parse_bool(gcmd.get("MOVE", "0"))
         run_script = "SET_GCODE_OFFSET "
-        for axis in ["X", "Y", "Z"]:
+        for axis in ("X", "Y", "Z"):
             offset = 0.0
             if tool.offset[XYZ_TO_INDEX[axis]] is not None:
                 offset += tool.offset[XYZ_TO_INDEX[axis]]
@@ -848,23 +848,25 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_DEBUG_TOOLS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
         self.log.always("KTC Debugging Heaters:")
         for tool in self.all_tools.values():
-            if tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
+            if tool in self.INVALID_TOOLS:
                 continue
-            ActiveTime = self.log.tool_stats[tool.name].start_time_heater_active
-            StandbyTime = self.log.tool_stats[tool.name].start_time_heater_standby
-            SelectedTime = self.log.tool_stats[tool.name].start_time_selected
-            TimeSelecting = self.log.tool_stats[tool.name].start_time_spent_selecting
-            TimeDeselecting = self.log.tool_stats[tool.name].start_time_spent_deselecting
-            ExtruderState = tool.extruder.state
+            active_time = self.log.tool_stats[tool.name].start_time_heater_active
+            standby_time = self.log.tool_stats[tool.name].start_time_heater_standby
+            selected_time = self.log.tool_stats[tool.name].start_time_selected
+            time_selecting = self.log.tool_stats[tool.name].start_time_spent_selecting
+            time_deselecting = self.log.tool_stats[tool.name].start_time_spent_deselecting
+            extruder_state = tool.extruder.state
 
-            if ActiveTime or StandbyTime or SelectedTime or TimeSelecting or TimeDeselecting or ExtruderState != HeaterStateType.OFF:
+            if ( active_time or standby_time or selected_time or
+                time_selecting or time_deselecting or
+                extruder_state != HeaterStateType.OFF):
                 self.log.always(
                     f"{tool.name}:\n" +
-                    f"- Active time: {ActiveTime}\n" +
-                    f"- Standby time: {StandbyTime}\n" +
-                    f"- Selected time: {SelectedTime}\n" +
-                    f"- Time spent selecting: {TimeSelecting}\n" +
-                    f"- Time spent deselecting: {TimeDeselecting}\n" +
+                    f"- Active time: {active_time}\n" +
+                    f"- Standby time: {standby_time}\n" +
+                    f"- Selected time: {selected_time}\n" +
+                    f"- Time spent selecting: {time_selecting}\n" +
+                    f"- Time spent deselecting: {time_deselecting}\n" +
                     f"- state: {tool.state}\n" +
                     f"- extruder state: {tool.extruder.state}\n"
                 )

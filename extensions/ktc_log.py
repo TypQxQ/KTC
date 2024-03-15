@@ -604,7 +604,7 @@ class KtcLog:
 
     def track_heater_active_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
         for tool in self._ktc.all_tools.values():
-            if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+            if tool not in (self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None):
                 # self.debug(
                 #     "track_heater_active_end_for_tools_having_heater: "
                 #     + f"Heater: {heater.name}: Tool: {tool.name} .start_time_heater_active: "
@@ -626,8 +626,9 @@ class KtcLog:
         '''Called when a tool changes state to active. 
         Will call active end for all other tools having any of the same heaters and
         having running active timers.'''
+        invalid_tools = (tool_still_active, self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None)
         for tool in tool_still_active._ktc.all_tools.values():  # pylint: disable=protected-access
-            if tool not in [tool_still_active, self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+            if tool not in invalid_tools:
                 if self.tool_stats[tool.name].start_time_heater_active:
                     for heater_name in tool.extruder.heater_names():
                         if heater_name in tool_still_active.extruder.heater_names():
@@ -641,7 +642,7 @@ class KtcLog:
         self, heater: 'ktc_heater.KtcHeater'):
         '''Called by the HeaterTimer when the heater is set to standby.'''
         for tool in self._ktc.all_tools.values():
-            if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+            if tool not in self._ktc.INVALID_TOOLS:
                 # self.debug(
                 #     "track_heater_standby_start_for_standby_tools_having_heater: "
                 #     + f"Tool: {tool.name} .extruder.state: {tool.extruder.state}")
@@ -663,7 +664,7 @@ class KtcLog:
     def track_heater_end_for_tools_having_heater(self, heater: 'ktc_heater.KtcHeater'):
         '''Called by the HeaterTimer when the heater is set to off.'''
         for tool in self._ktc.all_tools.values():
-            if tool not in [self._ktc.TOOL_NONE, self._ktc.TOOL_UNKNOWN, None]:
+            if tool not in self._ktc.INVALID_TOOLS:
                 if self.tool_stats[tool.name].start_time_heater_standby:
                     if heater.name in tool.extruder.heater_names():
                         if self.tool_stats[tool.name].start_time_heater_standby:

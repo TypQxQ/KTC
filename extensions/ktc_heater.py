@@ -31,11 +31,11 @@ class HeaterStateType(IntEnum):
     def parse_heater_state(cls, state: str):
         state = str(state).strip()
         if state is not None:
-            if state.lower() in ["0", "off"]:
+            if state.lower() in ("0", "off"):
                 return cls.OFF
-            elif state.lower() in ["1", "standby"]:
+            elif state.lower() in ("1", "standby"):
                 return cls.STANDBY
-            elif state.lower() in ["2", "active"]:
+            elif state.lower() in("2", "active"):
                 return cls.ACTIVE
             else:
                 raise ValueError(
@@ -91,7 +91,7 @@ class KtcToolExtruder:
         self.heaters: list["KtcHeaterSettings"] = []
         # dataclasses.field(default_factory=list)
 
-        if tool.name not in ["tool_unknown", "tool_none"]:
+        if tool.name not in ("tool_unknown", "tool_none"):
             self._ktc = tool._ktc
 
     def heater_names(self) -> list[str]:
@@ -122,12 +122,14 @@ class KtcToolExtruder:
 
         # For STANDY and OFF, check if the heater is active on another tool.
         heaters_active_with_other_tool: list[str] = []
-        for tool in self._tool._ktc.all_tools.values():
-            if tool not in [
+        invalid_tools = (
                 self._tool,
                 self._tool._ktc.TOOL_NONE,
                 self._tool._ktc.TOOL_UNKNOWN,
-            ]:
+                None,
+            )
+        for tool in self._tool._ktc.all_tools.values():
+            if tool not in invalid_tools:
                 if tool.extruder.state == HeaterStateType.ACTIVE:
                     heaters_active_with_other_tool.extend(tool.extruder.heater_names())
 
