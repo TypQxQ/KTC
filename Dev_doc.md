@@ -267,7 +267,7 @@ final_selected
 
 # To try to keep terms apart:
 Inheritance: tool <- inheriting_tool <- toolchanger <- tool <-  inheriting_tool <- toolchanger <- ktc
-
+- Add T# macros if option (default) is True. Do trough adding a gcodemacro object and rename any existing. Maybe renaming to random number, recursive until not already existing.
 Each tool has a id (name) (ktc_tool name) and a nr.
 
 # Select: Tool is selected and loaded for use, be it a physical or a virtual on physical.
@@ -282,7 +282,8 @@ Maybe delete?
 # ToolUnLock: Toollock is disengaged and tool is free.
 
 ## TESTS TO DO
-# Check if TOOL_UNKNOWN is active if it raises error when selecting another tool.
+- Check if it selects previous tool for deselecting a tool that needs tool selected.
+- If T0 -> T11 -> Deselect_all should: Deselect T11, select T20, deselect T0, deselect T20.
 
 class ktc_MeanLayerTime:
     def __init__(self, printer):
@@ -299,3 +300,13 @@ class ktc_MeanLayerTime:
 - Extruder -> heater_collection (HeaterCollectionWrapper)
 
 - Add context as constants that are inherited. Add a ktc._run_gcode_from_context()
+
+- Idea for preprocessing to get time of toolchange is using a module that has a opiton named time before ToolChange.
+    - CMD in GCODE before waiting for bed to reach temperature.
+    - The cmd is searching for T# commands that do toolchange.
+    - Parse chunks of rows before T# and see how much time it takes.
+        - If takes less than option above then add a chunk, but not more than untill previous T#.
+        - If takes more than option above then note row and have T# heat up when gcode file has been run past that command.
+        - Check line once a second or twice a second, configurable.
+-Maybe using something from:
+    https://github.com/Annex-Engineering/klipper_estimator

@@ -127,9 +127,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_TOOLCHANGER_SET_STATE",
             "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
             "KTC_SET_ACTIVE_TOOL",
-            # "KTC_SAVE_POSITION",
-            # "KTC_SAVE_CURRENT_POSITION",
-            # "KTC_RESTORE_POSITION",
             "KTC_TOOLCHANGER_ENGAGE",
             "KTC_TOOLCHANGER_DISENGAGE",
             "KTC_SET_ALL_TOOL_HEATERS_OFF",
@@ -137,6 +134,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_TOOLCHANGER_INITIALIZE",
             "KTC_DISPLAY_TOOLS",
             "KTC_MAP_TOOL",
+            "KTC_DEBUG_HEATERS",
+            "KTC_DEBUG_TOOLS",
         ]
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)
@@ -821,6 +820,48 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
         self.gcode.run_script_from_command(run_script)
+
+    ###########################################
+    # DEBUGGING                               #
+    ###########################################
+    def cmd_KTC_DEBUG_HEATERS(self, gcmd):  # pylint: disable=invalid-name
+        self.log.always("KTC Debugging Heaters:")
+        for heater in self.all_heaters.values():
+            self.log.always(
+                f"{heater.name}: {heater.state}\n"
+                + f"- Active temp: {heater.heater_active_temp}\n"
+                + f"- Standby temp: {heater.standby_temp}\n"
+                + f"- Active to Standby delay: {heater.active_to_standby_delay}\n"
+                + f"- Standby to Powerdown delay: {heater.standby_to_powerdown_delay}\n"
+                + f"- Timer Active to Standby counting: {heater.timer_heater_active_to_standby_delay.counting_down}\n"
+                + f"- Timer Active to Standby duration: {heater.timer_heater_active_to_standby_delay.duration}\n"
+                + f"- Timer Standby to Powerdown counting: {heater.timer_heater_standby_to_powerdown_delay.counting_down}\n"
+                + f"- Timer Standby to Powerdown duration: {heater.timer_heater_standby_to_powerdown_delay.duration}"
+            )
+
+    def cmd_KTC_DEBUG_TOOLS(self, gcmd):  # pylint: disable=invalid-name
+        self.log.always("KTC Debugging Heaters:")
+        for tool in self.all_tools.values():
+            if tool in [self.TOOL_NONE, self.TOOL_UNKNOWN]:
+                continue
+            ActiveTime = self.log.tool_stats[tool.name].start_time_heater_active
+            StandbyTime = self.log.tool_stats[tool.name].start_time_heater_standby
+            SelectedTime = self.log.tool_stats[tool.name].start_time_selected
+            TimeSelecting = self.log.tool_stats[tool.name].start_time_spent_selecting
+            TimeDeselecting = self.log.tool_stats[tool.name].start_time_spent_deselecting
+            ExtruderState = tool.extruder.state
+
+            if ActiveTime or StandbyTime or SelectedTime or TimeSelecting or TimeDeselecting or ExtruderState != HeaterStateType.OFF:
+                self.log.always(
+                    f"{tool.name}:\n" +
+                    f"- Active time: {ActiveTime}\n" +
+                    f"- Standby time: {StandbyTime}\n" +
+                    f"- Selected time: {SelectedTime}\n" +
+                    f"- Time spent selecting: {TimeSelecting}\n" +
+                    f"- Time spent deselecting: {TimeDeselecting}\n" +
+                    f"- state: {tool.state}\n" +
+                    f"- extruder state: {tool.extruder.state}\n"
+                )
 
     ###########################################
     # TOOL REMAPING                           #

@@ -116,7 +116,7 @@ class KtcToolExtruder:
             self._tool._ktc.log.track_heater_active_start(self._tool)
             return
 
-        # For any other state check if the heater is active on another tool first
+        # For STANDY and OFF, check if the heater is active on another tool.
         heaters_active_with_other_tool: list[str] = []
         for tool in self._tool._ktc.all_tools.values():
             if tool not in [self._tool, self._tool._ktc.TOOL_NONE, self._tool._ktc.TOOL_UNKNOWN]:
@@ -141,6 +141,13 @@ class KtcToolExtruder:
                     self._tool._ktc.all_heaters[hs.name].standby_to_powerdown_delay = \
                         self.standby_to_powerdown_delay
                 self._tool._ktc.all_heaters[hs.name].state = value
+            else:
+                # Can't track standby for tool if heater is in active state on another tool.
+                self._tool._ktc.log.trace(
+                    f"Tool {self._tool.name} has heater {hs.name} active on another tool. ")
+                self._tool._ktc.log.track_heater_active_end(self._tool)
+                self._tool._ktc.log.track_heater_standby_end(self._tool)
+                self._state = HeaterStateType.OFF
 
     @property
     def active_temp(self):
