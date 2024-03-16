@@ -104,6 +104,10 @@ class KtcToolExtruder:
     @state.setter
     def state(self, value: HeaterStateType):
         self._state = value
+        self._tool._ktc.log.trace(
+            f"In extr. Setting heater state to {value} "
+            + f"for tool {self._tool.name}"
+        )
 
         # Allways set active state on all heaters
         if value == HeaterStateType.ACTIVE:
@@ -310,9 +314,13 @@ class KtcHeater:
 
     @state.setter
     def state(self, value: HeaterStateType) -> None:
-        """Set the state of the heater. 0=OFF, 1=STANDBY, 2=ACTIVE.
+        """Set the state of the heater. The state can be OFF, STANDBY or ACTIVE.
         Disregard the previous state.
         Restart the timers if the state is changed to STANDBY."""
+        self.printer.lookup_object("ktc_log").trace(
+            f"In heater.state.setter. Setting heater state to {value} for heater {self.name}"
+        )
+
         set_timer_to_standby = self.timer_heater_active_to_standby_delay.set_timer
         set_timer_to_powerdown = self.timer_heater_standby_to_powerdown_delay.set_timer
 
@@ -323,9 +331,9 @@ class KtcHeater:
             self.printer.lookup_object("ktc_log").trace(
                 f"Setting heater state to ACTIVE for heater {self.name}"
                 + f" with klippy heater {self.klippy_heater.name}"
-                + f" and heater_active_temp {self._heater_active_temp}"
+                + f" and heater_active_temp {self.heater_active_temp}"
             )
-            self.klippy_heater.set_temp(self._heater_active_temp)
+            self.klippy_heater.set_temp(self.heater_active_temp)
         elif value == HeaterStateType.STANDBY:
             if self._state != HeaterStateType.ACTIVE:
                 self.printer.lookup_object("ktc_log").trace(
@@ -361,7 +369,7 @@ class KtcHeater:
     def heater_active_temp(self, value):
         self._heater_active_temp = value if value > 0 else 0
         if self.state == HeaterStateType.ACTIVE:
-            self.klippy_heater.set_temp(value)
+            self.klippy_heater.set_temp(self._heater_active_temp)
 
     @property
     def standby_temp(self):
@@ -374,7 +382,7 @@ class KtcHeater:
             self.state == HeaterStateType.STANDBY
             and not self.timer_heater_active_to_standby_delay.counting_down
         ):
-            self.klippy_heater.set_temp(value)
+            self.klippy_heater.set_temp(self._standby_temp)
 
 
 class KtcHeaterTimer:

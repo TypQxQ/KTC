@@ -9,6 +9,7 @@
 #
 from __future__ import annotations
 import ast, typing, re
+import cProfile, pstats, io
 from enum import IntEnum, Enum
 from .ktc_heater import (   # pylint: disable=relative-beyond-top-level
     KtcToolExtruder,
@@ -72,6 +73,12 @@ class KtcBaseClass:
     def __init__(self, config: "configfile.ConfigWrapper"): # type: ignore
         self.config = typing.cast('configfile.ConfigWrapper', config)
         self.name: str = ""
+
+        # TODO: Remove this after testing.
+        #: To store performance data on startup for later logging.
+        self.init_profile:str = None    # type: ignore
+
+        self.debug_with_profile: bool = False
 
         # Can contain "X", "Y", "Z" or a combination.
         self.requires_axis_homed: str = ""
@@ -190,6 +197,10 @@ class KtcBaseClass:
         self._ktc = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc"))
         self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object(
             "ktc_log"))  # Load the log object.
+
+        # TODO: Remove this after testing.
+        if self.init_profile is not None:
+            self.log.trace("KTC startup profile: " + str(self.init_profile))
 
         self.state = self.StateType.CONFIGURING
 
@@ -358,6 +369,34 @@ class KtcBaseClass:
             return bool(int(value))
         return value.strip().lower() in ("true", "1", "yes")
 
+    def run_with_profile(self, method, *args, **kwargs):
+        '''Run a profile on a method. Used for debugging.'''
+        if not self.run_with_profile:
+            method(*args, **kwargs)
+            return
+        pr = cProfile.Profile()
+        pr.enable()
+        method(*args, **kwargs)
+        pr.disable()
+        s = io.StringIO()
+        ps = pstats.Stats(pr, stream=s).sort_stats('cumulative')
+        ps.print_stats()
+        stats_string = s.getvalue()
+        s.close()
+
+        # Trim to 20 lines.
+        carriage_return_count = stats_string.count('\n')
+        if carriage_return_count >= 20:
+            index = -1
+            for _ in range(20):
+                index = stats_string.find('\n', index + 1)
+            # index now contains the index of the 10th carriage return
+        else:
+            index = len(stats_string) - 1
+
+        self.log.trace(
+            f"Performance profile for {method.__name__}:\n" + stats_string[:index])
+
 class KtcBaseChangerClass(KtcBaseClass):
     '''Base class for toolchangers. Contains common methods and properties.'''
     def __init__(self, config: 'configfile.ConfigWrapper'):
@@ -385,11 +424,13 @@ class KtcBaseToolClass(KtcBaseClass):
 
     @KtcBaseClass.state.setter
     def state(self, value):
-        '''Having it here also applies for TOOL_UNKNOWN and TOOL_NONE state.'''
+        '''Set state of the tool. If the tool is selected or active then the toolchanger
+        is also set to the same state.'''
         super(KtcBaseToolClass, type(self)).state.fset(self, value) # type: ignore
 
         # TOOL_UNKNOWN and TOOL_NONE has no _ktc object.
-        if hasattr(self, "_ktc") is False:
+        if self in KtcConstantsClass.INVALID_TOOLS:
+        # if not hasattr(self, "_ktc"):
             return
 
         if self._ktc.propagate_state:
@@ -403,10 +444,6 @@ class KtcBaseToolClass(KtcBaseClass):
 
         if value == self.StateType.ERROR:
             self.log.always("KTC Tool %s is now in error state." % self.name)
-
-
-    # def set_offset(self, **kwargs):
-    #     '''Set the offset of the tool.'''
 
     def select(self, final_selected=False):
         pass

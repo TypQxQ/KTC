@@ -48,7 +48,7 @@ class KtcLog:
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self._handle_connect)
-        self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
+        self.printer.register_event_handler("klippy:disconnect", self._handle_disconnect)
         self.printer.register_event_handler("klippy:ready", self._handle_ready)
 
         # Read and load configuration
@@ -88,7 +88,7 @@ class KtcLog:
     def _handle_connect(self):
         '''Handle the connect event. This is called when the printer connects to Klipper.'''
         self._ktc = typing.cast('ktc.Ktc', self.printer.lookup_object("ktc"))
-        
+
         # Load the persistent variables object here to avoid circular dependencies
         self._ktc_persistent = typing.cast(      # pylint: disable=attribute-defined-outside-init
             'ktc_persisting.KtcPersisting', self.printer.lookup_object( "ktc_persisting"))
@@ -120,8 +120,11 @@ class KtcLog:
         """Handle the ready event. This is called when the printer is ready to receive commands."""
         self.always("KTC Log Ready")
 
-    def handle_disconnect(self):
+    def _handle_disconnect(self):
         """Handle the disconnect event. This is called when the printer disconnects from Klipper."""
+        self.always("Klipper disconnected! Closing KTC log.")
+        if self.queue_listener:
+            self.queue_listener.stop()
         if self._ktc_persistent is not None:
             self._ktc_persistent.disconnect()  # Close the persistent variables file
 
@@ -669,14 +672,15 @@ class KtcLog:
                     if heater.name in tool.extruder.heater_names():
                         if self.tool_stats[tool.name].start_time_heater_standby:
                             self.debug(
-                                f"track_heater_end_for_tools_having_heater: "
-                                + f"Heater: {heater.name}: Standby end called for tool: {tool.name}")
+                                "track_heater_end_for_tools_having_heater: "
+                                + f"Heater: {heater.name}: Standby end called "
+                                + "for tool: {tool.name}")
                             self.track_heater_standby_end(tool)
                 if self.tool_stats[tool.name].start_time_heater_active:
                     if heater.name in tool.extruder.heater_names():
                         if self.tool_stats[tool.name].start_time_heater_active:
                             self.debug(
-                                f"track_heater_end_for_tools_having_heater: "
+                                "track_heater_end_for_tools_having_heater: "
                                 + f"Heater: {heater.name}: Active end called for tool: {tool.name}")
                             self.track_heater_active_end(tool)
 
@@ -714,8 +718,9 @@ class KtcLog:
             # TODO Delete when confirmed working
             self.debug(
                 f"increase_tool_time_diff for Tool: {tool.name}.{final_time_key}: "
-                + f"start_time: {start_time}, self.tool_stats[tool.name].start_time: "
-                + f"{getattr(self.tool_stats[tool.name], 'start_' + final_time_key, 'Not found')}"
+                + f"start_time: {start_time}"
+                + f", time_spent: {self.seconds_to_human_string(time_spent)}"
+                + f", final_time: {self.seconds_to_human_string(final_time)}"
                 )
 
             setattr(self.tool_stats[tool.name], "start_" + final_time_key, 0)

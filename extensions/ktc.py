@@ -7,6 +7,7 @@
 #
 from __future__ import annotations
 import typing
+import cProfile, pstats, io
 
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
 from .ktc_base import (
@@ -45,7 +46,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def __init__(self, config: "configfile.ConfigWrapper"):
         super().__init__(config)
 
-        self.propagate_state = config.getboolean("propagate_state", True)  # type: ignore
+        #: If True, will propagate the state of the tool to the toolchanger.
+        self.propagate_state = typing.cast(bool, config.getboolean("propagate_state", True))  # type: ignore
+        #: If True, will run with cProfile and log the stats to ktc.log.
+        self.debug_with_profile = typing.cast(bool, config.getboolean("debug_with_profile", False))  # type: ignore
 
         ############################
         # Load the persistent variables object
@@ -106,13 +110,14 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         ############################
         # Configure default toolchanger and tools
-        self._config_default_toolchanger()
-        self._config_tools()
+        self.run_with_profile(self._config_default_toolchanger)
+        self.run_with_profile(self._config_tools)
 
         ############################
         # Configure inherited parameters
-        self.configure_inherited_params()
-        self._recursive_configure_inherited_attributes(self.default_toolchanger)
+        self.run_with_profile(self.configure_inherited_params)
+        self.run_with_profile(
+            self._recursive_configure_inherited_attributes, self.default_toolchanger)
 
         # Control that all tools and toolchangers are configured.
         if self.state < self.StateType.CONFIGURED:
@@ -1064,4 +1069,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 )
 
 def load_config(config):
+    # prof = cProfile.Profile()
+
+    # retval = prof.runcall(Ktc, config)
+
+    # output = io.StringIO()
+    # stats = pstats.Stats(prof, stream=output).sort_stats('cumtime')
+    # stats.print_stats()
+    # stats_string = output.getvalue()
+    # output.close()
+    # carriage_return_count = stats_string.count('\n')
+    # if carriage_return_count >= 20:
+    #     index = -1
+    #     for _ in range(20):
+    #         index = stats_string.find('\n', index + 1)
+    #     # index now contains the index of the 10th carriage return
+    # else:
+    #     index = len(stats_string) - 1
+    # retval.init_profile = stats_string[:index]
+
+    # return retval
     return Ktc(config)

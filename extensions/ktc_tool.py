@@ -128,7 +128,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 # Put all other active heaters in standby.
                 for heater in ( heater for heater in self._ktc.all_heaters.values()
                                 if heater.state == HeaterStateType.ACTIVE
-                                and heater not in self.extruder.heaters):
+                                and heater.name not in self.extruder.heater_names()):
                     heater.state = HeaterStateType.STANDBY
 
                 # If another tool is selected it needs to be deselected first.
@@ -226,6 +226,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.log.track_tool_deselecting_start(self)
             self.log.tool_stats[self.name].deselects_started += 1
 
+            # TODO: Change to Python
             # Turn off fan if has a fan.
             for fan in self.fans:
                 self.gcode.run_script_from_command(

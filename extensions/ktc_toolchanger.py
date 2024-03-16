@@ -8,6 +8,7 @@
 
 # from enum import unique
 import typing
+# import cProfile, pstats
 from enum import unique
 from .ktc_base import KtcConstantsClass, KtcBaseChangerClass, KtcConfigurableEnum # pylint: disable=relative-beyond-top-level
 
@@ -17,6 +18,7 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
     from . import ktc_persisting, ktc_tool
 
+@typing.final
 class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
     """Class initialized for each toolchanger.
     At least one toolchanger will be initialized for each printer.
@@ -55,6 +57,8 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
     @selected_tool.setter
     def selected_tool(self, value: 'ktc_tool.KtcTool'):
+        if self._selected_tool == value:
+            return
         self._selected_tool = value
         self.persistent_state = {"selected_tool": value.name}
 
@@ -249,7 +253,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         if self._ktc.propagate_state:
             self._ktc.state = value
 
-        if value == self.StateType.ENGAGING or value == self.StateType.DISENGAGING:
+        if value == self.StateType.ENGAGING:
             self.selected_tool = self.TOOL_UNKNOWN
         elif value == self.StateType.READY:
             self.selected_tool = self.TOOL_NONE
@@ -292,4 +296,25 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 def load_config_prefix(config):
     """Load the toolchanger object with the given config.
     This is called by Klipper to initialize the toolchanger object."""
+    # prof = cProfile.Profile()
+
+    # retval = prof.runcall(KtcToolchanger, config)
+
+    # output = io.StringIO()
+    # stats = pstats.Stats(prof, stream=output).sort_stats('cumtime')
+    # stats.print_stats()
+    # stats_string = output.getvalue()
+    # output.close()
+    # carriage_return_count = stats_string.count('\n')
+    # if carriage_return_count >= 20:
+    #     index = -1
+    #     for _ in range(20):
+    #         index = stats_string.find('\n', index + 1)
+    #     # index now contains the index of the 10th carriage return
+    # else:
+    #     index = len(stats_string) - 1
+    # retval.init_profile = stats_string[:index]
+
+    # return retval
+
     return KtcToolchanger(config)
