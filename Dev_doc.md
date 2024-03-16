@@ -75,7 +75,7 @@ When selecting tool, check if heater changes.
 - standby_to_powerdown_time = 0.1:     Seconds to wait when a tool has been deselected, before changing temperature on heater to standy temperature. 0.1 is a tenth of a second.
 Use something like  86400 to wait 24h if you want to run indefinitly.
 - heater_standby_to_powerdown_delay = 0.2: As above but from active to off.
-- init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to overwrite to other value. Or use the KTC_SET_TOOL_OFFSET GCode command.
+- init_offset = "":     Toolhead offset. If not set anywhere, will default to "0.0,0.0,0.0". Must be deleted after the value has been read once. Can be put in again to overwrite to other value. Or use the KTC_TOOL_OFFSET_SAVE GCode command.
 - force_deselect_when_parent_deselects = True: 
     Does nothing for tools on default toolchanger.
     When deselecting the parent tool, deselect this tool first. Otherwise it will be left
@@ -281,13 +281,6 @@ Each tool has a id (name) (ktc_tool name) and a nr.
     When a child tool is selected it will be active on it's toolchanger and on ktc while the parent only on it's toolchanger.
 # Deselect: Tool is deselected and unloaded, be it a physical or a virtual on physical.
 
-# Pickup: Tool is physically picked up and attached to the toolchanger head.
-# Droppoff: Tool is physically parked and dropped of the toolchanger head.
-
-Maybe delete?
-# ToolLock: Tool is locked in place.
-# ToolUnLock: Toollock is disengaged and tool is free.
-
 ## TESTS TO DO
 - Check if it selects previous tool for deselecting a tool that needs tool selected.
 - If T0 -> T11 -> Deselect_all should: Deselect T11, select T20, deselect T0, deselect T20.
@@ -307,11 +300,6 @@ class ktc_MeanLayerTime:
 - Extruder -> heater_collection (HeaterCollectionWrapper)
 
 - Add context as constants that are inherited. Add a ktc._run_gcode_from_context()
-
-- cmd_KTC_SET_ALL_TOOL_HEATERS_OFF -> cmd_KTC_HEATERS_PAUSE
-
-- cmd_KTC_SET_TOOL_OFFSET -> cmd_KTC_TOOL_OFFSET_SAVE
-cmd_KTC_TOOL_OFFSET_APPLY
 
 - Idea for preprocessing to get time of toolchange is using a module that has a opiton named time before ToolChange.
     - CMD in GCODE before waiting for bed to reach temperature.

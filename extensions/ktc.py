@@ -19,7 +19,10 @@ from .ktc_heater import HeaterStateType
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
-    from ...klipper.klippy.extras import heaters as klippy_heaters, gcode_move as klippy_gcode_move
+    from ...klipper.klippy.extras import (
+        heaters as klippy_heaters,
+        gcode_move as klippy_gcode_move,
+    )
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
 # Constants for the restore_axis_on_toolchange variable.
@@ -28,9 +31,10 @@ INDEX_TO_XYZ: dict[int, str] = {0: "X", 1: "Y", 2: "Z"}
 DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE = 1  # Default tolerance in degC.
 # Don't wait for temperatures below this because they might be ambient.
 LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR = 40
-_OFFSET_HELP = ("\n[X: X position] or [X_ADJUST: X adjust]\n" +
-    "[Y: Y position] or [Y_ADJUST: Y adjust]\n" +
-    "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
+_OFFSET_HELP = (
+    "\n[X: X position] or [X_ADJUST: X adjust]\n"
+    + "[Y: Y position] or [Y_ADJUST: Y adjust]\n"
+    + "[Z: Z position] or [Z_ADJUST: Z adjust]\n"
 )
 
 _TOOL_HELP = "\n [TOOL: Tool name] or [T: Tool number]"
@@ -70,7 +74,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.default_toolchanger_name: str = config.get("default_toolchanger", "")  # type: ignore
         self.default_toolchanger: "ktc_toolchanger.KtcToolchanger" = None  # type: ignore
 
-        self._changes_made_by_set_all_tool_heaters_off = {}
+        self._heaters_paused = {}
         self._saved_position = [None, None, None]
 
         self.global_offset = [0, 0, 0]  # Global offset for all tools.
@@ -125,10 +129,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_DROPOFF",
             "KTC_TEMPERATURE_WAIT_WITH_TOLERANCE",
             "KTC_SET_AND_SAVE_PARTFAN_SPEED",
-            "KTC_SET_GLOBAL_OFFSET",
+            "KTC_GLOBAL_OFFSET_SAVE",
             "KTC_SET_TOOL_TEMPERATURE",
-            "KTC_SET_TOOL_OFFSET",
-            "KTC_APPLY_GCODE_OFFSET",  # Maybe remove?
+            "KTC_TOOL_OFFSET_SAVE",
+            "KTC_TOOL_OFFSET_APPLY",  # Maybe remove?
             "KTC_SET_STATE",
             "KTC_TOOL_SET_STATE",
             "KTC_TOOLCHANGER_SET_STATE",
@@ -136,11 +140,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_SET_ACTIVE_TOOL",
             "KTC_TOOLCHANGER_ENGAGE",
             "KTC_TOOLCHANGER_DISENGAGE",
-            "KTC_SET_ALL_TOOL_HEATERS_OFF",
-            "KTC_RESUME_ALL_TOOL_HEATERS",
+            "KTC_HEATERS_PAUSE",
+            "KTC_HEATERS_RESUME",
             "KTC_TOOLCHANGER_INITIALIZE",
-            "KTC_DISPLAY_TOOLS",
-            "KTC_MAP_TOOL",
+            "KTC_TOOLS_DISPLAY",
+            "KTC_TOOL_MAP_NR",
             "KTC_DEBUG_HEATERS",
             "KTC_DEBUG_TOOLS",
         ]
@@ -375,19 +379,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.log.always("KTC Toolchanger %s is now in error state." % self.name)
             self.selected_tool = self.TOOL_UNKNOWN
 
-    cmd_KTC_SET_STATE_help = (
-        "Set the state of the KTC.\n STATE= Defaut is ERROR."
-        )
-
-    def cmd_KTC_SET_STATE(self, gcmd: "gcode.GCodeCommand"): # pylint: disable=invalid-name
-        value = gcmd.get("STATE", self.StateType.ERROR)
-        if value not in self.StateType.__members__:
-            raise self.printer.command_error(
-                f"KTC_SET_STATE: Invalid STATE: {value}."
-                + f" Valid states are: {self.StateType.__members__}"
-            )
-        self._state = value
-
     cmd_KTC_TOOLCHANGER_SET_STATE_help = (
         "Set the state of the toolchanger."
         + " [TOOLCHANGER: Default_ToolChanger]"
@@ -408,34 +399,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         + " [STATE: STATE.ERROR]"
     )
 
-    def cmd_KTC_TOOL_SET_STATE(
-        self, gcmd: "gcode.GCodeCommand"
-    ):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
-        value = gcmd.get("STATE", None)
-        if value is None:
-            raise self.printer.command_error(
-                "KTC_TOOL_SET_STATE: No STATE specified for tool: %s." % str(tool.name)
-            )
-        elif value not in self.StateType.__members__:
-            raise self.printer.command_error(
-                f"KTC_TOOL_SET_STATE: Invalid STATE: {value}."
-                + f" Valid states are: {self.StateType.__members__}"
-            )
-        tool: "ktc_tool.KtcTool" = self.printer.lookup_object(
-            "ktc_tool " + str(tool.name)
-        )
-        tool.state = value
-
-    cmd_KTC_SET_ACTIVE_TOOL_help = (
-        "Set the active tool.\n" + "[TOOL: Tool_name] or [T: Tool_number]"
-    )
-
-    def cmd_KTC_SET_ACTIVE_TOOL(
-        self, gcmd: "gcode.GCodeCommand"
-    ):  # pylint: disable=invalid-name
-        self.active_tool = self.get_tool_from_gcmd(gcmd)
-
     cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL_help = (
         "Set the selected tool in the toolchanger.\n"
         + "[TOOLCHANGER: Default_ToolChanger]\n"
@@ -447,10 +410,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     ):  # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
         toolchanger = self.get_toolchanger_from_gcmd(gcmd)
-        if (
-            tool not in self.INVALID_TOOLS
-            and tool.name not in toolchanger.tools
-        ):
+        if tool not in self.INVALID_TOOLS and tool.name not in toolchanger.tools:
             raise self.printer.command_error(
                 "Tool %s not found in toolchanger %s." % (tool.name, toolchanger.name)
             )
@@ -497,6 +457,47 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 "Error disengaging toolchanger: %s" % str(e)
             ) from e
 
+    def cmd_KTC_TOOL_SET_STATE(
+        self, gcmd: "gcode.GCodeCommand"
+    ):  # pylint: disable=invalid-name
+        tool = self.get_tool_from_gcmd(gcmd)
+        value = gcmd.get("STATE", None)
+        if value is None:
+            raise self.printer.command_error(
+                "KTC_TOOL_SET_STATE: No STATE specified for tool: %s." % str(tool.name)
+            )
+        elif value not in self.StateType.__members__:
+            raise self.printer.command_error(
+                f"KTC_TOOL_SET_STATE: Invalid STATE: {value}."
+                + f" Valid states are: {self.StateType.__members__}"
+            )
+        tool: "ktc_tool.KtcTool" = self.printer.lookup_object(
+            "ktc_tool " + str(tool.name)
+        )
+        tool.state = value
+
+    cmd_KTC_SET_STATE_help = "Set the state of the KTC.\n STATE= Defaut is ERROR."
+
+    def cmd_KTC_SET_STATE(
+        self, gcmd: "gcode.GCodeCommand"
+    ):  # pylint: disable=invalid-name
+        value = gcmd.get("STATE", self.StateType.ERROR)
+        if value not in self.StateType.__members__:
+            raise self.printer.command_error(
+                f"KTC_SET_STATE: Invalid STATE: {value}."
+                + f" Valid states are: {self.StateType.__members__}"
+            )
+        self._state = value
+
+    cmd_KTC_SET_ACTIVE_TOOL_help = (
+        "Set the active tool.\n" + "[TOOL: Tool_name] or [T: Tool_number]"
+    )
+
+    def cmd_KTC_SET_ACTIVE_TOOL(
+        self, gcmd: "gcode.GCodeCommand"
+    ):  # pylint: disable=invalid-name
+        self.active_tool = self.get_tool_from_gcmd(gcmd)
+
     cmd_KTC_DROPOFF_help = "Deselect all tools"
 
     def cmd_KTC_DROPOFF(
@@ -523,8 +524,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         try:
             # Traverse all tools and deselect them from the deepest towards the top.
             def deselect(tool: "ktc_tool.KtcTool"):
-                if (tool not in self.INVALID_TOOLS and
-                    tool.state == self.StateType.SELECTED):
+                if (
+                    tool not in self.INVALID_TOOLS
+                    and tool.state == self.StateType.SELECTED
+                ):
                     tool.deselect()
 
             self.traverse_tools_from_deepest(deselect)
@@ -535,17 +538,17 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         "Save the fan speed to be recovered at ToolChange."
     )
 
-    def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(self, gcmd: "gcode.GCodeCommand"): # pylint: disable=invalid-name
+    def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(
+        self, gcmd: "gcode.GCodeCommand"
+    ):  # pylint: disable=invalid-name
         try:
             tool = self.get_tool_from_gcmd(gcmd)
-            fanspeed = typing.cast(float, gcmd.get_float("S", 1.0,0.0,255.0))
+            fanspeed = typing.cast(float, gcmd.get_float("S", 1.0, 0.0, 255.0))
             self.set_and_save_fan_speed(tool, fanspeed)
         except Exception as e:
-            raise gcmd.error(
-                f"KTC_SET_AND_SAVE_PARTFAN_SPEED: Error: {str(e)}"
-            ) from e
+            raise gcmd.error(f"KTC_SET_AND_SAVE_PARTFAN_SPEED: Error: {str(e)}") from e
 
-    def set_and_save_fan_speed(self, tool:ktc_tool.KtcTool, fanspeed: float):
+    def set_and_save_fan_speed(self, tool: ktc_tool.KtcTool, fanspeed: float):
         if fanspeed > 1:
             fanspeed = fanspeed / 255.0
 
@@ -565,7 +568,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
-        '''Waits for current tool temperature, or a specified tool or heater's temperature.
+        """Waits for current tool temperature, or a specified tool or heater's temperature.
         This command can be used without any additional parameters.
         Without parameters it waits for bed and current heaters.
         Only one of either P or H may be used.
@@ -574,25 +577,25 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         T= Tool number.
         HEATER= Coma separated list of heater names.
         TOLERANCE=nnn Tolerance in degC. Defaults to 1*C.
-        Wait will wait until heater is between set temperature +/- tolerance.'''
+        Wait will wait until heater is between set temperature +/- tolerance."""
         heater_names = []
-        tolerance = gcmd.get_int("TOLERANCE",
-                                 DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE,
-                                 minval=0, maxval=50)
+        tolerance = gcmd.get_int(
+            "TOLERANCE", DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE, minval=0, maxval=50
+        )
         var_heater = typing.cast(str, gcmd.get("HEATER", None))
         var_tool_name = typing.cast(str, gcmd.get("TOOL", None))
         var_tool_id = gcmd.get_int("T", None, minval=0)
 
-        if (var_heater is not None and
-            (var_tool_name is not None or var_tool_id is not None)):
+        if var_heater is not None and (
+            var_tool_name is not None or var_tool_id is not None
+        ):
             raise gcmd.error(
                 "Can't use both TOOL and HEATER parameter at the same time."
             )
 
         available_heaters = typing.cast(
-            'klippy_heaters.PrinterHeaters',
-            self.printer.lookup_objects("heaters")
-            ).available_heaters
+            "klippy_heaters.PrinterHeaters", self.printer.lookup_objects("heaters")
+        ).available_heaters
 
         # If neither tool or heaters are given, also wait for bed.
         if var_tool_name is None and var_tool_id is None and var_heater is None:
@@ -603,7 +606,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         if var_heater is not None:
             var_heater = var_heater.replace(" ", "").split(",")
             lcase_heater_names_dict = {
-                heater.lower(): heater for heater in available_heaters}
+                heater.lower(): heater for heater in available_heaters
+            }
             for name in var_heater:
                 if name.lower() not in lcase_heater_names_dict:
                     raise gcmd.error(
@@ -615,7 +619,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             # Get the tool if valid or active tool.
             tool = self.get_tool_from_gcmd(gcmd)
             heater_names.append(
-                [tool_heater.name for tool_heater in tool.extruder.heaters])
+                [tool_heater.name for tool_heater in tool.extruder.heaters]
+            )
 
         for name in heater_names:
             self._temperature_wait_with_tolerance(name, tolerance)
@@ -625,9 +630,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     ):  # pylint: disable=invalid-name
         curtime = self.printer.get_reactor().monotonic()
         target_temp = int(
-            self.printer.lookup_object(
-                heater_name
-            ).get_status(curtime)["target"]
+            self.printer.lookup_object(heater_name).get_status(curtime)["target"]
         )
 
         if target_temp > LOWEST_ALLOWED_TEMPERATURE_TO_WAIT_FOR:
@@ -646,11 +649,14 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.log.always("Wait for heater " + heater_name + " complete.")
 
     cmd_KTC_SET_TOOL_TEMPERATURE_help = (
-    "Waits for all temperatures, or a specified (TOOL) tool or"
-    + "(HEATER) heater's temperature within (TOLERANCE) tolerance.")
+        "Waits for all temperatures, or a specified (TOOL) tool or"
+        + "(HEATER) heater's temperature within (TOLERANCE) tolerance."
+    )
 
-    def cmd_KTC_SET_TOOL_TEMPERATURE(self, gcmd: "gcode.GCodeCommand"): # pylint: disable=invalid-name
-        '''
+    def cmd_KTC_SET_TOOL_TEMPERATURE(
+        self, gcmd: "gcode.GCodeCommand"
+    ):  # pylint: disable=invalid-name
+        """
         Set tool temperature.
         TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
         STDB_TMP= Standby temperature(s), optional
@@ -666,7 +672,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         SHTDWN_TIMEOUT = Time in seconds to wait from docking tool to shutting
         off the heater, optional.
             Use for example 86400 to wait 24h if you want to disable shutdown timer.
-         '''
+        """
         try:
             tool = self.get_tool_from_gcmd(gcmd)
 
@@ -677,9 +683,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             shtdwn_timeout = gcmd.get_float("SHTDWN_TIMEOUT", None, minval=0)
 
             self.log.trace(
-                f"cmd_KTC_SET_TOOL_TEMPERATURE: T{tool.name}: stdb_tmp:{stdb_tmp}, " +
-                f"actv_tmp:{actv_tmp}, chng_state:{chng_state}, " +
-                f"stdb_timeout:{stdb_timeout}, shtdwn_timeout:{shtdwn_timeout}."
+                f"cmd_KTC_SET_TOOL_TEMPERATURE: T{tool.name}: stdb_tmp:{stdb_tmp}, "
+                + f"actv_tmp:{actv_tmp}, chng_state:{chng_state}, "
+                + f"stdb_timeout:{stdb_timeout}, shtdwn_timeout:{shtdwn_timeout}."
             )
 
             if len(self.all_tools[tool.name].extruder.heaters) < 1:
@@ -697,68 +703,81 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             if shtdwn_timeout is not None:
                 set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
             if chng_state is not None:
-                set_heater_cmd["heater_state"] =  HeaterStateType.parse_heater_state(chng_state)
+                set_heater_cmd["heater_state"] = HeaterStateType.parse_heater_state(
+                    chng_state
+                )
 
             if len(set_heater_cmd) > 0:
                 tool.set_heaters(**set_heater_cmd)
             else:
                 # Print out the current temperature settings.
                 ext = tool.extruder
-                msg = (f"{tool.name} is {ext.state}:\n" +
-                       f"Active temperature: {ext.active_temp}\n" +
-                       f"Standby temperature: {ext.standby_temp}\n" +
-                       f"Active to Standby timer: {ext.active_to_standby_delay} seconds\n" +
-                       f"Standby to Off timer: {ext.standby_to_powerdown_delay} seconds\n"
+                msg = (
+                    f"{tool.name} is {ext.state}:\n"
+                    + f"Active temperature: {ext.active_temp}\n"
+                    + f"Standby temperature: {ext.standby_temp}\n"
+                    + f"Active to Standby timer: {ext.active_to_standby_delay} seconds\n"
+                    + f"Standby to Off timer: {ext.standby_to_powerdown_delay} seconds\n"
                 )
 
                 if ext.state == HeaterStateType.STANDBY:
                     first_heater_object = self.all_heaters[ext.heaters[0].name]
-                    to_standby_timer = first_heater_object.timer_heater_active_to_standby_delay
+                    to_standby_timer = (
+                        first_heater_object.timer_heater_active_to_standby_delay
+                    )
                     to_standby_timer_wake = to_standby_timer.get_status()["next_wake"]
                     if to_standby_timer_wake:
                         msg += (
-                            "\n Will go to standby temperature in " +
-                            f"{to_standby_timer_wake} seconds."
+                            "\n Will go to standby temperature in "
+                            + f"{to_standby_timer_wake} seconds."
                         )
 
-                    to_powerdown_timer = first_heater_object.timer_heater_standby_to_powerdown_delay
-                    to_powerdown_timer_wake = to_powerdown_timer.get_status()["next_wake"]
+                    to_powerdown_timer = (
+                        first_heater_object.timer_heater_standby_to_powerdown_delay
+                    )
+                    to_powerdown_timer_wake = to_powerdown_timer.get_status()[
+                        "next_wake"
+                    ]
                     if to_powerdown_timer_wake:
                         msg += (
-                            "\n Will power down in " +
-                            f"{to_powerdown_timer_wake} seconds."
+                            "\n Will power down in "
+                            + f"{to_powerdown_timer_wake} seconds."
                         )
                 gcmd.respond_info(msg)
         except ValueError as e:
             raise gcmd.error(
                 "KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)
-                )from e.with_traceback(e.__traceback__)
+            ) from e.with_traceback(e.__traceback__)
 
-    cmd_KTC_SET_ALL_TOOL_HEATERS_OFF_help = (
+    cmd_KTC_HEATERS_PAUSE_help = (
         "Turns off all heaters and saves changes made to be resumed by "
-        + "KTC_RESUME_ALL_TOOL_HEATERS."
+        + "KTC_HEATERS_RESUME."
     )
 
-    def cmd_KTC_SET_ALL_TOOL_HEATERS_OFF(self, gcmd):  # pylint: disable=invalid-name, unused-argument
+    def cmd_KTC_HEATERS_PAUSE(
+        self, gcmd
+    ):  # pylint: disable=invalid-name, unused-argument
         self.set_all_tool_heaters_off()
 
     def set_all_tool_heaters_off(self):
-        self._changes_made_by_set_all_tool_heaters_off = {}
+        self._heaters_paused = {}
         try:
             for heater in self.all_heaters.values():
                 if heater.state > HeaterStateType.OFF:
-                    self._changes_made_by_set_all_tool_heaters_off[heater.name] = (
+                    self._heaters_paused[heater.name] = (
                         heater.state
                     )
                     heater.state = HeaterStateType.OFF
         except Exception as e:
             raise Exception("set_all_tool_heaters_off: Error: %s" % str(e)) from e
 
-    cmd_KTC_RESUME_ALL_TOOL_HEATERS_help = (
-        "Resumes all heaters previously turned off by KTC_SET_ALL_TOOL_HEATERS_OFF."
+    cmd_KTC_HEATERS_RESUME_help = (
+        "Resumes all heaters previously turned off by KTC_HEATERS_PAUSE."
     )
 
-    def cmd_KTC_RESUME_ALL_TOOL_HEATERS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
+    def cmd_KTC_HEATERS_RESUME(
+        self, gcmd
+    ):  # pylint: disable=invalid-name, unused-argument
         self.resume_all_tool_heaters()
 
     def resume_all_tool_heaters(self):
@@ -766,7 +785,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             for (
                 heater_name,
                 state,
-            ) in self._changes_made_by_set_all_tool_heaters_off.items():
+            ) in self._heaters_paused.items():
                 self.all_heaters[heater_name].state = state
         except Exception as e:
             raise Exception("resume_all_tool_heaters: Error: %s" % str(e)) from e
@@ -781,32 +800,33 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 offset[XYZ_TO_INDEX[axis]] += adjust
         return offset
 
-    cmd_KTC_SET_TOOL_OFFSET_help = ("Set and save the tool offset."
-                                    + _TOOL_HELP + _OFFSET_HELP)
+    cmd_KTC_TOOL_OFFSET_SAVE_help = (
+        "Set and save the tool offset." + _TOOL_HELP + _OFFSET_HELP
+    )
 
-    def cmd_KTC_SET_TOOL_OFFSET(
+    def cmd_KTC_TOOL_OFFSET_SAVE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
         tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
 
-    cmd_KTC_SET_GLOBAL_OFFSET_help = "Set the global tool offset" + _OFFSET_HELP
+    cmd_KTC_GLOBAL_OFFSET_SAVE_help = "Set the global tool offset" + _OFFSET_HELP
 
-    def cmd_KTC_SET_GLOBAL_OFFSET(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_GLOBAL_OFFSET_SAVE(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
 
-    cmd_KTC_APPLY_GCODE_OFFSET_help = (
-        "Set G-Code offset to the one of current tool." +
-        "Global offset is also applied." +
-        "MOVE= If should move the toolhead, optional." +
-        "If not specified, it will not move." +
-        "0/FALSE/NO: No move" +
-        "1/TRUE/YES: Move"
-        + _TOOL_HELP +
-        " If not specified, active tool is used."
+    cmd_KTC_TOOL_OFFSET_APPLY_help = (
+        "Set G-Code offset to the one of current tool."
+        + "Global offset is also applied."
+        + "MOVE= If should move the toolhead, optional."
+        + "If not specified, it will not move."
+        + "0/FALSE/NO: No move"
+        + "1/TRUE/YES: Move"
+        + _TOOL_HELP
+        + " If not specified, active tool is used."
     )
 
-    def cmd_KTC_APPLY_GCODE_OFFSET(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_TOOL_OFFSET_APPLY(self, gcmd):  # pylint: disable=invalid-name
         tool = self.get_tool_from_gcmd(gcmd)
 
         param_move = self.parse_bool(gcmd.get("MOVE", "0"))
@@ -822,54 +842,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
         self.gcode.run_script_from_command(run_script)
-
-    ###########################################
-    # DEBUGGING                               #
-    ###########################################
-    def cmd_KTC_DEBUG_HEATERS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
-        self.log.always("KTC Debugging Heaters:")
-        for heater in self.all_heaters.values():
-            self.log.always(
-                f"{heater.name}: {heater.state}\n"
-                + f"- Active temp: {heater.heater_active_temp}\n"
-                + f"- Standby temp: {heater.standby_temp}\n"
-                + f"- Active to Standby delay: {heater.active_to_standby_delay}\n"
-                + f"- Standby to Powerdown delay: {heater.standby_to_powerdown_delay}\n"
-                + "- Timer Active to Standby counting: "
-                + f"{heater.timer_heater_active_to_standby_delay.counting_down}\n"
-                + "- Timer Active to Standby duration: "
-                + f"{heater.timer_heater_active_to_standby_delay.duration}\n"
-                + "- Timer Standby to Powerdown counting: "
-                + f"{heater.timer_heater_standby_to_powerdown_delay.counting_down}\n"
-                + "- Timer Standby to Powerdown duration: "
-                + f"{heater.timer_heater_standby_to_powerdown_delay.duration}"
-            )
-
-    def cmd_KTC_DEBUG_TOOLS(self, gcmd):  # pylint: disable=invalid-name, unused-argument
-        self.log.always("KTC Debugging Heaters:")
-        for tool in self.all_tools.values():
-            if tool in self.INVALID_TOOLS:
-                continue
-            active_time = self.log.tool_stats[tool.name].start_time_heater_active
-            standby_time = self.log.tool_stats[tool.name].start_time_heater_standby
-            selected_time = self.log.tool_stats[tool.name].start_time_selected
-            time_selecting = self.log.tool_stats[tool.name].start_time_spent_selecting
-            time_deselecting = self.log.tool_stats[tool.name].start_time_spent_deselecting
-            extruder_state = tool.extruder.state
-
-            if ( active_time or standby_time or selected_time or
-                time_selecting or time_deselecting or
-                extruder_state != HeaterStateType.OFF):
-                self.log.always(
-                    f"{tool.name}:\n" +
-                    f"- Active time: {active_time}\n" +
-                    f"- Standby time: {standby_time}\n" +
-                    f"- Selected time: {selected_time}\n" +
-                    f"- Time spent selecting: {time_selecting}\n" +
-                    f"- Time spent deselecting: {time_deselecting}\n" +
-                    f"- state: {tool.state}\n" +
-                    f"- extruder state: {tool.extruder.state}\n"
-                )
 
     ###########################################
     # TOOL REMAPING                           #
@@ -889,20 +861,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         return msg
 
-    ### GCODE COMMANDS FOR TOOL REMAP LOGIC ##################################
+    cmd_KTC_TOOLS_DISPLAY_help = (
+        "Display the current mapping of tools to KTC_T# numbers."
+    )
 
-    cmd_KTC_DISPLAY_TOOLS_help = "Display the current mapping of tools to KTC_T# numbers."
-
-    def cmd_KTC_DISPLAY_TOOLS(self, gcmd):   # pylint: disable=invalid-name, unused-argument
+    def cmd_KTC_TOOLS_DISPLAY(
+        self, gcmd
+    ):  # pylint: disable=invalid-name, unused-argument
         self.log.always(self._tool_map_to_human_string())
 
-    cmd_KTC_MAP_TOOL_help = ("Remap a tool to another one." +
-        "This is not persistent and will be lost on restart." +
-        " [TOOL: Tool name] or [T: Tool number]" +
-        " [SET: Tool number]" +
-        " [OVERWRITE: 0/1] Default 0. If 1, will overwrite existing mapping.")
+    cmd_KTC_TOOL_MAP_NR_help = (
+        "Remap a tool to another one."
+        + "This is not persistent and will be lost on restart."
+        + " [TOOL: Tool name] or [T: Tool number]"
+        + " [SET: Tool number]"
+        + " [OVERWRITE: 0/1] Default 0. If 1, will overwrite existing mapping."
+    )
 
-    def cmd_KTC_MAP_TOOL(self, gcmd):   # pylint: disable=invalid-name
+    def cmd_KTC_TOOL_MAP_NR(self, gcmd):  # pylint: disable=invalid-name
         overwite = self.parse_bool(gcmd.get("OVERWRITE", "0"))
         tool = self.get_tool_from_gcmd(gcmd, allow_none=False)
         set_tool = gcmd.get_int("SET", minval=0)
@@ -910,9 +886,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         if set_tool in self.all_tools_by_number:
             if not overwite:
                 raise gcmd.error(
-                    f"Tool number {set_tool} is already used" +
-                    "by tool {self.all_tools_by_number[set_tool].name}." +
-                    " Use OVERWRITE=1 to overwrite."
+                    f"Tool number {set_tool} is already used"
+                    + "by tool {self.all_tools_by_number[set_tool].name}."
+                    + " Use OVERWRITE=1 to overwrite."
                 )
             else:
                 self.all_tools_by_number[set_tool].number = None
@@ -963,13 +939,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 % (tool.requires_axis_homed, tool.name)
             )
 
-
-    def get_tool_from_gcmd(self,
-                           gcmd: "gcode.GCodeCommand",
-                           allow_none: bool = True) -> "ktc_tool.KtcTool":
+    def get_tool_from_gcmd(
+        self, gcmd: "gcode.GCodeCommand", allow_none: bool = True
+    ) -> "ktc_tool.KtcTool":
         """Returns the tool object specified in the gcode command or
         the active tool if none is specified."""
-        tool_name: str = gcmd.get("TOOL", None) # type: ignore
+        tool_name: str = gcmd.get("TOOL", None)  # type: ignore
         tool_nr: int = gcmd.get_int("T", None)  # type: ignore
         if tool_name:
             tool = self.all_tools.get(tool_name, None)
@@ -988,7 +963,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             tool = self.active_tool
         if not allow_none and (tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN):
             raise gcmd.error("Tool TOOL_NONE or TOOL_UNKNOWN are not allowed.")
-        return tool # type: ignore
+        return tool  # type: ignore
 
     def get_toolchanger_from_gcmd(
         self, gcmd: "gcode.GCodeCommand"
@@ -1028,6 +1003,65 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         nested_tools = _get_nested_tools(self, self.default_toolchanger)
         _recursive_traverse_tools(self, nested_tools, func)
+
+    ###########################################
+    # DEBUGGING                               #
+    ###########################################
+    def cmd_KTC_DEBUG_HEATERS(
+        self, gcmd
+    ):  # pylint: disable=invalid-name, unused-argument
+        self.log.always("KTC Debugging Heaters:")
+        for heater in self.all_heaters.values():
+            self.log.always(
+                f"{heater.name}: {heater.state}\n"
+                + f"- Active temp: {heater.heater_active_temp}\n"
+                + f"- Standby temp: {heater.standby_temp}\n"
+                + f"- Active to Standby delay: {heater.active_to_standby_delay}\n"
+                + f"- Standby to Powerdown delay: {heater.standby_to_powerdown_delay}\n"
+                + "- Timer Active to Standby counting: "
+                + f"{heater.timer_heater_active_to_standby_delay.counting_down}\n"
+                + "- Timer Active to Standby duration: "
+                + f"{heater.timer_heater_active_to_standby_delay.duration}\n"
+                + "- Timer Standby to Powerdown counting: "
+                + f"{heater.timer_heater_standby_to_powerdown_delay.counting_down}\n"
+                + "- Timer Standby to Powerdown duration: "
+                + f"{heater.timer_heater_standby_to_powerdown_delay.duration}"
+            )
+
+    def cmd_KTC_DEBUG_TOOLS(
+        self, gcmd
+    ):  # pylint: disable=invalid-name, unused-argument
+        self.log.always("KTC Debugging Heaters:")
+        for tool in self.all_tools.values():
+            if tool in self.INVALID_TOOLS:
+                continue
+            active_time = self.log.tool_stats[tool.name].start_time_heater_active
+            standby_time = self.log.tool_stats[tool.name].start_time_heater_standby
+            selected_time = self.log.tool_stats[tool.name].start_time_selected
+            time_selecting = self.log.tool_stats[tool.name].start_time_spent_selecting
+            time_deselecting = self.log.tool_stats[
+                tool.name
+            ].start_time_spent_deselecting
+            extruder_state = tool.extruder.state
+
+            if (
+                active_time
+                or standby_time
+                or selected_time
+                or time_selecting
+                or time_deselecting
+                or extruder_state != HeaterStateType.OFF
+            ):
+                self.log.always(
+                    f"{tool.name}:\n"
+                    + f"- Active time: {active_time}\n"
+                    + f"- Standby time: {standby_time}\n"
+                    + f"- Selected time: {selected_time}\n"
+                    + f"- Time spent selecting: {time_selecting}\n"
+                    + f"- Time spent deselecting: {time_deselecting}\n"
+                    + f"- state: {tool.state}\n"
+                    + f"- extruder state: {tool.extruder.state}\n"
+                )
 
 def load_config(config):
     return Ktc(config)
