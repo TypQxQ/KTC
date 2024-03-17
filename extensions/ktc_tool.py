@@ -13,7 +13,6 @@ from .ktc_base import (     # pylint: disable=relative-beyond-top-level
     KtcBaseChangerClass,
 )
 from .ktc_heater import HeaterStateType, KtcHeaterSettings   # pylint: disable=relative-beyond-top-level
-# from . import ktc_heater
 
 # Only import these modules in Dev environment. Consult Dev_doc.md for more info.
 if typing.TYPE_CHECKING:
@@ -99,11 +98,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
         try:
             self.log.always("KTC Tool %s Selecting." % self.name)
             at = self._ktc.active_tool
-
-            # TODO: Remove when debugged.
-            self.log.always(f"Current KTC Tool is {at.name}.")
-            self.log.always(f"Selecting KTC Tool {self.name} as " +
-                            f"final_selected: {str(final_selected)}.")
 
             # None of this is needed if this is not the final tool.
             if final_selected:

@@ -74,9 +74,8 @@ class KtcBaseClass:
         self.config = typing.cast('configfile.ConfigWrapper', config)
         self.name: str = ""
 
-        # TODO: Remove this after testing.
         #: To store performance data on startup for later logging.
-        self.init_profile:str = None    # type: ignore
+        self.debug_init_profile:str = None    # type: ignore
 
         self.debug_with_profile: bool = False
 
@@ -198,9 +197,8 @@ class KtcBaseClass:
         self.log = typing.cast('ktc_log.KtcLog', self.printer.lookup_object(
             "ktc_log"))  # Load the log object.
 
-        # TODO: Remove this after testing.
-        if self.init_profile is not None:
-            self.log.trace("KTC startup profile: " + str(self.init_profile))
+        if self.debug_init_profile is not None:
+            self.log.trace("KTC startup profile: " + str(self.debug_init_profile))
 
         self.state = self.StateType.CONFIGURING
 

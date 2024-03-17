@@ -7,7 +7,7 @@
 #
 from __future__ import annotations
 import typing
-import cProfile, pstats, io
+# import cProfile, pstats, io
 
 # from .ktc_base import * # pylint: disable=relative-beyond-top-level, wildcard-import
 from .ktc_base import (
@@ -592,21 +592,21 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         )
         var_heater = typing.cast(str, gcmd.get("HEATER", None))
         var_tool_name = typing.cast(str, gcmd.get("TOOL", None))
-        var_tool_id = gcmd.get_int("T", None, minval=0)
+        var_tool_n = gcmd.get_int("T", None, minval=0)
 
         if var_heater is not None and (
-            var_tool_name is not None or var_tool_id is not None
+            var_tool_name is not None or var_tool_n is not None
         ):
             raise gcmd.error(
                 "Can't use both TOOL and HEATER parameter at the same time."
             )
 
         available_heaters = typing.cast(
-            "klippy_heaters.PrinterHeaters", self.printer.lookup_objects("heaters")
+            "klippy_heaters.PrinterHeaters", self.printer.lookup_object("heaters")
         ).available_heaters
 
         # If neither tool or heaters are given, also wait for bed.
-        if var_tool_name is None and var_tool_id is None and var_heater is None:
+        if var_tool_name is None and var_tool_n is None and var_heater is None:
             if "heater_bed" in available_heaters:
                 heater_names.append("heater_bed")
 
@@ -626,9 +626,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         else:
             # Get the tool if valid or active tool.
             tool = self.get_tool_from_gcmd(gcmd)
-            heater_names.append(
-                [tool_heater.name for tool_heater in tool.extruder.heaters]
-            )
+            heater_names += [tool_heater.name for tool_heater in tool.extruder.heaters]
+
+        self.log.trace(
+            f"cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE: Heater names: {heater_names}."
+        )
 
         for name in heater_names:
             self._temperature_wait_with_tolerance(name, tolerance)
@@ -1104,7 +1106,7 @@ def load_config(config):
     #     # index now contains the index of the 10th carriage return
     # else:
     #     index = len(stats_string) - 1
-    # retval.init_profile = stats_string[:index]
+    # retval.debug_init_profile = stats_string[:index]
 
     # return retval
     return Ktc(config)

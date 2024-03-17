@@ -721,14 +721,6 @@ class KtcLog:
             final_time = getattr(self.tool_stats[tool.name], final_time_key, 0)
             final_time += time_spent
 
-            # TODO Delete when confirmed working
-            self.debug(
-                f"increase_tool_time_diff for Tool: {tool.name}.{final_time_key}: "
-                + f"{start_time = :.2f}"
-                + f", time_spent: {self.seconds_to_human_string(time_spent)}"
-                + f", final_time: {self.seconds_to_human_string(final_time)}"
-                )
-
             setattr(self.tool_stats[tool.name], "start_" + final_time_key, 0)
         except Exception as e:
             # Handle any exceptions that occur during the process

@@ -245,11 +245,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
     @KtcBaseChangerClass.state.setter
     def state(self, value):
         super(KtcBaseChangerClass, type(self)).state.fset(self, value)  # type: ignore
-        # TODO: Remove when debugged.
-        self.log.always(
-            f"KTC Toolchanger {self.name} is now {str(self.state).lower()}."
-        )
-
         if self._ktc.propagate_state:
             self._ktc.state = value
 
@@ -313,7 +308,7 @@ def load_config_prefix(config):
     #     # index now contains the index of the 10th carriage return
     # else:
     #     index = len(stats_string) - 1
-    # retval.init_profile = stats_string[:index]
+    # retval.debug_init_profile = stats_string[:index]
 
     # return retval
 
