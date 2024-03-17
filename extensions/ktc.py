@@ -48,9 +48,11 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         super().__init__(config)
 
         #: If True, will propagate the state of the tool to the toolchanger.
-        self.propagate_state = typing.cast(bool, config.getboolean("propagate_state", True))  # type: ignore
+        self.propagate_state = typing.cast(
+            bool, config.getboolean("propagate_state", True))  # type: ignore
         #: If True, will run with cProfile and log the stats to ktc.log.
-        self.debug_with_profile = typing.cast(bool, config.getboolean("debug_with_profile", False))  # type: ignore
+        self.debug_with_profile = typing.cast(
+            bool, config.getboolean("debug_with_profile", False))  # type: ignore
 
         ############################
         # Load the persistent variables object
@@ -709,9 +711,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             if actv_tmp is not None:
                 set_heater_cmd["heater_active_temp"] = int(actv_tmp)
             if stdb_timeout is not None:
-                set_heater_cmd["heater_active_to_standby_delay"] = stdb_timeout
+                set_heater_cmd["heater_active_to_standby_delay"] = max(stdb_timeout, 0.1)
             if shtdwn_timeout is not None:
-                set_heater_cmd["heater_standby_to_powerdown_delay"] = shtdwn_timeout
+                set_heater_cmd["heater_standby_to_powerdown_delay"] = max(shtdwn_timeout, 0.1)
             if chng_state is not None:
                 set_heater_cmd["heater_state"] = HeaterStateType.parse_heater_state(
                     chng_state
@@ -913,10 +915,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "active_tool": self.active_tool.name,  # Active tool name for GCode compatibility.
             "active_tool_n": self.active_tool.number,  # Active tool number for GCode compatibility.
             "saved_fan_speed": self.saved_fan_speed,
+            "state": self.state,
             "tools": list(self.all_tools.keys()),
             "toolchangers": list(self.all_toolchangers.keys()),
             "TOOL_NONE": self.TOOL_NONE.name,
             "TOOL_UNKNOWN": self.TOOL_UNKNOWN.name,
+            "params_available": str(self.params.keys()),
             **self.params,
         }
         return status

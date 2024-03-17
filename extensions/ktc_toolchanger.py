@@ -258,7 +258,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument
         status = {
-            # "global_offset": self.global_offset,
             "name": self.name,
             "selected_tool": self.selected_tool.name,
             "selected_tool_n": self.selected_tool.number,
@@ -277,9 +276,6 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         MANUAL = "manual"
         ON_START = "on_start"
         ON_FIRST_USE = "on_first_use"
-        # Can be manual and call KTC_TOOLCHANGER_INITIALIZE from gcode homing macro.
-            # HOMING_START = "homing_start"
-            # HOMING_END = "homing_end"
 
     @unique
     class InitOrderType(str, KtcConfigurableEnum):
