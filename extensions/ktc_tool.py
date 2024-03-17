@@ -92,7 +92,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
     def cmd_SelectTool(self, gcmd): # pylint: disable=invalid-name, unused-argument
         self.log.trace("KTC Tool " + str(self.number) + " Selected.")
-        self.select(final_selected=True)
+        self.run_with_profile(self.select, final_selected=True)
 
     def select(self, final_selected=False):
         self.state = self.StateType.SELECTING
@@ -226,11 +226,10 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.log.track_tool_deselecting_start(self)
             self.log.tool_stats[self.name].deselects_started += 1
 
-            # TODO: Change to Python
+            self.extruder.state = HeaterStateType.STANDBY
+
             # Turn off fan if has a fan.
-            for fan in self.fans:
-                self.gcode.run_script_from_command(
-                    "SET_FAN_SPEED FAN=" + fan[0] + " SPEED=0")
+            self._ktc.tool_fan_speed_set(self, 0)
 
             # Check if toolchanger is not topmost and
             # parent tool must be selected on deselect and

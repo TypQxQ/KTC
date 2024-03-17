@@ -23,6 +23,7 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy.extras import (
         heaters as klippy_heaters,
         gcode_move as klippy_gcode_move,
+        fan_generic as klippy_fan_generic,
     )
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
 
@@ -135,7 +136,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_TEMPERATURE_WAIT_WITH_TOLERANCE",
             "KTC_SET_AND_SAVE_PARTFAN_SPEED",
             "KTC_GLOBAL_OFFSET_SAVE",
-            "KTC_SET_TOOL_TEMPERATURE",
+            "KTC_TOOL_SET_TEMPERATURE",
             "KTC_TOOL_OFFSET_SAVE",
             "KTC_TOOL_OFFSET_APPLY",  # Maybe remove?
             "KTC_SET_STATE",
@@ -507,6 +508,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_DROPOFF(
         self, gcmd=None
     ):  # pylint: disable=invalid-name, unused-argument
+        self.run_with_profile(self.deselect_all_tools)
+
+    def deselect_all_tools(self):
         if self.active_tool == self.TOOL_UNKNOWN:
             raise self.printer.command_error(
                 "Unknown tool is active and can't be deselected."
@@ -556,12 +560,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         if fanspeed > 1:
             fanspeed = fanspeed / 255.0
 
+        self.log.trace(
+            f"set_and_save_fan_speed: T{tool.name}: Saving fan speed: {fanspeed}."
+        )
+
         self.saved_fan_speed = fanspeed
-        for fan in tool.fans:
-            self.gcode.run_script_from_command(
-                f"SET_FAN_SPEED FAN={fan[0]} SPEED={fanspeed * float(fan[1])}"
-            )
-        return
+        self.tool_fan_speed_set(tool, fanspeed)
 
     cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE_help = (
         "Waits for current tool temperature, or a specified.\n"
@@ -652,12 +656,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
             self.log.always("Wait for heater " + heater_name + " complete.")
 
-    cmd_KTC_SET_TOOL_TEMPERATURE_help = (
+    cmd_KTC_TOOL_SET_TEMPERATURE_help = (
         "Waits for all temperatures, or a specified (TOOL) tool or"
         + "(HEATER) heater's temperature within (TOLERANCE) tolerance."
     )
 
-    def cmd_KTC_SET_TOOL_TEMPERATURE(
+    def cmd_KTC_TOOL_SET_TEMPERATURE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         """
@@ -687,7 +691,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             shtdwn_timeout = gcmd.get_float("SHTDWN_TIMEOUT", None, minval=0)
 
             self.log.trace(
-                f"cmd_KTC_SET_TOOL_TEMPERATURE: T{tool.name}: stdb_tmp:{stdb_tmp}, "
+                f"cmd_KTC_TOOL_SET_TEMPERATURE: T{tool.name}: stdb_tmp:{stdb_tmp}, "
                 + f"actv_tmp:{actv_tmp}, chng_state:{chng_state}, "
                 + f"stdb_timeout:{stdb_timeout}, shtdwn_timeout:{shtdwn_timeout}."
             )
@@ -750,7 +754,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 gcmd.respond_info(msg)
         except ValueError as e:
             raise gcmd.error(
-                "KTC_SET_TOOL_TEMPERATURE: Error: %s" % str(e)
+                "KTC_TOOL_SET_TEMPERATURE: Error: %s" % str(e)
             ) from e.with_traceback(e.__traceback__)
 
     cmd_KTC_HEATERS_PAUSE_help = (
@@ -1004,6 +1008,24 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         nested_tools = _get_nested_tools(self, self.default_toolchanger)
         _recursive_traverse_tools(self, nested_tools, func)
+
+    @staticmethod
+    def tool_fan_speed_set(tool: "ktc_tool.KtcTool", speed: float):
+        '''If the tool has fans, set the speed of the fans.'''
+        if tool.fans:
+            for fan in tool.fans:
+                generic_fan = typing.cast(
+                    "klippy_fan_generic.PrinterFanGeneric",
+                    tool.printer.lookup_object("fan_generic " + fan[0], None),
+                )
+                if generic_fan:
+                    generic_fan.fan.set_speed_from_command(speed)
+                else:
+                    tool.log.always(
+                        f"set_and_save_fan_speed: T{tool.name}: "
+                        + f"Fan 'fan_generic {fan[0]}' not found. Can't set speed."
+                    )
+            return
 
     ###########################################
     # DEBUGGING                               #
