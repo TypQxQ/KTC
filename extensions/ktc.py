@@ -364,9 +364,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         self.log.trace("ktc.active_tool set to: " + tool.name)
 
-        self._ktc_persistent.save_variable(
-            "current_tool", str("'" + tool.name + "'"), section="State", force_save=True
-        )
+        # Not used for now. Maybe later.
+        # self.persistent_state_set("active_tool", tool.name)
 
     @property
     def active_tool_n(self) -> int:
@@ -960,10 +959,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 raise gcmd.error("T%d not found" % (tool_nr))
             tool = self.all_tools_by_number[tool_nr]
         else:
-            if (
-                self.active_tool == self.TOOL_NONE
-                or self.active_tool == self.TOOL_UNKNOWN
-            ):
+            if self.active_tool in self.INVALID_TOOLS:
                 raise gcmd.error("No tool specified and no active tool")
             tool = self.active_tool
         if not allow_none and (tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN):

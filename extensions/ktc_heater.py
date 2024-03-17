@@ -104,22 +104,33 @@ class KtcToolExtruder:
     @state.setter
     def state(self, value: HeaterStateType):
         self._state = value
+        _ktc = self._tool._ktc
         self._tool._ktc.log.trace(
             f"In extr. Setting heater state to {value} "
             + f"for tool {self._tool.name}"
         )
 
+        def set_heater_options(self: KtcToolExtruder, heater_settings: KtcHeaterSettings):
+            heater: KtcHeater = self._tool._ktc.all_heaters[heater_settings.name]
+            heater.heater_active_temp = heater_settings.temperature_offset + self.active_temp
+            heater.standby_temp = heater_settings.temperature_offset + self.standby_temp
+            heater.active_to_standby_delay = self.active_to_standby_delay
+            heater.standby_to_powerdown_delay = self.standby_to_powerdown_delay
+            self._tool._ktc.log.trace(
+                f"Setting heater options for heater {heater.name} "
+                + f"{heater.heater_active_temp=}, {heater.standby_temp=}, "
+                + f"{heater.active_to_standby_delay= }, {heater.standby_to_powerdown_delay= }"
+            )
+
         # Allways set active state on all heaters
         if value == HeaterStateType.ACTIVE:
             self._tool._ktc.log.trace(
-                f"In extr. Setting heater state to ACTIVE "
+                "In extr. Setting heater state to ACTIVE "
                 + f"for tool {self._tool.name}"
                 + f" with active_temp {self._active_temp}"
             )
             for hs in self.heaters:
-                self._tool._ktc.all_heaters[hs.name].heater_active_temp = (
-                    self._active_temp + hs.temperature_offset
-                )
+                set_heater_options(self, hs)
                 self._tool._ktc.all_heaters[hs.name].state = value
             self._tool._ktc.log.track_heater_active_start(self._tool)
             return
@@ -142,24 +153,9 @@ class KtcToolExtruder:
                 if value == HeaterStateType.STANDBY:
                     self._tool._ktc.log.trace(
                         f"Setting heater state to STANDBY for tool {self._tool.name}"
-                        + f" with heater {hs.name} and "
-                        + f"active_to_standby_delay {self._active_to_standby_delay}, "
-                        + f"standby_to_powerdown_delay {self._standby_to_powerdown_delay}"
+                        + f" with heater {hs.name}"
                     )
-                    self._tool._ktc.all_heaters[hs.name].standby_temp = (
-                        self._standby_temp + hs.temperature_offset
-                    )
-                    self._tool._ktc.log.trace(
-                        f".standby_temp is {self._tool._ktc.all_heaters[hs.name].standby_temp}, "
-                        + f"._standby_temp is {self._standby_temp}, "
-                        + f"temperature_offset is {hs.temperature_offset}"
-                    )
-                    self._tool._ktc.all_heaters[hs.name].active_to_standby_delay = (
-                        self.active_to_standby_delay
-                    )
-                    self._tool._ktc.all_heaters[hs.name].standby_to_powerdown_delay = (
-                        self.standby_to_powerdown_delay
-                    )
+                    set_heater_options(self, hs)
                 self._tool._ktc.all_heaters[hs.name].state = value
             else:
                 # Can't track standby for tool if heater is in active state on another tool.
@@ -477,7 +473,7 @@ class KtcHeaterTimer:
             self.log.trace(
                 f"heatertimer set_timer {self.timer_type}: "
                 + f"duration: {self.duration}, "
-                + f"nextwake: {self._time_left()}"
+                + f"nextwake: {self._time_left()} "
                 f"counting_down: {self.counting_down}"
             )
             if self.duration:
@@ -487,7 +483,7 @@ class KtcHeaterTimer:
 
         self.log.trace(
             f"Time until heater {str(self.heater.name)} "
-            + f"changes to {('Standby' if self.timer_type == 1 else 'OFF')}:"
+            + f"changes to {('Standby' if self.timer_type == 1 else 'OFF')}: "
             + f"{self._time_left()}"
         )
 

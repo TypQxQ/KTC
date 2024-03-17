@@ -79,6 +79,12 @@ class KtcLog:
             self._ktc_logger.setLevel(logging.INFO)
             self._ktc_logger.addHandler(queue_handler)
 
+        self._rollover_logfile_at_startup = typing.cast(bool, config.getboolean(
+            "rollover_logfile_at_startup", default=False))
+        if self._rollover_logfile_at_startup and self.logfile_level:
+            self.queue_listener.doRollover()
+            self.debug("Forced rollover of KTC log file done.")
+
         # Statistics variables
         self.changer_stats: typing.Dict[str, ChangerStatisticsClass] = {}
         self.tool_stats: typing.Dict[str, ToolStatisticsClass] = {}
@@ -710,7 +716,7 @@ class KtcLog:
             if start_time == 0:
                 return
 
-            time_spent = max(start_time - time.time(), 0)
+            time_spent = max(time.time() - start_time, 0)
 
             final_time = getattr(self.tool_stats[tool.name], final_time_key, 0)
             final_time += time_spent
@@ -718,7 +724,7 @@ class KtcLog:
             # TODO Delete when confirmed working
             self.debug(
                 f"increase_tool_time_diff for Tool: {tool.name}.{final_time_key}: "
-                + f"start_time: {start_time}"
+                + f"{start_time = :.2f}"
                 + f", time_spent: {self.seconds_to_human_string(time_spent)}"
                 + f", final_time: {self.seconds_to_human_string(final_time)}"
                 )

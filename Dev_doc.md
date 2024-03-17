@@ -213,7 +213,7 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
 
     -params
     tools:              dict[tool_name:tool]
-    persistent_state:   Get or Set the persistend state. ex. ['active_tool':'20']
+    persistent_state:   Get the persistend state. ex. {'active_tool':'20',}
     state :         ktc_toolchanger.STATE attr indicating current state.
     init_mode:      ktc_toolchanger.INIT_MODE attr indicating method of initialization.
     active_tool:    tool object currently active. Defaults to TOOL_UNKNOWN
@@ -242,7 +242,7 @@ ktc_toolchanger.py is initialized for each toolchanger system and can have a par
                                     ktc:    The ktc object.
                                     STATE:  Constants for setting and comparing myself.state
                                     INIT_MODE: Constants for setting and comparing myself.init_mode
-
+    persistent_state_set: Set the persistend state. ex. {'active_tool':'20',}
     - G-Code commands                                
 
     

@@ -182,7 +182,7 @@ class KtcBaseClass:
         # Check if any initiating values are set.
         if len(self._initiating_config) > 0:
             if "offset" in self._initiating_config:
-                self.persistent_state = {"offset": self._initiating_config["offset"]}
+                self.persistent_state_set("offset", self._initiating_config["offset"])
                 raise self.config.error(f"Offset for {self.config.get_name()} successfully aved as"
                     + f" {self._initiating_config['offset']}."
                     +" Remove the offset from the config and restart Klipper to continue.")
@@ -319,7 +319,8 @@ class KtcBaseClass:
     @property
     def persistent_state(self) -> dict:
         '''Return the persistent state from file.
-        Is initialized inside _handle_connect.'''
+        Is initialized inside _handle_connect.
+        Use persistent_state_set to set the state.'''
         if self._ktc_persistent is None:
             self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
                 self.printer.lookup_object("ktc_persisting")
@@ -336,9 +337,8 @@ class KtcBaseClass:
         v: dict = self._ktc_persistent.content.get("State", {})
         return v.get(c, {})
 
-    @persistent_state.setter
-    def persistent_state(self, value):
-        self.log.trace(f"Setting persistent state for {self.name} to {value}")
+    def persistent_state_set(self, key: str, value: typing.Any):
+        self.log.trace(f"Setting persistent state for {self.name} to {value = }, {key =}")
         if self._ktc_persistent is None:
             self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
                 self.printer.lookup_object("ktc_persisting")
@@ -353,7 +353,10 @@ class KtcBaseClass:
         else:
             raise ValueError(f"Can't set persistent state for object: {type(self)}")
 
-        self._ktc_persistent.save_variable(c, str(value), "State", True)
+        state: dict = self._ktc_persistent.content.get("State", {}).get(c, {})
+        state[key] = str(value)
+
+        self._ktc_persistent.save_variable(c, str(state), "State", True)
 
     @staticmethod
     def is_float(value: str) -> bool:

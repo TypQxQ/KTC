@@ -60,7 +60,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         if self._selected_tool == value:
             return
         self._selected_tool = value
-        self.persistent_state = {"selected_tool": value.name}
+        self.persistent_state_set("selected_tool", value.name)
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
