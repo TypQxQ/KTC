@@ -37,33 +37,19 @@ I welcome any and all input and contributions. Don't be afraid to make a pull re
 Thank you!
 
 ## Readme Table of Contents
-**[Major feature](#major-features)**<br>
-**[Installation](#installation)**<br>
-**[Minimum Configuration](#---minimum_configuration)**<br>
-**[Setup & Calibration](#---setup-and-calibration)**<br>
-**[Important Concepts and Features](#---important-concepts-and-features)**<br>
-\- [1. How to handle errors](#1-how-to-handle-errors)<br>
-\- [2. State and Persistence](#2-state-and-persistence)<br>
-\- [3. Tool to Gate MutableMapping](#3-tool-to-gate-ttg-mapping)<br>
-\- [4. Synchronized Gear/Extruder](#4-synchronized-gearextruder-motors)<br>
-\- [5. Clog, Runout, EndlessSpool, Flowrate](#5-clogrunout-detection-endlessspool-and-flowrate-monitoring)<br>
-\- [6. Logging me](#6-logging)<br>
-\- [7. Pause/Resume/Cancel](#7-pause--resume--cancel_print-macros)<br>
-\- [8. Recovering MMU state](#8-recovering-mmu-state)<br>
-\- [9. Gate statistics](#9-gate-statistics)<br>
-\- [10. Filament bypass](#10-filament-bypass)<br>
-\- [11. Pre-print functions](#11-useful-pre-print-functionality)<br>
-\- [12. Gate map, Filament type and color](#12-gate-map-describing-filament-type-color-and-status)<br>
-**[Loading and Unloading Sequences](#---filament-loading-and-unloading-sequences)**<br>
-**[KlipperScreen Happy Hare Edition](#---klipperscreen-happy-hare-edition)**<br>
-**[My Testing / Setup](#---my-testing)**<br>
-**[Revision History](#---revision-history)**<br>
+**[Major feature](#---major-features)**<br>
+**[Installation](#---installation)**<br>
+\- [1-Automatic install with Moonraker Autoupdate Support](#1-automatic-install-with-Moonraker-autoupdate-aupport)<br>
+\- [2-Manual Install](#2-manual-install)<br>
+**[Minimum Configuration](#---minimum-configuration)**<br>
+**[Configuration Examples](#---configuration-examples)**<br>
+**[G-Code commands](#---g-code-commands)**<br>
+**[Values accesible from Macro for each object](#---values-accesible-from-macro-for-each-object)**<br>
 
 #### Other Docs:
 
 **[Command Reference](./doc/command_ref.md)**<br>
 **[Harware Configuration, Movement and Homing](./doc/hardware_config.md)**<br>
-**[Calibration Guide](./doc/calibration.md)**<br>
 **[Configuation Reference](./doc/configuration.md)**<br>
 **[Gcode Customization](./doc/gcode_customization.md)**<br>
 
@@ -88,6 +74,7 @@ Thank you!
 </ul>
 
 <br>
+
 ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Installation
 
 ### 1\. Automatic install with Moonraker Autoupdate Support
