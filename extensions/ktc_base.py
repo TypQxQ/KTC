@@ -154,21 +154,27 @@ class KtcBaseClass:
         # Initiating values are only red once and then saved to the persistent state and
         # must be removed from the config file to continue.
         self._initiating_config = {}
-        # Offset as a list of 3 floats.
+        # Offset as a list of 3 floats. Also valid for global_offset.
         init: str = ""
         for init in config.get_prefix_options("init_"):
             init = init.strip().lower()
-            if init == "init_offset":
+            if 'offset' in init:
                 try:
-                    v : str = config.get(init)
-                    if v is not None or v != "":
+                    if init == "init_global_offset" and self.__class__.__name__ != "Ktc":
+                        raise ValueError(
+                            "init_global_offset is only valid for the topmost KTC object.")
+                    elif init != "init_global_offset" or init == "init_offset":
+                        raise ValueError(
+                            f"Invalid initializing option name {init} "
+                            + "for {self.config.get_name()}.")
+                    v = typing.cast(str, config.get(init)).replace(" ", "")
+                    if v:
                         vl = [float(x) for x in v.split(",")]
                         if len(vl) != 3:
-                            raise ValueError("Offset must be a list of 3 floats.")
-                        self._initiating_config['offset'] = vl
+                            raise ValueError(f"{init} must be a list of 3 floats.")
+                        self._initiating_config[init.lstrip("init_")] = vl
                 except Exception as e:
-                    raise self.config.error(f"Invalid offset for {self.config.get_name()}: {e}")
-
+                    raise self.config.error(f"Invalid {init} for {self.config.get_name()}: {e}")
 
     def configure_inherited_params(self):
         '''Load inherited parameters from instances that this instance inherits from.
@@ -179,12 +185,14 @@ class KtcBaseClass:
         )
 
         # Check if any initiating values are set.
+        # offset and global_offset are valid.
         if len(self._initiating_config) > 0:
-            if "offset" in self._initiating_config:
-                self.persistent_state_set("offset", self._initiating_config["offset"])
-                raise self.config.error(f"Offset for {self.config.get_name()} successfully aved as"
-                    + f" {self._initiating_config['offset']}."
-                    +" Remove the offset from the config and restart Klipper to continue.")
+            for key in (key for key in self._initiating_config if "offset" in key):
+                self.persistent_state_set(key, self._initiating_config[key])
+                raise self.config.error(
+                    f"{key} for {self.config.get_name()} successfully saved as"
+                    + f" {self._initiating_config[key]}. "
+                    + "Remove the setting from config and restart Klipper to continue.")
 
         # Check for circular inheritance.
         if self.state >= self.StateType.CONFIGURED:
@@ -328,7 +336,7 @@ class KtcBaseClass:
         c = self._get_type_for_persistent_state()
 
         state: dict = self._ktc_persistent.content.get("State", {}).get(c, {})
-        state[key] = str(value)
+        state[key] = value
 
         self._ktc_persistent.save_variable(c, str(state), "State", True)
 

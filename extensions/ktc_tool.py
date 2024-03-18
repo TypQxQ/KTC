@@ -295,31 +295,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
 
         return return_list
 
-    # def set_offset(self, **kwargs):
-    #     for arg, value in kwargs.items():
-    #         if arg == "x_pos":
-    #             self.offset[0] = float(value)
-    #         elif arg == "x_adjust":
-    #             self.offset[0] += float(value)
-    #         elif arg == "y_pos":
-    #             self.offset[1] = float(value)
-    #         elif arg == "y_adjust":
-    #             self.offset[1] += float(value)
-    #         elif arg == "z_pos":
-    #             self.offset[2] = float(value)
-    #         elif arg == "z_adjust":
-    #             self.offset[2] += float(value)
-
-    #     self.log.always(
-    #         "ktc_tool %s offset now set to: %f, %f, %f."
-    #         % (
-    #             self.name,
-    #             float(self.offset[0]),
-    #             float(self.offset[1]),
-    #             float(self.offset[2]),
-    #         )
-    #     )
-
     def set_heaters(self, **kwargs) -> None:
         if len(self.extruder.heaters) < 1:
             self.log.debug(

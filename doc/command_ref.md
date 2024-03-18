@@ -15,8 +15,8 @@
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Offset commands
   | Command | Description | 
   | ------- | ----------- |
-  | `KTC_GLOBAL_OFFSET_SAVE [X=<pos>\|X_ADJUST=<adjust>] [Y=<pos>\|Y_ADJUST=<adjust>] [Z=<pos>\|Z_ADJUST=<adjust>]` | Set a global positiona offset that is applied to all tool offsets. |
-  | `KTC_TOOL_OFFSET_SAVE [X=<pos>\|X_ADJUST=<adjust>] [Y=<pos>\|Y_ADJUST=<adjust>] [Z=<pos>\|Z_ADJUST=<adjust>]` | Set the positional offset of an individual tool. |
+  | `KTC_GLOBAL_OFFSET_SAVE [X=<pos>\|X_ADJUST=<adjust>] [Y=<pos>\|Y_ADJUST=<adjust>] [Z=<pos>\|Z_ADJUST=<adjust>]` | Set a global position offset that is applied to all tool offsets. |
+  | `KTC_TOOL_OFFSET_SAVE [TOOL=<name> \| T=<index>] [X=<pos>\|X_ADJUST=<adjust>] [Y=<pos>\|Y_ADJUST=<adjust>] [Z=<pos>\|Z_ADJUST=<adjust>]` | Save the positional offset of an individual tool to file so it can be used later. |
   <br>
 
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Tool remapping commands

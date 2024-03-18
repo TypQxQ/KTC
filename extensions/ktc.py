@@ -84,20 +84,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self._heaters_paused = {}
         self._saved_position = [None, None, None]
 
-        self.global_offset = [0, 0, 0]  # Global offset for all tools.
-        self.global_offset = config.get("global_offset", "0,0,0")  # type: ignore
-        if isinstance(self.global_offset, str):
-            offset_list = self.global_offset.split(",")
-            if len(offset_list) == 3 and all(
-                x.replace(".", "").isdigit() for x in offset_list
-            ):
-                self.global_offset = [float(x) for x in offset_list]
-            else:
-                raise ValueError(
-                    "global_offset is not a string containing 3 float numbers separated by ,"
-                )
-        else:
-            raise TypeError("global_offset is not a string")
+        self.global_offset = [0.0, 0.0, 0.0]  # Global offset for all tools.
 
         # Register events
         self.printer.register_event_handler("klippy:connect", self._handle_connect)
@@ -333,6 +320,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
+        # Get Offset from persistent storage
+        self.global_offset = self.persistent_state.get("global_offset", self.global_offset)
         self.state = self.StateType.CONFIGURED
 
     @property
@@ -817,41 +806,17 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_TOOL_OFFSET_SAVE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
+        tool: 'ktc_tool.KtcTool' = self.get_tool_from_gcmd(gcmd)
         tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
+        tool.persistent_state_set("offset", tool.offset)
+        self.log.always(f"Tool {tool.name} offset set to: {tool.offset}")
 
     cmd_KTC_GLOBAL_OFFSET_SAVE_help = "Set the global tool offset" + _OFFSET_HELP
 
     def cmd_KTC_GLOBAL_OFFSET_SAVE(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
-
-    # cmd_KTC_TOOL_OFFSET_APPLY_help = (
-    #     "Set G-Code offset to the one of current tool."
-    #     + "Global offset is also applied."
-    #     + "MOVE= If should move the toolhead, optional."
-    #     + "If not specified, it will not move."
-    #     + "0/FALSE/NO: No move"
-    #     + "1/TRUE/YES: Move"
-    #     + _TOOL_HELP
-    #     + " If not specified, active tool is used."
-    # )
-
-    # def cmd_KTC_TOOL_OFFSET_APPLY(self, gcmd):  # pylint: disable=invalid-name
-    #     tool = self.get_tool_from_gcmd(gcmd)
-
-    #     param_move = self.parse_bool(gcmd.get("MOVE", "0"))
-    #     run_script = "SET_GCODE_OFFSET "
-    #     for axis in ("X", "Y", "Z"):
-    #         offset = 0.0
-    #         if tool.offset[XYZ_TO_INDEX[axis]] is not None:
-    #             offset += tool.offset[XYZ_TO_INDEX[axis]]
-    #         if self.global_offset[XYZ_TO_INDEX[axis]] is not None:
-    #             offset += self.global_offset[XYZ_TO_INDEX[axis]]
-    #         run_script += f"{axis}={offset} "
-    #     run_script += f"MOVE={param_move}"
-
-    #     self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
-    #     self.gcode.run_script_from_command(run_script)
+        self.persistent_state_set("global_offset", self.global_offset)
+        self.log.always(f"Global offset set to: {self.global_offset}")
 
     ###########################################
     # TOOL REMAPING                           #

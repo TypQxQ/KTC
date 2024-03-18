@@ -72,6 +72,7 @@ Thank you!
   <li>Persitance of state and statistics across restarts.</li>
   <li>Sophisticated logging options (console and file)</li>
   <li>Moonraker update-manager support</li>
+  <li>Persistent state saved to file.</li>
 </ul>
 
 <br>
