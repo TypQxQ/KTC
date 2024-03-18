@@ -22,7 +22,7 @@ from .ktc_heater import (   # pylint: disable=relative-beyond-top-level
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode, klippy
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc, ktc_persisting, ktc_heater
+    from . import ktc_log, ktc_toolchanger, ktc_tool, ktc, ktc_persisting
 
 # Value of Unknown and None tools.
 TOOL_NUMBERLESS_N = -3
@@ -319,42 +319,32 @@ class KtcBaseClass:
         '''Return the persistent state from file.
         Is initialized inside _handle_connect.
         Use persistent_state_set to set the state.'''
-        if self._ktc_persistent is None:
-            self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
-                self.printer.lookup_object("ktc_persisting")
-            )
-        if isinstance(self, KtcBaseToolClass):
-            c = "ktc_tool_" + self.name.lower()
-        elif isinstance(self, KtcBaseChangerClass):
-            c = "ktc_toolchanger_" + self.name.lower()
-        elif isinstance(self, KtcBaseClass):
-            c = "ktc"
-        else:
-            raise ValueError(f"Can't get persistent state for object: {type(self)}")
-
+        c = self._get_type_for_persistent_state()
         v: dict = self._ktc_persistent.content.get("State", {})
         return v.get(c, {})
 
     def persistent_state_set(self, key: str, value: typing.Any):
-        self.log.trace(f"Setting persistent state for {self.name} to {value = }, {key =}")
-        if self._ktc_persistent is None:
-            self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
-                self.printer.lookup_object("ktc_persisting")
-            )
-
-        if isinstance(self, KtcBaseToolClass):
-            c = "ktc_tool_" + self.name.lower()
-        elif isinstance(self, KtcBaseChangerClass):
-            c = "ktc_toolchanger_" + self.name.lower()
-        elif isinstance(self, KtcBaseClass):
-            c = "ktc"
-        else:
-            raise ValueError(f"Can't set persistent state for object: {type(self)}")
+        '''Set the persistent state for the object. Use persistent_state to get the state.'''
+        c = self._get_type_for_persistent_state()
 
         state: dict = self._ktc_persistent.content.get("State", {}).get(c, {})
         state[key] = str(value)
 
         self._ktc_persistent.save_variable(c, str(state), "State", True)
+
+    def _get_type_for_persistent_state(self) -> str:
+        if self._ktc_persistent is None:
+            self._ktc_persistent: 'ktc_persisting.KtcPersisting' = (  # type: ignore # pylint: disable=attribute-defined-outside-init
+                self.printer.lookup_object("ktc_persisting")
+            )
+        if isinstance(self, KtcBaseToolClass):
+            return "ktc_tool_" + self.name.lower()
+        elif isinstance(self, KtcBaseChangerClass):
+            return "ktc_toolchanger_" + self.name.lower()
+        elif isinstance(self, KtcBaseClass):
+            return "ktc"
+        else:
+            raise ValueError(f"Can't get persistent state for object: {type(self)}")
 
     @staticmethod
     def is_float(value: str) -> bool:
@@ -431,7 +421,6 @@ class KtcBaseToolClass(KtcBaseClass):
 
         # TOOL_UNKNOWN and TOOL_NONE has no _ktc object.
         if self in KtcConstantsClass.INVALID_TOOLS:
-        # if not hasattr(self, "_ktc"):
             return
 
         if self._ktc.propagate_state:
