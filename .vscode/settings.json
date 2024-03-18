@@ -16,6 +16,6 @@
         // "../klipper/klippy/"
     // ]
     "python.analysis.diagnosticSeverityOverrides": {
-        "reportArgumentType": "none",
+        "reportArgumentType": "none"
     },
 }
