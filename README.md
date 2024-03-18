@@ -9,19 +9,19 @@ Universal Toolchanger helper for Klipper
 
 <p align="center">
   <a aria-label="Downloads" href="https://github.com/TypQxQ/KTC/releases">
-    <img src="https://img.shields.io/github/release/TypQxQ/KTC?display_name=tag&style=flat-square">
+    <img src="https://img.shields.io/github/release/TypQxQ/KTC?display_name=tag&style=flat-square"  alt="Downloads Badge">
   </a>
   <a aria-label="Stars" href="https://github.com/TypQxQ/KTC/stargazers">
-    <img src="https://img.shields.io/github/stars/TypQxQ/KTC?style=flat-square">
+    <img src="https://img.shields.io/github/stars/TypQxQ/KTC?style=flat-square"  alt="Stars Badge">
   </a>
   <a aria-label="Forks" href="https://github.com/TypQxQ/KTC/network/members">
-    <img src="https://img.shields.io/github/forks/TypQxQ/KTC?style=flat-square">
+    <img src="https://img.shields.io/github/forks/TypQxQ/KTC?style=flat-square" alt="Forks Badge">
   </a>
   <a aria-label="License" href="https://github.com/TypQxQ/KTC/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/TypQxQ/KTC?style=flat-square">
+    <img src="https://img.shields.io/github/license/TypQxQ/KTC?style=flat-square" alt="License Badge">
   </a>
   <a aria-label="Codacy Badge" href="https://app.codacy.com/gh/TypQxQ/KTC/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade">
-    <img src="https://app.codacy.com/project/badge/Grade/2ba035ce6a444b889d3e9afcd5e9ec87">
+    <img src="https://app.codacy.com/project/badge/Grade/2ba035ce6a444b889d3e9afcd5e9ec87" alt="Codacy Badge">
   </a>
 </p>
 
@@ -40,14 +40,12 @@ I welcome any and all input and contributions. Don't be afraid to make a pull re
 Thank you!
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Table of Contents
-**[Major feature](#---major-features)**<br>
-**[Installation](#---installation)**<br>
-\- [1-Automatic install with Moonraker Autoupdate Support](#1-automatic-install-with-Moonraker-autoupdate-aupport)<br>
-\- [2-Manual Install](#2-manual-install)<br>
-**[Minimum Configuration](#---minimum-configuration)**<br>
-**[Configuration Examples](#---configuration-examples)**<br>
-**[G-Code commands](#---g-code-commands)**<br>
-**[Values accesible from Macro for each object](#---values-accesible-from-macro-for-each-object)**<br>
+**[Major feature](#----major-features)**<br>
+**[Installation](#----installation)**<br>
+**[Minimum Configuration](#----minimum-configuration)**<br>
+**[Configuration Examples](#----configuration-examples)**<br>
+**[G-Code commands](#----g-code-commands)**<br>
+**[Values accesible from Macro for each object](#----values-accesible-from-macro-for-each-object)**<br>
 
 #### Other Docs:
 

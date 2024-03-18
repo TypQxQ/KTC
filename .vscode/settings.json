@@ -9,7 +9,8 @@
         "--disable=W0718",
         "--disable=C0114",
         "--disable=C0112",
-        "--disable=W0201",],
+        "--disable=W0201"
+    ],
     "python.analysis.typeCheckingMode": "standard",
     // "python.analysis.extraPaths": [
         // "../klipper/klippy/"
