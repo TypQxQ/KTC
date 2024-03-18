@@ -134,7 +134,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         # Register commands
         handlers = [
-            "KTC_DROPOFF",
+            "KTC_DESELECT_ALL",
             "KTC_TEMPERATURE_WAIT_WITH_TOLERANCE",
             "KTC_SET_AND_SAVE_PARTFAN_SPEED",
             "KTC_GLOBAL_OFFSET_SAVE",
@@ -505,9 +505,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     ):  # pylint: disable=invalid-name
         self.active_tool = self.get_tool_from_gcmd(gcmd)
 
-    cmd_KTC_DROPOFF_help = "Deselect all tools"
+    cmd_KTC_DESELECT_ALL_help = "Deselect all tools"
 
-    def cmd_KTC_DROPOFF(
+    def cmd_KTC_DESELECT_ALL(
         self, gcmd=None
     ):  # pylint: disable=invalid-name, unused-argument
         self.run_with_profile(self.deselect_all_tools)

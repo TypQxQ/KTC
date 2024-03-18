@@ -102,6 +102,11 @@ Add the files in the macros folder to the macros folder.
 
  `[ktc_tool 0]`
 
+## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Help and community:
+Discuss it on Discord:
+<iframe src="https://discord.com/widget?id=1219262213492310106&theme=dark" width="800" height="300" allowtransparency="true" frameborder="0" sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"></iframe>
+
+
 ## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Configuration Examples:
 Configuration example can be found here:
 
