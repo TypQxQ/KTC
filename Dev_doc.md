@@ -298,8 +298,9 @@ class ktc_MeanLayerTime:
 
 
 - Extruder -> heater_collection (HeaterCollectionWrapper)
-
 - Add context as constants that are inherited. Add a ktc._run_gcode_from_context()
+- Combine KTC_SET_STATUS with TOOL and TOOLCHANGER
+- Add Tn in addition to KTC_Tn
 
 - Idea for preprocessing to get time of toolchange is using a module that has a opiton named time before ToolChange.
     - CMD in GCODE before waiting for bed to reach temperature.

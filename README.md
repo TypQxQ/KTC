@@ -9,16 +9,19 @@ Universal Toolchanger helper for Klipper
 
 <p align="center">
   <a aria-label="Downloads" href="https://github.com/TypQxQ/KTC/releases">
-    <img src="https://img.shields.io/github/release/TypQxQ/KTC?display_name=tag&style=flat-square">
+    <img src="https://img.shields.io/github/release/TypQxQ/KTC?display_name=tag&style=flat-square"  alt="Downloads Badge">
   </a>
   <a aria-label="Stars" href="https://github.com/TypQxQ/KTC/stargazers">
-    <img src="https://img.shields.io/github/stars/TypQxQ/KTC?style=flat-square">
+    <img src="https://img.shields.io/github/stars/TypQxQ/KTC?style=flat-square"  alt="Stars Badge">
   </a>
   <a aria-label="Forks" href="https://github.com/TypQxQ/KTC/network/members">
-    <img src="https://img.shields.io/github/forks/TypQxQ/KTC?style=flat-square">
+    <img src="https://img.shields.io/github/forks/TypQxQ/KTC?style=flat-square" alt="Forks Badge">
   </a>
   <a aria-label="License" href="https://github.com/TypQxQ/KTC/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/TypQxQ/KTC?style=flat-square">
+    <img src="https://img.shields.io/github/license/TypQxQ/KTC?style=flat-square" alt="License Badge">
+  </a>
+  <a aria-label="Codacy Badge" href="https://app.codacy.com/gh/TypQxQ/KTC/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade">
+    <img src="https://app.codacy.com/project/badge/Grade/2ba035ce6a444b889d3e9afcd5e9ec87" alt="Codacy Badge">
   </a>
 </p>
 
@@ -36,15 +39,13 @@ I welcome any and all input and contributions. Don't be afraid to make a pull re
 
 Thank you!
 
-## Readme Table of Contents
-**[Major feature](#---major-features)**<br>
-**[Installation](#---installation)**<br>
-\- [1-Automatic install with Moonraker Autoupdate Support](#1-automatic-install-with-Moonraker-autoupdate-aupport)<br>
-\- [2-Manual Install](#2-manual-install)<br>
-**[Minimum Configuration](#---minimum-configuration)**<br>
-**[Configuration Examples](#---configuration-examples)**<br>
-**[G-Code commands](#---g-code-commands)**<br>
-**[Values accesible from Macro for each object](#---values-accesible-from-macro-for-each-object)**<br>
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Table of Contents
+**[Major feature](#----major-features)**<br>
+**[Installation](#----installation)**<br>
+**[Minimum Configuration](#----minimum-configuration)**<br>
+**[Configuration Examples](#----configuration-examples)**<br>
+**[G-Code commands](#----g-code-commands)**<br>
+**[Values accesible from Macro for each object](#----values-accesible-from-macro-for-each-object)**<br>
 
 #### Other Docs:
 
@@ -55,7 +56,7 @@ Thank you!
 
 <br>
  
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Major features:
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Major features:
 <ul>
   <li>Support any type of toolchanger and any type of tool.</li>
   <li>Infinite levels of nested changers and tools</li>
@@ -75,7 +76,7 @@ Thank you!
 
 <br>
 
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Installation
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Installation
 
 ### 1\. Automatic install with Moonraker Autoupdate Support
 This plugin assumes that you installed Klipper into your home directory (usually `/home/pi`).
@@ -97,12 +98,16 @@ If you encouter errors after an automatic Klipper update you can safetly run the
 Copy or link the python (`*.py`) files into the `\klipper\klippy\extras` directory. Assuming Then restart Klipper to pick up the extensions.
 Add the files in the macros folder to the macros folder.
 
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Minimum Configuration:
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Minimum Configuration:
 * At least one tool needs to be defined, ex:
 
  `[ktc_tool 0]`
 
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Configuration Examples:
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Help and community:
+
+<img src="doc/discord+ktc.png" alt='KTC on Discord' height='100'>
+
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Configuration Examples:
 Configuration example can be found here:
 
 * [Simple Configuration with one toolchanger](/config/example_config/simple/simple_example.cfg)
@@ -110,10 +115,10 @@ Configuration example can be found here:
 * [Jubilee Toolchanger with Toolchanger and ERCF]
 
 
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) G-Code commands:
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) G-Code commands:
 Reffer to the [Command Reference](./doc/command_ref.md).<br>
 
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Values accesible from Macro for each object
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Values accesible from Macro for each object
 
   Macros used by KTC have this objects accesible
 
@@ -173,6 +178,6 @@ States can be set like: `KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STA
   - `SELECTED` - Tool is selected.
   - `ACTIVE` - Tool is active as main engaged tool for ktc.
 
-## ![#f03c15](/doc/f03c15.png) ![#c5f015](/doc/c5f015.png) ![#1589F0](/doc/1589F0.png) Example configuration
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Example configuration
 My corrent configuration is for v.2 where work progresses fast.
 

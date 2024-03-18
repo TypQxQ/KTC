@@ -134,13 +134,13 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
         # Register commands
         handlers = [
-            "KTC_DROPOFF",
+            "KTC_DESELECT_ALL",
             "KTC_TEMPERATURE_WAIT_WITH_TOLERANCE",
             "KTC_SET_AND_SAVE_PARTFAN_SPEED",
             "KTC_GLOBAL_OFFSET_SAVE",
             "KTC_TOOL_SET_TEMPERATURE",
             "KTC_TOOL_OFFSET_SAVE",
-            "KTC_TOOL_OFFSET_APPLY",  # Maybe remove?
+            # "KTC_TOOL_OFFSET_APPLY",  # remove
             "KTC_SET_STATE",
             "KTC_TOOL_SET_STATE",
             "KTC_TOOLCHANGER_SET_STATE",
@@ -505,9 +505,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     ):  # pylint: disable=invalid-name
         self.active_tool = self.get_tool_from_gcmd(gcmd)
 
-    cmd_KTC_DROPOFF_help = "Deselect all tools"
+    cmd_KTC_DESELECT_ALL_help = "Deselect all tools"
 
-    def cmd_KTC_DROPOFF(
+    def cmd_KTC_DESELECT_ALL(
         self, gcmd=None
     ):  # pylint: disable=invalid-name, unused-argument
         self.run_with_profile(self.deselect_all_tools)
@@ -827,33 +827,33 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_GLOBAL_OFFSET_SAVE(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
 
-    cmd_KTC_TOOL_OFFSET_APPLY_help = (
-        "Set G-Code offset to the one of current tool."
-        + "Global offset is also applied."
-        + "MOVE= If should move the toolhead, optional."
-        + "If not specified, it will not move."
-        + "0/FALSE/NO: No move"
-        + "1/TRUE/YES: Move"
-        + _TOOL_HELP
-        + " If not specified, active tool is used."
-    )
+    # cmd_KTC_TOOL_OFFSET_APPLY_help = (
+    #     "Set G-Code offset to the one of current tool."
+    #     + "Global offset is also applied."
+    #     + "MOVE= If should move the toolhead, optional."
+    #     + "If not specified, it will not move."
+    #     + "0/FALSE/NO: No move"
+    #     + "1/TRUE/YES: Move"
+    #     + _TOOL_HELP
+    #     + " If not specified, active tool is used."
+    # )
 
-    def cmd_KTC_TOOL_OFFSET_APPLY(self, gcmd):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
+    # def cmd_KTC_TOOL_OFFSET_APPLY(self, gcmd):  # pylint: disable=invalid-name
+    #     tool = self.get_tool_from_gcmd(gcmd)
 
-        param_move = self.parse_bool(gcmd.get("MOVE", "0"))
-        run_script = "SET_GCODE_OFFSET "
-        for axis in ("X", "Y", "Z"):
-            offset = 0.0
-            if tool.offset[XYZ_TO_INDEX[axis]] is not None:
-                offset += tool.offset[XYZ_TO_INDEX[axis]]
-            if self.global_offset[XYZ_TO_INDEX[axis]] is not None:
-                offset += self.global_offset[XYZ_TO_INDEX[axis]]
-            run_script += f"{axis}={offset} "
-        run_script += f"MOVE={param_move}"
+    #     param_move = self.parse_bool(gcmd.get("MOVE", "0"))
+    #     run_script = "SET_GCODE_OFFSET "
+    #     for axis in ("X", "Y", "Z"):
+    #         offset = 0.0
+    #         if tool.offset[XYZ_TO_INDEX[axis]] is not None:
+    #             offset += tool.offset[XYZ_TO_INDEX[axis]]
+    #         if self.global_offset[XYZ_TO_INDEX[axis]] is not None:
+    #             offset += self.global_offset[XYZ_TO_INDEX[axis]]
+    #         run_script += f"{axis}={offset} "
+    #     run_script += f"MOVE={param_move}"
 
-        self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
-        self.gcode.run_script_from_command(run_script)
+    #     self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
+    #     self.gcode.run_script_from_command(run_script)
 
     ###########################################
     # TOOL REMAPING                           #
