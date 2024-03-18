@@ -27,6 +27,9 @@ This helps [Klipper](https://github.com/Klipper3d/klipper) with ToolChanging fun
 This is a complete rewrite of [KTCC v.1](https://github.com/TypQxQ/Klipper_ToolChanger) to be more versatile and have indefinite levels of toolchangers. Inspiration comes mainly from how RRF enables toolchanging and from the HappyHare project.
 
 # !!!!!!!!!!!!!!!!!!!!!!!!!!
+
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/ec9d1d05e1de40eb824c4005a51ff18f)](https://app.codacy.com/gh/TypQxQ/KTC?utm_source=github.com&utm_medium=referral&utm_content=TypQxQ/KTC&utm_campaign=Badge_Grade)
+
 # This is still under development
 Published for preview.
 The code works but the documentation is not finished yet.
