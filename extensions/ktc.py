@@ -84,20 +84,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self._heaters_paused = {}
         self._saved_position = [None, None, None]
 
-        self.global_offset = [0, 0, 0]  # Global offset for all tools.
-        self.global_offset = config.get("global_offset", "0,0,0")  # type: ignore
-        if isinstance(self.global_offset, str):
-            offset_list = self.global_offset.split(",")
-            if len(offset_list) == 3 and all(
-                x.replace(".", "").isdigit() for x in offset_list
-            ):
-                self.global_offset = [float(x) for x in offset_list]
-            else:
-                raise ValueError(
-                    "global_offset is not a string containing 3 float numbers separated by ,"
-                )
-        else:
-            raise TypeError("global_offset is not a string")
+        self.global_offset = [0.0, 0.0, 0.0]  # Global offset for all tools.
 
         # Register events
         self.printer.register_event_handler("klippy:connect", self._handle_connect)
@@ -333,6 +320,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def configure_inherited_params(self):
         super().configure_inherited_params()
+        # Get Offset from persistent storage
+        self.global_offset = self.persistent_state.get("global_offset", self.global_offset)
         self.state = self.StateType.CONFIGURED
 
     @property
@@ -590,15 +579,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         Wait will wait until heater is between set temperature +/- tolerance."""
         heater_names = []
         tolerance = gcmd.get_int(
-            "TOLERANCE", DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE, minval=0, maxval=50
+            "TOLERANCE", DEFAULT_WAIT_FOR_TEMPERATURE_TOLERANCE, minval=0, maxval=9
         )
         var_heater = typing.cast(str, gcmd.get("HEATER", None))
-        var_tool_name = typing.cast(str, gcmd.get("TOOL", None))
-        var_tool_n = gcmd.get_int("T", None, minval=0)
+        tool = self.get_tool_from_gcmd(gcmd, explicit=True)
 
-        if var_heater is not None and (
-            var_tool_name is not None or var_tool_n is not None
-        ):
+        if var_heater and tool:
             raise gcmd.error(
                 "Can't use both TOOL and HEATER parameter at the same time."
             )
@@ -608,12 +594,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         ).available_heaters
 
         # If neither tool or heaters are given, also wait for bed.
-        if var_tool_name is None and var_tool_n is None and var_heater is None:
+        if not tool and not var_heater:
             if "heater_bed" in available_heaters:
                 heater_names.append("heater_bed")
 
         # If heater names are specified
-        if var_heater is not None:
+        if var_heater:
             var_heater = var_heater.replace(" ", "").split(",")
             lcase_heater_names_dict = {
                 heater.lower(): heater for heater in available_heaters
@@ -626,8 +612,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 heater_names.append(lcase_heater_names_dict[name.lower()])
         # If tool name is specified or neither tool or heater is specified.
         else:
-            # Get the tool if valid or active tool.
-            tool = self.get_tool_from_gcmd(gcmd)
+            # Get a valid active tool if no tool is specified.
+            if not tool:
+                tool = self.get_tool_from_gcmd(gcmd)
             heater_names += [tool_heater.name for tool_heater in tool.extruder.heaters]
 
         self.log.trace(
@@ -819,41 +806,17 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_TOOL_OFFSET_SAVE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
+        tool: 'ktc_tool.KtcTool' = self.get_tool_from_gcmd(gcmd)
         tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
+        tool.persistent_state_set("offset", tool.offset)
+        self.log.always(f"Tool {tool.name} offset set to: {tool.offset}")
 
     cmd_KTC_GLOBAL_OFFSET_SAVE_help = "Set the global tool offset" + _OFFSET_HELP
 
     def cmd_KTC_GLOBAL_OFFSET_SAVE(self, gcmd):  # pylint: disable=invalid-name
         self.global_offset = self.offset_from_gcmd(gcmd, self.global_offset)
-
-    # cmd_KTC_TOOL_OFFSET_APPLY_help = (
-    #     "Set G-Code offset to the one of current tool."
-    #     + "Global offset is also applied."
-    #     + "MOVE= If should move the toolhead, optional."
-    #     + "If not specified, it will not move."
-    #     + "0/FALSE/NO: No move"
-    #     + "1/TRUE/YES: Move"
-    #     + _TOOL_HELP
-    #     + " If not specified, active tool is used."
-    # )
-
-    # def cmd_KTC_TOOL_OFFSET_APPLY(self, gcmd):  # pylint: disable=invalid-name
-    #     tool = self.get_tool_from_gcmd(gcmd)
-
-    #     param_move = self.parse_bool(gcmd.get("MOVE", "0"))
-    #     run_script = "SET_GCODE_OFFSET "
-    #     for axis in ("X", "Y", "Z"):
-    #         offset = 0.0
-    #         if tool.offset[XYZ_TO_INDEX[axis]] is not None:
-    #             offset += tool.offset[XYZ_TO_INDEX[axis]]
-    #         if self.global_offset[XYZ_TO_INDEX[axis]] is not None:
-    #             offset += self.global_offset[XYZ_TO_INDEX[axis]]
-    #         run_script += f"{axis}={offset} "
-    #     run_script += f"MOVE={param_move}"
-
-    #     self.log.trace(f"Applying G-Code offset from tool {tool.name}: {run_script}")
-    #     self.gcode.run_script_from_command(run_script)
+        self.persistent_state_set("global_offset", self.global_offset)
+        self.log.always(f"Global offset set to: {self.global_offset}")
 
     ###########################################
     # TOOL REMAPING                           #
@@ -892,7 +855,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
 
     def cmd_KTC_TOOL_MAP_NR(self, gcmd):  # pylint: disable=invalid-name
         overwite = self.parse_bool(gcmd.get("OVERWRITE", "0"))
-        tool = self.get_tool_from_gcmd(gcmd, allow_none=False)
+        tool = self.get_tool_from_gcmd(gcmd, allow_invalid_active_tool=False)
         set_tool = gcmd.get_int("SET", minval=0)
 
         if set_tool in self.all_tools_by_number:
@@ -954,26 +917,29 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
 
     def get_tool_from_gcmd(
-        self, gcmd: "gcode.GCodeCommand", allow_none: bool = True
-    ) -> "ktc_tool.KtcTool":
+        self, gcmd: "gcode.GCodeCommand", allow_invalid_active_tool: bool = True,
+    explicit: bool = False) -> "ktc_tool.KtcTool":
         """Returns the tool object specified in the gcode command or
-        the active tool if none is specified."""
+        the active tool if none is specified and explicit is not True.
+        If explicit is True, None is returned if no tool is specified in the gcode command."""
         tool_name: str = gcmd.get("TOOL", None)  # type: ignore
         tool_nr: int = gcmd.get_int("T", None)  # type: ignore
         if tool_name:
             tool = self.all_tools.get(tool_name, None)
             if not tool:
                 raise gcmd.error("Tool %s not found" % (tool_name))
-        elif tool_nr is not None:
+        elif tool_nr:
             if tool_nr not in self.all_tools_by_number:
                 raise gcmd.error("T%d not found" % (tool_nr))
             tool = self.all_tools_by_number[tool_nr]
+        elif explicit:
+            return None # type: ignore
         else:
             if self.active_tool in self.INVALID_TOOLS:
                 raise gcmd.error("No tool specified and no active tool")
             tool = self.active_tool
-        if not allow_none and (tool == self.TOOL_NONE or tool == self.TOOL_UNKNOWN):
-            raise gcmd.error("Tool TOOL_NONE or TOOL_UNKNOWN are not allowed.")
+        if not allow_invalid_active_tool and tool in self.INVALID_TOOLS:
+            raise gcmd.error(f"Tool {tool.name} not allowed.")
         return tool  # type: ignore
 
     def get_toolchanger_from_gcmd(
