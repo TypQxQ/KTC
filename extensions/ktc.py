@@ -853,9 +853,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         + " [OVERWRITE: 0/1] Default 0. If 1, will overwrite existing mapping."
     )
 
-    def cmd_KTC_TOOL_MAP_NR(self, gcmd):  # pylint: disable=invalid-name
+    def cmd_KTC_TOOL_MAP_NR(self, gcmd: "gcode.GCodeCommand"):  # pylint: disable=invalid-name
         overwite = self.parse_bool(gcmd.get("OVERWRITE", "0"))
-        tool = self.get_tool_from_gcmd(gcmd, allow_invalid_active_tool=False)
+        tool = self.get_tool_from_gcmd(gcmd, allow_invalid_active_tool=False, explicit=True)
         set_tool = gcmd.get_int("SET", minval=0)
 
         if set_tool in self.all_tools_by_number:
@@ -1023,6 +1023,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 + f"{heater.timer_heater_standby_to_powerdown_delay.duration}"
             )
 
+    cmd_KTC_DEBUG_TOOLS_help = "Debugging tools."
     def cmd_KTC_DEBUG_TOOLS(
         self, gcmd
     ):  # pylint: disable=invalid-name, unused-argument
@@ -1037,26 +1038,17 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             time_deselecting = self.log.tool_stats[
                 tool.name
             ].start_time_spent_deselecting
-            extruder_state = tool.extruder.state
 
-            if (
-                active_time
-                or standby_time
-                or selected_time
-                or time_selecting
-                or time_deselecting
-                or extruder_state != HeaterStateType.OFF
-            ):
-                self.log.always(
-                    f"{tool.name}:\n"
-                    + f"- Active time: {active_time}\n"
-                    + f"- Standby time: {standby_time}\n"
-                    + f"- Selected time: {selected_time}\n"
-                    + f"- Time spent selecting: {time_selecting}\n"
-                    + f"- Time spent deselecting: {time_deselecting}\n"
-                    + f"- state: {tool.state}\n"
-                    + f"- extruder state: {tool.extruder.state}\n"
-                )
+            self.log.always(
+                f"KTC_TOOL {tool.name} (T{tool.number}):\n"
+                + f"- state: {tool.state}\n"
+                + f"- extruder state: {tool.extruder.state}\n"
+                + f"- Active time: {self.log.seconds_to_human_string(active_time)}\n"
+                + f"- Standby time: {self.log.seconds_to_human_string(standby_time)}\n"
+                + f"- Selected time: {self.log.seconds_to_human_string(selected_time)}\n"
+                + f"- Time spent selecting: {self.log.seconds_to_human_string(time_selecting)}\n"
+                + f"- Time spent deselecting: {self.log.seconds_to_human_string(time_deselecting)}\n"
+            )
 
 def load_config(config):
     # prof = cProfile.Profile()

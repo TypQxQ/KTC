@@ -15,20 +15,20 @@
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Offset commands
   | Command | Description | 
   | ------- | ----------- |
-  | `KTC_GLOBAL_OFFSET_SAVE [X=<pos>\|X_ADJUST=<adjust>] [Y=<pos>\|Y_ADJUST=<adjust>] [Z=<pos>\|Z_ADJUST=<adjust>]` | Set a global position offset that is applied to all tool offsets. |
-  | `KTC_TOOL_OFFSET_SAVE [TOOL=<name> \| T=<index>] [X=<pos>\|X_ADJUST=<adjust>] [Y=<pos>\|Y_ADJUST=<adjust>] [Z=<pos>\|Z_ADJUST=<adjust>]` | Save the positional offset of an individual tool to file so it can be used later. |
+  | `KTC_GLOBAL_OFFSET_SAVE [ [[X=<pos>] [Y=<pos>] [Z=<pos>]] \| [[X_ADJUST=<adjust>] [Y_ADJUST=<adjust>] [Z_ADJUST=<adjust>]] ]` | Set a global position offset that is applied to all tool offsets. Reports the current global offset if no parameter is provided. |
+  | `KTC_TOOL_OFFSET_SAVE [TOOL=<name> \| T=<index>] [ [[X=<pos>] [Y=<pos>] [Z=<pos>]] \| [[X_ADJUST=<adjust>] [Y_ADJUST=<adjust>] [Z_ADJUST=<adjust>]] ]` | Save the positional offset of an individual tool to file so it can be used later. Reports the tool offset without global offsets if no offset parameter is provided. |
   <br>
 
-  ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Tool remapping commands
-  | Command | Description | Parameters |
-  | ------- | ----------- | ---------- |
-  | `KTC_TOOLS_DISPLAY` | Dump the current mapping of tools to other KTCC tools. |  |
-  | `KTC_TOOL_MAP_NR` | Remap a tool to another one. | `RESET=[0\|1]` If 1 the stored tooö remap will be reset.<br> `TOOL=[0-n]` The toolnumber to remap.<br> `SET=[0-n]` The toolnumber to remap to. |
+  ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Tool number mapping commands
+  | Command | Description | 
+  | ------- | ----------- |
+  | `KTC_TOOLS_DISPLAY` | Dump the current mapping of tools to other KTCC tools. |
+  | `KTC_TOOL_MAP_NR TOOL=<name> SET=<index>` | Map a tool to a index. Index must not be already in use. |
   <br>
 
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Advanced commands, rarely used
-  | Command | Description | Parameters |
-  | ------- | ----------- | ---------- |
+  | Command | Description |
+  | ------- | ----------- |
   | `KTC_SET_ACTIVE_TOOL` |  Set the current loaded tool manually to the specified. When loading a tool manually | `T=[-2-n]` Tool to set as current. ( -2 = Unknown tool ), ( -1 = Toollock unlocked without tool ) |
   | `KTC_SET_STATE` | . |  |
   | `KTC_TOOL_SET_STATE` | . |  |
@@ -41,8 +41,8 @@
   <br>
 
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Status, Logging and Persisted state
-  | Command | Description | Parameters |
-  | ------- | ----------- | ---------- |
+  | Command | Description |
+  | ------- | ----------- |
   | `KTCC_DUMP_STATS` | Dump the KTCC statistics to console. |  |
   | `KTCC_RESET_STATS` | Reset all the KTCC statistics. | `SUERE=[yes\|no]` If "yes" the stored statistics will be reset. |
   | `KTCC_INIT_PRINT_STATS` | Run at start of a print to initialize and reset the KTCC print statistics | |
@@ -55,10 +55,10 @@
   <br>
 
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Debuging
-  | Command | Description | Parameters |
-  | ------- | ----------- | ---------- |
-  | `KTC_DEBUG_HEATERS` | Dumps information about heaters not being off. |  |
-  | `KTC_DEBUG_TOOLS` | Dumps information about tools. | `SUERE=[yes\|no]` If "yes" the stored statistics will be reset. |
+  | Command | Description |
+  | ------- | ----------- |
+  | `KTC_DEBUG_HEATERS` | Reports current status of heaters. |
+  | `KTC_DEBUG_TOOLS` | Reports current status of tools. |
   <br>
 
 
