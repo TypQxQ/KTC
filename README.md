@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/TypQxQ/KTCC/assets/24956496/72e5732b-c571-4dd3-9a0a-ca78b13b5b82" alt='A Toolchenager' width='30%'>
+  <img src="https://github.com/TypQxQ/KTC/assets/24956496/72e5732b-c571-4dd3-9a0a-ca78b13b5b82" alt='A Toolchenager' width='30%'>
   <h1 align="center">KTC - Klipper Tool Changer code <sub>v.2</sub></h1>
 </p>
 
