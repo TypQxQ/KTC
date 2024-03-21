@@ -105,8 +105,7 @@ Add the files in the macros folder to the macros folder.
  `[ktc_tool 0]`
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Help and community:
-
-<img src="doc/discord+ktc.png" alt='KTC on Discord' height='100'>
+[The discution forums here on Github](https://github.com/TypQxQ/KTC/discussions)
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Configuration Examples:
 Configuration example can be found here:

@@ -129,8 +129,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             "KTC_TOOL_OFFSET_SAVE",
             # "KTC_TOOL_OFFSET_APPLY",  # remove
             "KTC_SET_STATE",
-            "KTC_TOOL_SET_STATE",
-            "KTC_TOOLCHANGER_SET_STATE",
             "KTC_TOOLCHANGER_SET_SELECTED_TOOL",
             "KTC_SET_ACTIVE_TOOL",
             "KTC_TOOLCHANGER_ENGAGE",
@@ -375,26 +373,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.log.always("KTC Toolchanger %s is now in error state." % self.name)
             self.selected_tool = self.TOOL_UNKNOWN
 
-    cmd_KTC_TOOLCHANGER_SET_STATE_help = (
-        "Set the state of the toolchanger."
-        + " [TOOLCHANGER: Default_ToolChanger]"
-        + " [STATE: STATE.ERROR]"
-    )
-
-    def cmd_KTC_TOOLCHANGER_SET_STATE(
-        self, gcmd: "gcode.GCodeCommand"
-    ):  # pylint: disable=invalid-name
-        try:
-            self.get_toolchanger_from_gcmd(gcmd).state = gcmd.get("STATE", None)
-        except Exception as e:
-            raise gcmd.error("Error setting toolchanger state: %s" % str(e)) from e
-
-    cmd_KTC_TOOL_SET_STATE_help = (
-        "Set the state of the toolchanger.\n"
-        + " [TOOL: Tool_name] or [T: Tool_number]\n"
-        + " [STATE: STATE.ERROR]"
-    )
-
     cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL_help = (
         "Set the selected tool in the toolchanger.\n"
         + "[TOOLCHANGER: Default_ToolChanger]\n"
@@ -404,9 +382,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
+        tool = self.get_tool_from_gcmd(gcmd, False)
         toolchanger = self.get_toolchanger_from_gcmd(gcmd)
-        if tool not in self.INVALID_TOOLS and tool.name not in toolchanger.tools:
+        if tool.name not in toolchanger.tools:
             raise self.printer.command_error(
                 "Tool %s not found in toolchanger %s." % (tool.name, toolchanger.name)
             )
@@ -453,36 +431,41 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 "Error disengaging toolchanger: %s" % str(e)
             ) from e
 
-    def cmd_KTC_TOOL_SET_STATE(
-        self, gcmd: "gcode.GCodeCommand"
-    ):  # pylint: disable=invalid-name
-        tool = self.get_tool_from_gcmd(gcmd)
-        value = gcmd.get("STATE", None)
-        if value is None:
-            raise self.printer.command_error(
-                "KTC_TOOL_SET_STATE: No STATE specified for tool: %s." % str(tool.name)
-            )
-        elif value not in self.StateType.__members__:
-            raise self.printer.command_error(
-                f"KTC_TOOL_SET_STATE: Invalid STATE: {value}."
-                + f" Valid states are: {self.StateType.__members__}"
-            )
-        tool: "ktc_tool.KtcTool" = self.printer.lookup_object(
-            "ktc_tool " + str(tool.name)
-        )
-        tool.state = value
-
     cmd_KTC_SET_STATE_help = "Set the state of the KTC.\n STATE= Defaut is ERROR."
 
     def cmd_KTC_SET_STATE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
-        value = gcmd.get("STATE", self.StateType.ERROR)
-        if value not in self.StateType.__members__:
+        value = typing.cast(str, gcmd.get("STATE", "")).upper()
+        tool = self.get_tool_from_gcmd(gcmd, False, True)
+        toolchanger = self.get_toolchanger_from_gcmd(gcmd, True)
+
+        if value and value not in self.StateType.__members__:  # type: ignore
             raise self.printer.command_error(
                 f"KTC_SET_STATE: Invalid STATE: {value}."
-                + f" Valid states are: {self.StateType.__members__}"
-            )
+                + f" Valid states are: {self.StateType.__members__}")
+
+        if tool:
+            if not value:
+                self.gcode.respond_info(
+                    f"Tool {tool.name} state is: {tool.state}."
+                )
+            else:
+                tool.state = value
+        elif toolchanger:
+            if not value:
+                self.gcode.respond_info(
+                    f"Toolchanger {toolchanger.name} state is: {toolchanger.state}."
+                )
+            else:
+                toolchanger.state = value
+        else:
+            if not value:
+                self.gcode.respond_info(
+                    f"KTC state is: {self.state}."
+                )
+            else:
+                self.state = value
         self._state = value
 
     cmd_KTC_SET_ACTIVE_TOOL_help = (
@@ -943,10 +926,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         return tool  # type: ignore
 
     def get_toolchanger_from_gcmd(
-        self, gcmd: "gcode.GCodeCommand"
+        self, gcmd: "gcode.GCodeCommand", explicit = False
     ) -> "ktc_toolchanger.KtcToolchanger":
-        """Returns the toolchanger object specified in the gcode command
-        or the default toolchanger if none is specified and only one is available."""
+        """Returns the toolchanger object specified in the gcode command.
+        If none are specified it will either return None if explicit is True or
+        the default toolchanger if only one toolchanger is available and
+        explicit is False, default."""
         toolchanger_name = typing.cast(str, gcmd.get("TOOLCHANGER", None))
         if toolchanger_name:
             toolchanger = self.printer.lookup_object(
@@ -954,6 +939,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
             if not toolchanger:
                 raise gcmd.error("Toolchanger %s not found" % (toolchanger_name))
+        elif explicit:
+            return None # type: ignore
         else:
             if len(self.all_toolchangers) > 1:
                 raise gcmd.error("No toolchanger specified and more than one available")
