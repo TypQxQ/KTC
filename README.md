@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/TypQxQ/KTCC/assets/24956496/72e5732b-c571-4dd3-9a0a-ca78b13b5b82" alt='A Toolchenager' width='30%'>
+  <img src="https://github.com/TypQxQ/KTC/assets/24956496/72e5732b-c571-4dd3-9a0a-ca78b13b5b82" alt='A Toolchenager' width='30%'>
   <h1 align="center">KTC - Klipper Tool Changer code <sub>v.2</sub></h1>
 </p>
 
@@ -105,8 +105,7 @@ Add the files in the macros folder to the macros folder.
  `[ktc_tool 0]`
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Help and community:
-
-<img src="doc/discord+ktc.png" alt='KTC on Discord' height='100'>
+[The discution forums here on Github](https://github.com/TypQxQ/KTC/discussions)
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Configuration Examples:
 Configuration example can be found here:
@@ -161,7 +160,7 @@ Reffer to the [Command Reference](./doc/command_ref.md).<br>
   - `params_*` - parameter in the above list.
 
 - **STATE_TYPE** Constant listing the difrent states ktc, a tool or toolchanger can have:
-States can be set like: `KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY`
+States can be set like: `KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY`
   - `ERROR` - Toolchanger or tool is in error state.
   - `NOT_CONFIGURED` - Toolchanger or tool is not configured.
   - `CONFIGURING` - Toolchanger or tool is configuring.

@@ -16,7 +16,7 @@ from .ktc_base import KtcConstantsClass, KtcBaseChangerClass, KtcConfigurableEnu
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_persisting, ktc_tool
+    from . import ktc_tool
 
 @typing.final
 class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
@@ -73,7 +73,8 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         # Sanity check. If the parent tool is not defined,
         # the init_order should be set to independent.
         if (self.init_order != self.InitOrderType.INDEPENDENT and
-            self.parent_tool is not None):
+            self.parent_tool is not None
+            ):
             raise Exception(
                 "Toolchanger %s has no parent tool " % self.name
                 + "defined but init_order is set to AFTER_PARENT."
@@ -116,6 +117,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
         # Run the init gcode template if it is defined.
         if self._init_gcode != "":
+            self.log.trace(f"Initalizing ktc_toolchanger {self.name}.")
             init_gcode_template = self.gcode_macro.load_template(   # type: ignore
                 self.config, "", self._init_gcode)
             context = init_gcode_template.create_template_context()
@@ -128,7 +130,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 raise self.config.error(
                     ("ktc_toolchanger %s: init_gcode did not " % self.name)
                     + "change the state. Use for example "
-                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "'KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
                     + "change the state to READY."
                 )
         else:
@@ -149,7 +151,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 self.state = self.StateType.ENGAGED
                 return
 
-            if not disregard_engaged and self.state == self.StateType.ENGAGED:
+            if not disregard_engaged and self.state >= self.StateType.ENGAGED:
                 self.log.always(
                     "ktc_toolchanger %s is already engaged with tool %s."
                     % (self.name, self.selected_tool.name)
@@ -172,7 +174,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 self.state == self.StateType.INITIALIZING):
                 raise self.config.error(
                     ("engage_gcode did not change the state. Use for example "
-                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
+                    + "'KTC_SET_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
                     + "change the state to ENGAGED. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -225,7 +227,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 raise self.config.error(
                     ("disengage_gcode did not "
                     + "change the state. Use for example "
-                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "'KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
                     + "change the state to READY. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -253,7 +255,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         elif value == self.StateType.READY:
             self.selected_tool = self.TOOL_NONE
         elif value == self.StateType.ERROR:
-            self.log.always("KTC Toolchanger %s is now in error state." % self.name)
+            self.log.always("KTC is now in error state.")
             self.selected_tool = self.TOOL_UNKNOWN
 
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument

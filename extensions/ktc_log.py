@@ -106,10 +106,10 @@ class KtcLog:
             "KTC_LOG_INFO",
             "KTC_LOG_ALWAYS",
             "KTC_SET_LOG_LEVEL",
-            "KTC_DUMP_STATS",
+            "KTC_STATS_REPORT",
             "KTC_RESET_STATS",
-            "KTC_INIT_PRINT_STATS",
-            "KTC_DUMP_PRINT_STATS",
+            "KTC_RESET_PRINT_STATS",
+            "KTC_PRINT_STATS_REPORT",
         ]
         for cmd in handlers:
             func = getattr(self, "cmd_" + cmd)
@@ -782,20 +782,20 @@ class KtcLog:
             message += "KTC_RESET_STATS SURE=YES"
             self.gcode.respond_info(message)
 
-    cmd_KTC_DUMP_STATS_help = "Dump the KTC statistics"
-    def cmd_KTC_DUMP_STATS(self, gcmd): # pylint: disable=unused-argument
+    cmd_KTC_STATS_REPORT_help = "Dump the KTC statistics"
+    def cmd_KTC_STATS_REPORT(self, gcmd): # pylint: disable=unused-argument
         self._dump_statistics()
 
-    cmd_KTC_INIT_PRINT_STATS_help = (
+    cmd_KTC_RESET_PRINT_STATS_help = (
         "Run at start of a print to initialize the KTC print statistics"
     )
-    def cmd_KTC_INIT_PRINT_STATS(self, gcmd):   # pylint: disable=unused-argument
+    def cmd_KTC_RESET_PRINT_STATS(self, gcmd):   # pylint: disable=unused-argument
         self._reset_print_statistics()
 
-    cmd_KTC_DUMP_PRINT_STATS_help = (
+    cmd_KTC_PRINT_STATS_REPORT_help = (
         "Run at end of a print to list statistics since last print reset."
     )
-    def cmd_KTC_DUMP_PRINT_STATS(self, gcmd):   # pylint: disable=unused-argument
+    def cmd_KTC_PRINT_STATS_REPORT(self, gcmd):   # pylint: disable=unused-argument
         self._dump_statistics(since_print_start=True)
 
     cmd_KTC_SET_LOG_LEVEL_help = "Set the log level for the KTC"
