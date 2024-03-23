@@ -302,7 +302,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def _recursive_initialize_toolchangers(
         self,
         tc: "ktc_toolchanger.KtcToolchanger",
-        init_mode: "ktc_toolchanger.KtcToolchanger.InitModeType",
+        init_mode: "ktc_toolchanger.KtcToolchanger.InitModeType"
     ):
         """Initialize all toolchangers that have init_mode == ON_START
         and have a parent tool that has been initialized."""
