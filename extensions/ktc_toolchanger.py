@@ -255,7 +255,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         elif value == self.StateType.READY:
             self.selected_tool = self.TOOL_NONE
         elif value == self.StateType.ERROR:
-            self.log.always("KTC Toolchanger %s is now in error state." % self.name)
+            self.log.always("KTC is now in error state.")
             self.selected_tool = self.TOOL_UNKNOWN
 
     def get_status(self, eventtime=None):   # pylint: disable=unused-argument

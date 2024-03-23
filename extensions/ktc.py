@@ -366,12 +366,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
     def state(self, value):
         self._state = value
 
-        if value == self.StateType.ENGAGING or value == self.StateType.DISENGAGING:
-            self.selected_tool = self.TOOL_UNKNOWN
-        elif value == self.StateType.READY:
-            self.selected_tool = self.TOOL_NONE
-        elif value == self.StateType.ERROR:
-            self.log.always("KTC Toolchanger %s is now in error state." % self.name)
+        # if value == self.StateType.ENGAGING or value == self.StateType.DISENGAGING:
+        #     self.selected_tool = self.TOOL_UNKNOWN
+        # elif value == self.StateType.READY:
+        #     self.selected_tool = self.TOOL_NONE
+        if value == self.StateType.ERROR:
+            self.log.always(f"KTC Toolchanger {self.name} is in ERROR state.")
             self.selected_tool = self.TOOL_UNKNOWN
 
     cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL_help = (
