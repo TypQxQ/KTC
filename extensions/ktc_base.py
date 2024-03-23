@@ -109,7 +109,7 @@ class KtcBaseClass:
         # Get inheritable parameters from the config.
         # Empty strings are NOT overwritten by the parent object in configure_inherited_params.
         # Must be set to None as standard.
-        # Initalized to empty strings in KTC as topmost parent.
+        # Initalized to default values in KTC as topmost parent.
         self._engage_gcode = config.get("engage_gcode", None)  # type: ignore
         self._disengage_gcode = config.get("disengage_gcode", None)  # type: ignore
         self._init_gcode = config.get("init_gcode", None)  # type: ignore
