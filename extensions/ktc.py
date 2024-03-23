@@ -22,7 +22,7 @@ if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile, gcode
     from ...klipper.klippy.extras import (
         heaters as klippy_heaters,
-        gcode_move as klippy_gcode_move,
+        # gcode_move as klippy_gcode_move,
         fan_generic as klippy_fan_generic,
     )
     from . import ktc_log, ktc_persisting, ktc_toolchanger, ktc_tool, ktc_heater
