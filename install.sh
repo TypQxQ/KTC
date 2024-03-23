@@ -132,9 +132,9 @@ verify_ready()
 function nextfilename {
     local name="$1"
     if [ -d "${name}" ]; then
-        printf "%s-%s" ${name%%.*} $(date '+%Y%m%d_%H%M%S')
+        printf "%s-%s" ${name%%.*} $(date "+%Y%m%d_%H%M%S")
     else
-        printf "%s-%s.%s-old" ${name%%.*} $(date '+%Y%m%d_%H%M%S') ${name#*.}
+        printf "%s-%s.%s-old" ${name%%.*} $(date "+%Y%m%d_%H%M%S") ${name#*.}
     fi
 }
 
@@ -146,7 +146,7 @@ link_extension()
     log_blank
     log_header "Linking extension files to Klipper..."
 
-    for file in `cd ${EXTENSION_PATH}/ ; ls *.py`; do
+    for file in $(cd ${EXTENSION_PATH}/ ; ls *.py); do
         ln -sf "${EXTENSION_PATH}/${file}" "${KLIPPER_HOME}/klippy/extras/${file}"
         log_info "Linking extension file: (${file})."
     done
@@ -159,13 +159,13 @@ install_update_manager() {
     log_blank
     log_header "Adding update manager to moonraker.conf"
     dest=${KLIPPER_CONFIG_HOME}/moonraker.conf
-    if test -f $dest; then
-        already_included=$(grep -c '\[update_manager KTC\]' ${dest} || true)
+    if test -f "$dest"; then
+        already_included=$(grep -c "\[update_manager KTC\]" ${dest} || true)
         if [ "${already_included}" -eq 0 ]; then
             # Backup the original  moonraker.conf file
             next_dest="$(nextfilename "$dest")"
             log_info "Copying original moonraker.conf file to ${next_dest}"
-            cp ${dest} ${next_dest}
+            cp "${dest} ${next_dest}"
 
             # Add the configuration to moonraker.conf
             echo "" >> "${dest}"    # Add a blank line
@@ -203,7 +203,7 @@ install_klipper_config() {
 
         # Add the configuration to printer.cfg
         # This example assumes that that both the server and the webcam stream are running on the same machine as Klipper
-        already_included=$(grep -c '\[ktc\]' ${dest} || true)
+        already_included=$(grep -c "\[ktc\]" ${dest} || true)
         if [ "${already_included}" -eq 0 ]; then
             echo "" >> "${dest}"    # Add a blank line
             echo "" >> "${dest}"    # Add a blank line
@@ -219,7 +219,7 @@ install_klipper_config() {
     fi
 
     # Add the inclusion of macros.cfg to printer.cfg if it doesn't exist
-    already_included=$(grep -c '\[include ktc_macros.cfg\]' ${dest} || true)
+    already_included=$(grep -c "\[include ktc_macros.cfg\]" ${dest} || true)
     if [ "${already_included}" -eq 0 ]; then
         echo "" >> "${dest}"    # Add a blank line
         echo -e "[include ktc-macros.cfg]" >> "${dest}"    # Add the section header
@@ -229,7 +229,7 @@ install_klipper_config() {
     
     if [ ! -f "${KLIPPER_CONFIG_HOME}/ktc-macros.cfg" ]; then
         log_info "Copying ktc-macros.cfg to ${KLIPPER_CONFIG_HOME}"
-        cp ${REPO_DIR}/ktc-macros.cfg ${KLIPPER_CONFIG_HOME}
+        cp "${REPO_DIR}/ktc-macros.cfg ${KLIPPER_CONFIG_HOME}"
     else
         log_error "[include ktc-macros.cfg] already exists in printer.cfg - skipping adding it there"
     fi

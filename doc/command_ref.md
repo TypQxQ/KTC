@@ -44,11 +44,11 @@
   | `KTC_PRINT_STATS_REPORT` | Report KTC statistics since last print started. |
   | `KTC_RESET_STATS SURE=YES` | Reset all the KTC statistics. |
   | `KTC_RESET_PRINT_STATS` | Run at start of a print to initialize and reset the KTC print statistics | |
-  | `KTC_SET_LOG_LEVEL` | Set the log level for the KTC | `LEVEL=[0-3]` How much to log to console: ( 0 = Only the Always messages ) ( 1 = Info messages and above ) ( 2 = Debug messages and above ) ( 3 = Trace messages and above )<br>  `LOGFILE=[0-3]` How much to log to file. Levels as above. |
-  | `KTC_LOG_TRACE` |  Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTC_LOG_DEBUG` | Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTC_LOG_INFO` | Send a message to log at this logging level | `MSG=...` The message to be sent |
-  | `KTC_LOG_ALWAYS` | Send a message to log at this logging level | `MSG=...` The message to be sent |
+  | `KTC_SET_LOG_LEVEL [LEVEL=<0-3>] [LOGFILE=<0-3>]` | Set the log level for the KTC.<br>- `LEVEL` determines the amount of logging displayed on the console.<br>- `LOGFILE` determines the amount of logging saved to a file.<br> Log levels:<br> ( 0 = Only the Always messages )<br>( 1 = Info messages and above )<br>( 2 = Debug messages and above )<br>( 3 = Trace messages and above ) |
+  | `KTC_LOG_TRACE MSG=<message>` |  Send a message to log at this logging level |
+  | `KTC_LOG_DEBUG MSG=<message>` | Send a message to log at this logging level |
+  | `KTC_LOG_INFO MSG=<message>` | Send a message to log at this logging level |
+  | `KTC_LOG_ALWAYS MSG=<message>` | Send a message to log at this logging level |
   <br>
 
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Debuging
