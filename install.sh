@@ -132,9 +132,9 @@ verify_ready()
 function nextfilename {
     local name="$1"
     if [ -d "${name}" ]; then
-        printf "%s-%s" ${name%%.*} $(date "+%Y%m%d_%H%M%S")
+        printf "%s-%s ${name%%.*} $(date +%Y%m%d_%H%M%S)"
     else
-        printf "%s-%s.%s-old" ${name%%.*} $(date "+%Y%m%d_%H%M%S") ${name#*.}
+        printf "%s-%s.%s-old ${name%%.*} $(date +%Y%m%d_%H%M%S) ${name#*.}"
     fi
 }
 
