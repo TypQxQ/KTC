@@ -29,7 +29,7 @@
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Advanced commands, rarely used
   | Command | Description |
   | ------- | ----------- |
-  | `KTC_SET_ACTIVE_TOOL [TOOL=<name> \| T=<index>]`|  Set the KTC active tool manually to the specified. For overwriding when loading a tool manually. |
+  | `KTC_SET_ACTIVE_TOOL TOOL=<name> \| T=<index>`|  Set the KTC active tool manually to the specified. For overwriding when loading a tool manually. |
   | `KTC_SET_STATE [TOOL=<name> \| T=<index>] [STATE=<ERROR \| NOT_CONFIGURED \| CONFIGURING \| CONFIGURED \| UNINITIALIZED \| INITIALIZING \| INITIALIZED \| READY \| CHANGING \| ENGAGING \| SELECTING \| DISENGAGING \| DESELECTING \| ENGAGED \| SELECTED \| ACTIVE>]` | Sets the state of the specified tool, toolchanger or the KTC itself. Without state provided, it reports the currently active state. |
   | `KTC_TOOLCHANGER_SET_SELECTED_TOOL TOOL=<name> \| T=<index> [TOOLCHANGER=<value>]` | Manually sets the selected tool of a specified or the default toolchanger. |
   | `KTC_TOOLCHANGER_INITIALIZE` | Manually initialize the specified or default toolchanger. |
