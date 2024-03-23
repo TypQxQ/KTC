@@ -270,13 +270,14 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 new_toolnumbers.append(tool.number)
                 if tool.number not in self._registered_toolnumbers:
                     self._registered_toolnumbers.append(tool.number)
-                self.gcode.register_command(
-                    "KTC_T" + str(tool.number),
-                    tool.select,
-                    False,
-                    "Select tool " + tool.name + " with number " + str(tool.number),
-                )
+                    self.gcode.register_command(
+                        "KTC_T" + str(tool.number),
+                        tool.select,
+                        False,
+                        "Select tool " + tool.name + " with number " + str(tool.number),
+                    )
         # Get all toolnumbers from self._registered_toolnumbers that are not in new_toolnumbers.
+        # This removes all tools that have been removed since reading the config file.
         for toolnumber in (
             x for x in self._registered_toolnumbers if x not in new_toolnumbers
         ):
@@ -374,9 +375,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.selected_tool = self.TOOL_UNKNOWN
 
     cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL_help = (
-        "Set the selected tool in the toolchanger.\n"
-        + "[TOOLCHANGER: Default_ToolChanger]\n"
-        + "[TOOL: Tool_name] or [T: Tool_number]"
+        "TOOL=<name> | T=<index> [TOOLCHANGER=<value>]\n"
+        + "Set the selected tool in the toolchanger."
     )
 
     def cmd_KTC_TOOLCHANGER_SET_SELECTED_TOOL(
@@ -396,7 +396,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ) from e
 
     cmd_KTC_TOOLCHANGER_INITIALIZE_help = (
-        "Initialize the toolchanger before use." + "[TOOLCHANGER: Default_ToolChanger]"
+        "[TOOLCHANGER=<value>]\n"
+        + "Initialize the toolchanger before use or when in ERROR state."
     )
 
     def cmd_KTC_TOOLCHANGER_INITIALIZE(
@@ -405,9 +406,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.get_toolchanger_from_gcmd(gcmd).initialize()
 
     cmd_KTC_TOOLCHANGER_ENGAGE_help = (
-        "Engage the toolchanger, lock in place.\n"
-        + "[TOOLCHANGER: Default_ToolChanger]\n"
-        + "[DISREGARD_ENGAGED: False]"
+        "[TOOLCHANGER=<name>] [DISREGARD_ENGAGED=<0|1>]\n"
+        + "Engage the toolchanger, lock in place.\n"
     )
 
     def cmd_KTC_TOOLCHANGER_ENGAGE(
@@ -422,21 +422,30 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ) from e
 
     cmd_KTC_TOOLCHANGER_DISENGAGE_help = (
-        "Disengage the toolchanger, unlock"
-        + " from place.\n [TOOLCHANGER: Default_ToolChanger]"
+        "[TOOLCHANGER=<name>] [DISREGARD_DISENGAGED=<0|1>]\n"
+        + "Disengage the toolchanger, unlock from place."
     )
 
     def cmd_KTC_TOOLCHANGER_DISENGAGE(
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         try:
-            self.get_toolchanger_from_gcmd(gcmd).disengage()
+            de = self.parse_bool(gcmd.get("DISREGARD_DISENGAGED", "False"))
+            self.get_toolchanger_from_gcmd(gcmd).disengage(de)
         except Exception as e:
             raise self.printer.command_error(
                 f"Error disengaging toolchanger with command {gcmd.get_commandline()}: {str(e)}"
             ) from e
 
-    cmd_KTC_SET_STATE_help = "Set the state of the KTC.\n STATE= Defaut is ERROR."
+    cmd_KTC_SET_STATE_help = (
+        "[TOOLCHANGER=<name> | TOOL=<name> | T=<index>]\n"
+        + "[STATE=<ERROR | NOT_CONFIGURED | CONFIGURING | CONFIGURED | "
+        + "UNINITIALIZED | INITIALIZING | INITIALIZED | READY | CHANGING | "
+        + "ENGAGING | SELECTING | DISENGAGING | DESELECTING | ENGAGED | "
+        + "SELECTED | ACTIVE>]\n"
+        + "Set the state of the KTC Tool, Toolchanger or KTC "
+        + "itself if no tool or toolchanger.\n STATE= Defaut is ERROR."
+    )
 
     def cmd_KTC_SET_STATE(
         self, gcmd: "gcode.GCodeCommand"
@@ -479,7 +488,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 ) from e
 
     cmd_KTC_SET_ACTIVE_TOOL_help = (
-        "Set the active tool.\n" + "[TOOL: Tool_name] or [T: Tool_number]"
+        "TOOL=<name> | T=<index>\n Set the active tool.\n"
     )
 
     def cmd_KTC_SET_ACTIVE_TOOL(
@@ -527,7 +536,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             raise Exception("Failed to deselect all tools: %s" % str(e)) from e
 
     cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED_help = (
-        "Save the fan speed to be recovered at ToolChange."
+        "[TOOL=<name> | T=<index>] [S=<value>]\n"
+        + "Save the fan speed to be recovered at ToolChange."
     )
 
     def cmd_KTC_SET_AND_SAVE_PARTFAN_SPEED(
@@ -554,7 +564,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self.tool_fan_speed_set(tool, fanspeed)
 
     cmd_KTC_TEMPERATURE_WAIT_WITH_TOLERANCE_help = (
-        "Waits for current tool temperature, or a specified.\n"
+        "[TOOL=<name> | T=<index>] [TOLERANCE=<0-9>]\n"
+        + "Waits for current tool temperature, or a specified.\n"
         + "TOOL= Tool name or T= Tool number or HEATER= Coma separated list of heater names.\n"
         + "TOLERANCE= Tolerance in degC. Defaults to 1*C."
     )
@@ -643,7 +654,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             self.log.always("Wait for heater " + heater_name + " complete.")
 
     cmd_KTC_TOOL_SET_TEMPERATURE_help = (
-        "Waits for all temperatures, or a specified (TOOL) tool or"
+        "[TOOL=<name> | T=<index>] [ACTV_TMP=<temperature>] [STDB_TMP=<temperature>]"
+        + "[CHNG_STATE=<0|1|2>|<OFF|STANDBY|ACTIVE>] [STDB_TIMEOUT=<seconds>]"
+        + "[SHTDWN_TIMEOUT=<seconds>]\n"
+        + "Waits for all temperatures, or a specified (TOOL) tool or"
         + "(HEATER) heater's temperature within (TOLERANCE) tolerance."
     )
 
@@ -651,6 +665,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         """
+        [TOOL=<name> | T=<index>] [ACTV_TMP=<temperature>] [STDB_TMP=<temperature>]
+        [CHNG_STATE=<0|1|2>|<OFF|STANDBY|ACTIVE>] [STDB_TIMEOUT=<seconds>]
+        [SHTDWN_TIMEOUT=<seconds>]
         Set tool temperature.
         TOOL= Tool number, optional. If this parameter is not provided, the current tool is used.
         STDB_TMP= Standby temperature(s), optional
@@ -849,7 +866,6 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         + "This is not persistent and will be lost on restart."
         + " [TOOL: Tool name] or [T: Tool number]"
         + " [SET: Tool number]"
-        + " [OVERWRITE: 0/1] Default 0. If 1, will overwrite existing mapping."
     )
 
     def cmd_KTC_TOOL_MAP_NR(self, gcmd: "gcode.GCodeCommand"):  # pylint: disable=invalid-name

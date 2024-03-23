@@ -3,8 +3,8 @@
   ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Basic Toolchanger functionality
   | Command | Description | 
   | ------- | ----------- |
-  | `KTC_TOOLCHANGER_ENGAGE` | Engage or lock the tool. |
-  | `KTC_TOOLCHANGER_DISENGAGE` | Disengage or unlock from the tool. |
+  | `KTC_TOOLCHANGER_ENGAGE [TOOLCHANGER=<name>] [DISREGARD_ENGAGED=<0\|1>]` | Engage or lock the tool. |
+  | `KTC_TOOLCHANGER_DISENGAGE [TOOLCHANGER=<name>] [DISREGARD_DISENGAGED=<0\|1>]` | Disengage or unlock from the tool. |
   | `KTC_T<index>` | Select the tool with number. |
   | `KTC_DESELECT_ALL` | Recursivley deselects all tools. |
   | `KTC_TOOL_SET_TEMPERATURE [TOOL=<name> \| T=<index>] [ACTV_TMP=<temperature>] [STDB_TMP=<temperature>] [CHNG_STATE=<0\|1\|2>\|<OFF\|STANDBY\|ACTIVE>] [STDB_TIMEOUT=<seconds>] [SHTDWN_TIMEOUT=<seconds>]` | Change temperature settings for active or specified tool. |
@@ -32,7 +32,7 @@
   | `KTC_SET_ACTIVE_TOOL TOOL=<name> \| T=<index>`|  Set the KTC active tool manually to the specified. For overwriding when loading a tool manually. |
   | `KTC_SET_STATE [TOOL=<name> \| T=<index>] [STATE=<ERROR \| NOT_CONFIGURED \| CONFIGURING \| CONFIGURED \| UNINITIALIZED \| INITIALIZING \| INITIALIZED \| READY \| CHANGING \| ENGAGING \| SELECTING \| DISENGAGING \| DESELECTING \| ENGAGED \| SELECTED \| ACTIVE>]` | Sets the state of the specified tool, toolchanger or the KTC itself. Without state provided, it reports the currently active state. |
   | `KTC_TOOLCHANGER_SET_SELECTED_TOOL TOOL=<name> \| T=<index> [TOOLCHANGER=<value>]` | Manually sets the selected tool of a specified or the default toolchanger. |
-  | `KTC_TOOLCHANGER_INITIALIZE` | Manually initialize the specified or default toolchanger. |
+  | `KTC_TOOLCHANGER_INITIALIZE [TOOLCHANGER=<value>]` | Manually initialize the specified or default toolchanger. |
   | `KTC_HEATERS_PAUSE` | Turns off all heaters that are configured for tools and saves the changes. The heaters can be resumed later using the command KTC_HEATERS_RESUME. This command does not affect heated beds. |
   | `KTC_HEATERS_RESUME` | Resumes all heaters that were previously turned off by the `KTC_HEATERS_PAUSE` command. |
   <br>
