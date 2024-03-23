@@ -16,7 +16,7 @@ from .ktc_base import KtcConstantsClass, KtcBaseChangerClass, KtcConfigurableEnu
 if typing.TYPE_CHECKING:
     from ...klipper.klippy import configfile
     from ...klipper.klippy.extras import gcode_macro as klippy_gcode_macro
-    from . import ktc_persisting, ktc_tool
+    from . import ktc_tool
 
 @typing.final
 class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
@@ -73,7 +73,8 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
         # Sanity check. If the parent tool is not defined,
         # the init_order should be set to independent.
         if (self.init_order != self.InitOrderType.INDEPENDENT and
-            self.parent_tool is not None):
+            self.parent_tool is not None
+            ):
             raise Exception(
                 "Toolchanger %s has no parent tool " % self.name
                 + "defined but init_order is set to AFTER_PARENT."
