@@ -160,7 +160,7 @@ Reffer to the [Command Reference](./doc/command_ref.md).<br>
   - `params_*` - parameter in the above list.
 
 - **STATE_TYPE** Constant listing the difrent states ktc, a tool or toolchanger can have:
-States can be set like: `KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY`
+States can be set like: `KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY`
   - `ERROR` - Toolchanger or tool is in error state.
   - `NOT_CONFIGURED` - Toolchanger or tool is not configured.
   - `CONFIGURING` - Toolchanger or tool is configuring.

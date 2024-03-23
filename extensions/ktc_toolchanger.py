@@ -116,6 +116,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
 
         # Run the init gcode template if it is defined.
         if self._init_gcode != "":
+            self.log.trace(f"Initalizing ktc_toolchanger {self.name}.")
             init_gcode_template = self.gcode_macro.load_template(   # type: ignore
                 self.config, "", self._init_gcode)
             context = init_gcode_template.create_template_context()
@@ -128,7 +129,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 raise self.config.error(
                     ("ktc_toolchanger %s: init_gcode did not " % self.name)
                     + "change the state. Use for example "
-                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "'KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
                     + "change the state to READY."
                 )
         else:
@@ -149,7 +150,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 self.state = self.StateType.ENGAGED
                 return
 
-            if not disregard_engaged and self.state == self.StateType.ENGAGED:
+            if not disregard_engaged and self.state >= self.StateType.ENGAGED:
                 self.log.always(
                     "ktc_toolchanger %s is already engaged with tool %s."
                     % (self.name, self.selected_tool.name)
@@ -172,7 +173,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 self.state == self.StateType.INITIALIZING):
                 raise self.config.error(
                     ("engage_gcode did not change the state. Use for example "
-                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
+                    + "'KTC_SET_STATE TOOLCHANGER={myself.name} STATE=ENGAGED' to "
                     + "change the state to ENGAGED. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -225,7 +226,7 @@ class KtcToolchanger(KtcBaseChangerClass, KtcConstantsClass):
                 raise self.config.error(
                     ("disengage_gcode did not "
                     + "change the state. Use for example "
-                    + "'KTC_TOOLCHANGER_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
+                    + "'KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY' to "
                     + "change the state to READY. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
