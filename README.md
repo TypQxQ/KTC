@@ -29,13 +29,9 @@ This helps [Klipper](https://github.com/Klipper3d/klipper) with ToolChanging fun
 
 This is a complete rewrite of [KTCC v.1](https://github.com/TypQxQ/Klipper_ToolChanger) to be more versatile and have indefinite levels of toolchangers. Inspiration comes mainly from how RRF enables toolchanging and from the HappyHare project.
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!
-# This is still under development
-Published for preview.
-The code works but the documentation is not finished yet.
-# !!!!!!!!!!!!!!!!!!!!!!!!!!
-
 I welcome any and all input and contributions. Don't be afraid to make a pull request :D
+
+Complex code example is still under construction.
 
 Thank you!
 
@@ -177,5 +173,12 @@ States can be set like: `KTC_SET_STATE TOOLCHANGER={myself.name} STATE=READY`
   - `ACTIVE` - Tool is active as main engaged tool for ktc.
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Example configuration
-My corrent configuration is for v.2 where work progresses fast.
+My current configuration can be refferenced here: https://github.com/TypQxQ/DuetBackup/tree/main/qTC-Klipper
+
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Related projects
+  - [kTAMV - Klipper Tool Alignment (using) Machine Vision](https://github.com/TypQxQ/kTAMV)  allows X and Y allignment betwween multiple tools on a 3D printer using a camera that points up towards the nozzle from inside Klipper.
+
+  - [KnobProbe](https://github.com/TypQxQ/KnobProbe_Klipper) allows Z allignment between multiple tools.
+
+  - [Query Endstop Continuesly in Klipper](https://github.com/TypQxQ/Query-Endstop-Continuesly-in-Klipper) Klipper module that adds a G-code command so Klipper will pause until specified endstop is in selected state, triggered or not triggered. Alternativley it can query a specified amount of times.
 
