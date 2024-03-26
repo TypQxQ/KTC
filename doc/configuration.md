@@ -95,7 +95,8 @@ The topmost object contains inheritable options that will be inherited by all ot
 ```
 [ktc]
 #propagate_state = True
-#   Propa
+#   Propagate state when changed on a tool, down through the tree to the ktc object.
+#   For example setting a tool state as selected will set it's changer to engaged.
 #default_toolchanger = <name of the only ktc_toolchanger object>
 #   This is required when specifying more than one ktc_toolchanger section.
 #   Otherwise it will default to the name of the only
