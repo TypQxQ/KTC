@@ -76,18 +76,14 @@ Thank you!
 ### 1\. Automatic install with Moonraker Autoupdate Support
 This plugin assumes that you installed Klipper into your home directory (usually `/home/pi`).
 
-1) Clone this repo into your home directory where Klipper is installed:
+Connect to your klipper machine using SSH and run these command:
 ```
-cd ~
-git clone https://github.com/TypQxQ/KTC.git
-```
-
-2) Run the `install.sh` script
-```
-~/KTC/install.sh
+cd ~/ && git clone https://github.com/TypQxQ/KTC.git && bash ~/KTC/install.sh
 ```
 
-If you encouter errors after an automatic Klipper update you can safetly run the `install.sh` scipt again to repair the links to the extension.
+This will install and configure everything.
+
+If you encouter errors after an automatic Klipper update you can safetly run the `install.sh` scipt inside the KTC directory again to repair the links to the extension.
 
 ### 2\. Manual Install
 Copy or link the python (`*.py`) files into the `\klipper\klippy\extras` directory. Assuming Then restart Klipper to pick up the extensions.
