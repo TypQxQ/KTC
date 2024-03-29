@@ -170,7 +170,7 @@ install_update_manager() {
             # Add the configuration to moonraker.conf
             echo "" >> "${dest}"    # Add a blank line
             echo "" >> "${dest}"    # Add a blank line
-            echo -e "[update_manager KTC\]" >> "${dest}"    # Add the section header
+            echo -e "[update_manager KTC]" >> "${dest}"    # Add the section header
             echo -e "type: git_repo" >> "${dest}"
             echo -e "path: ${REPO_DIR}" >> "${dest}"
             echo -e "origin: https://github.com/TypQxQ/KTC.git" >> "${dest}"
@@ -217,7 +217,7 @@ install_klipper_config() {
         fi
 
         # Add the inclusion of macros to printer.cfg if it doesn't exist
-        already_included=$(grep -c "[include ktc/base/*.cfg]" ${dest} || true)
+        already_included=$(grep -c "\[include ktc/base/*.cfg\]" ${dest} || true)
         if [ "${already_included}" -eq 0 ]; then
             echo "" >> "${dest}"    # Add a blank line
             echo -e "[include ktc/base/*.cfg]" >> "${dest}"    # Add the section header
