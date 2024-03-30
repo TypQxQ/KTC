@@ -192,7 +192,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             )
 
         # If only one toolchanger and no default toolchanger is specified, set it as default.
-        elif (len(self.printer.lookup_objects("ktc_toolchanger")) == 
+        elif (len(self.printer.lookup_objects("ktc_toolchanger")) ==
               1 and self.default_toolchanger is None):
             self.log.trace("Only one toolchanger defined. Setting it as default.")
             self.default_toolchanger = next(
@@ -205,7 +205,7 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                     "Only toolchanger %s can't have a parent tool."
                     % self.default_toolchanger.name
                 )
-        elif (len(self.printer.lookup_objects("ktc_toolchanger")) > 
+        elif (len(self.printer.lookup_objects("ktc_toolchanger")) >
               1 and self.default_toolchanger is None):
             raise self.config.error(
                 "More than one toolchanger defined but no default toolchanger set."
