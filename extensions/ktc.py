@@ -184,17 +184,20 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                         )
                     )
         # If no default toolchanger specified and no toolchangers, create a default toolchanger.
-        elif len(self.all_toolchangers) == 0:
+        elif len(self.printer.lookup_objects("ktc_toolchanger")) == 0:
             self.log.trace("No toolchangers defined. Creating default toolchanger.")
             # The toolchanger init will add itself to the list of toolchangers.
-            _ = self.printer.load_object(
+            self.default_toolchanger = self.printer.load_object(
                 self.config, "ktc_toolchanger default_toolchanger"
             )
 
         # If only one toolchanger and no default toolchanger is specified, set it as default.
-        elif len(self.all_toolchangers) == 1 and self.default_toolchanger is None:
+        elif (len(self.printer.lookup_objects("ktc_toolchanger")) ==
+              1 and self.default_toolchanger is None):
             self.log.trace("Only one toolchanger defined. Setting it as default.")
-            self.default_toolchanger = list(self.all_toolchangers.values())[0]
+            self.default_toolchanger = next(
+                iter(dict(self.printer.lookup_objects("ktc_toolchanger")).values())
+            )
 
             # Check if the now default toolchanger has a parent tool. If so raise error.
             if self.default_toolchanger.parent_tool is not None:
@@ -202,7 +205,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                     "Only toolchanger %s can't have a parent tool."
                     % self.default_toolchanger.name
                 )
-        elif len(self.all_toolchangers) > 1 and self.default_toolchanger is None:
+        elif (len(self.printer.lookup_objects("ktc_toolchanger")) >
+              1 and self.default_toolchanger is None):
             raise self.config.error(
                 "More than one toolchanger defined but no default toolchanger set."
                 + "Please set default_toolchanger in the [ktc] section of your printer.cfg file."
@@ -1071,7 +1075,8 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
                 + f"- Standby time: {self.log.seconds_to_human_string(standby_time)}\n"
                 + f"- Selected time: {self.log.seconds_to_human_string(selected_time)}\n"
                 + f"- Time spent selecting: {self.log.seconds_to_human_string(time_selecting)}\n"
-                + f"- Time spent deselecting: {self.log.seconds_to_human_string(time_deselecting)}\n"
+                + f"- Time spent deselecting: \
+                    {self.log.seconds_to_human_string(time_deselecting)}\n"
             )
 
 def load_config(config):
