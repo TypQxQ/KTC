@@ -76,7 +76,7 @@ Thank you!
 ### 1\. Automatic install with Moonraker Autoupdate Support
 This plugin assumes that you installed Klipper into your home directory (usually `/home/pi`).
 
-Connect to your klipper machine using SSH and run these command:
+Connect to your klipper machine using SSH and run this one line command:
 ```
 cd ~/ && git clone https://github.com/TypQxQ/KTC.git && bash ~/KTC/install.sh
 ```
