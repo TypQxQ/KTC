@@ -156,25 +156,27 @@ class KtcBaseClass:
         self._initiating_config = {}
         # Offset as a list of 3 floats. Also valid for global_offset.
         init: str = ""
-        for init in config.get_prefix_options("init_"):
-            init = init.strip().lower()
-            if 'offset' in init:
-                try:
-                    if init == "init_global_offset" and self.__class__.__name__ != "Ktc":
-                        raise ValueError(
-                            "init_global_offset is only valid for the topmost KTC object.")
-                    elif init != "init_global_offset" or init == "init_offset":
-                        raise ValueError(
-                            f"Invalid initializing option name {init} "
-                            + "for {self.config.get_name()}.")
-                    v = typing.cast(str, config.get(init)).replace(" ", "")
-                    if v:
-                        vl = [float(x) for x in v.split(",")]
-                        if len(vl) != 3:
-                            raise ValueError(f"{init} must be a list of 3 floats.")
-                        self._initiating_config[init.lstrip("init_")] = vl
-                except Exception as e:
-                    raise self.config.error(f"Invalid {init} for {self.config.get_name()}: {e}")
+        # Check first if the section exists in the configuration, get_prefix_options will fail otherwise.
+        if config.has_section(config.get_name()):
+            for init in config.get_prefix_options("init_"):
+                init = init.strip().lower()
+                if 'offset' in init:
+                    try:
+                        if init == "init_global_offset" and self.__class__.__name__ != "Ktc":
+                            raise ValueError(
+                                "init_global_offset is only valid for the topmost KTC object.")
+                        elif init != "init_global_offset" or init == "init_offset":
+                            raise ValueError(
+                                f"Invalid initializing option name {init} "
+                                + "for {self.config.get_name()}.")
+                        v = typing.cast(str, config.get(init)).replace(" ", "")
+                        if v:
+                            vl = [float(x) for x in v.split(",")]
+                            if len(vl) != 3:
+                                raise ValueError(f"{init} must be a list of 3 floats.")
+                            self._initiating_config[init.lstrip("init_")] = vl
+                    except Exception as e:
+                        raise self.config.error(f"Invalid {init} for {self.config.get_name()}: {e}")
 
     def configure_inherited_params(self):
         '''Load inherited parameters from instances that this instance inherits from.
