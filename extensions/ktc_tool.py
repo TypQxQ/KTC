@@ -99,6 +99,9 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
             self.log.always("KTC Tool %s Selecting." % self.name)
             at = self._ktc.active_tool
 
+            # Check if homed
+            self._ktc.confirm_ready_for_toolchange(self)
+
             # None of this is needed if this is not the final tool.
             if final_selected:
                 # If already selected as final tool then do nothing.
@@ -111,8 +114,6 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                         + " before selecting new tool.")
                     self.log.always(msg)
                     raise self.printer.command_error(msg)
-
-                self._ktc.confirm_ready_for_toolchange(self)
 
                 # If the new tool to be selected has any heaters prepare warmup before
                 # actual tool change so all moves will be done while heating up.
