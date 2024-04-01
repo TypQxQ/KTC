@@ -984,7 +984,10 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             return None # type: ignore
         else:
             if len(self.all_toolchangers) > 1:
-                raise gcmd.error("No toolchanger specified and more than one available")
+                raise gcmd.error(
+                    "No toolchanger specified and more than one available."
+                    + f" Available toolchangers: {self.all_toolchangers.keys()}"
+                    )
             toolchanger = self.all_toolchangers[0]
         return toolchanger
 
