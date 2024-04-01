@@ -27,7 +27,7 @@ Universal Toolchanger helper for Klipper
 
 This adds logic to [Klipper](https://github.com/Klipper3d/klipper) for layered, inherited ToolChanging functionality.
 
-This is a complete rewrite of [KTCC v.1](https://github.com/TypQxQ/Klipper_ToolChanger) to be more versatile and have infinite levels of toolchangers. Inspiration comes mainly from how RRF enables toolchanging and from the HappyHare project.
+This is a complete rewrite of KTCC v.1 to be more versatile and have infinite levels of toolchangers. Inspiration comes mainly from how RRF enables toolchanging and from the HappyHare project.
 
 I welcome any and all input and contributions. Don't be afraid to make a pull request :D
 
@@ -35,38 +35,17 @@ Complex code example is still under construction.
 
 Thank you!
 
-## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Table of Contents
-**[Major feature](#----major-features)**<br>
-**[Installation](#----installation)**<br>
-**[Minimum Configuration](#----minimum-configuration)**<br>
-**[Configuration Examples](#----configuration-examples)**<br>
-**[G-Code commands](#----g-code-commands)**<br>
-**[Values accesible from Macro for each object](#----state-values-accesible-from-macros)**<br>
-
-#### Other Docs:
-
-**[Command Reference](./doc/command_ref.md)**<br>
-**[Configuation Reference](./doc/configuration.md)**<br>
-
-<br>
- 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Major features:
 <ul>
   <li>Support any type of toolchanger and any type of tool.</li>
-  <li>Infinite levels of nested changers and tools</li>
-  <li>Handles fan speed transfer between tools.</li>
-  <li>Handles Tool temperature transfers on tool select/deselect.</li>
-  <li>Standby temperatures for parked tools</li>
-  <li>Tools can have multiple heaters and fans.</li>
-  <li>Tools don't need to be extruders/hotends, can be anything.</li>
+  <li>Infinite levels of nested changers and tools with inheritance.</li>
+  <li>Handles Tool temperature transfers on tool select/deselect with multiple heaters and offsets.</li>
+  <li>Standby temperatures for parked tools.</li>
+  <li>Handles multiple fans per tool and speed transfer between tools.</li>
   <li>Wait to reach temperature with configurable tolerance for tool.</li>
-  <li>Current Tool persists at powerdown. Default but optional.</li>
   <li>Unlimited parameters for each object, accesible by macros.</li>
   <li>Tool number maping. Remap a tool to another, no need to reslice.</li>
   <li>Persitance of state and statistics across restarts.</li>
-  <li>Sophisticated logging options (console and file)</li>
-  <li>Moonraker update-manager support</li>
-  <li>Persistent state saved to file.</li>
 </ul>
 
 <br>
@@ -75,21 +54,18 @@ Thank you!
 
 The code requires Klipper to run on Python v.3 and is not compatible with Python v.2.
 
-### 1\. Automatic install with Moonraker Autoupdate Support
-This plugin assumes that you installed Klipper into your home directory (usually `/home/pi`).
-
+### 1\. Automatic install with Moonraker autoupdate support
 Connect to your klipper machine using SSH and run this one line command:
 ```
 cd ~/ && git clone https://github.com/TypQxQ/KTC.git && bash ~/KTC/install.sh
 ```
 
-This will install and configure everything.
-
-If you encouter errors after an automatic Klipper update you can safetly run the `install.sh` scipt inside the KTC directory again to repair the links to the extension.
+Configure away inside printer.cfg or a file referenced by it.
 
 ### 2\. Manual Install
-Copy or link the python (`*.py`) files into the `\klipper\klippy\extras` directory. Assuming Then restart Klipper to pick up the extensions.
-Add the files in the macros folder to the macros folder.
+Copy or link the python (`*.py`) files into the `\klipper\klippy\extras` directory.
+
+Copy the macros inside the macros folder and reference them in printer.cfg.
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Minimum Configuration:
 * At least one tool needs to be defined, ex:
@@ -104,17 +80,18 @@ Configuration example can be found here:
 
 * [Simple Configuration with one toolchanger](/config/example_config/simple/simple_example.cfg)
 * [Full Configuration with one Toolchanger](/config/example_config/complete/complete_example.cfg)
-* [Jubilee Toolchanger with Toolchanger and ERCF](https://github.com/TypQxQ/DuetBackup/tree/main/qTC-Klipper)
+* [Jubilee Toolchanger with Toolchanger and ERCF](https://github.com/TypQxQ/DuetBackup/tree/main/qTC-Klipper/config)
 
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) References:
 
-## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) G-Code commands:
-Reffer to the [Command Reference](./doc/command_ref.md).<br>
+**[Configuation Reference](./doc/configuration.md)**<br>
+Explains all configurable options.
 
-## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) State values accesible from Macros
-Reffer to the [State Reference](./doc/state_ref.md).<br>
+**[Command Reference](./doc/command_ref.md)**<br>
+Lists all the commands available at runtime from Klipper.
 
-## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Example configuration
-My current configuration can be refferenced here: https://github.com/TypQxQ/DuetBackup/tree/main/qTC-Klipper
+**[Object state Reference](./doc/state_ref.md)**<br>
+Lists all available object variables available to macros.
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Related projects
   - [kTAMV - Klipper Tool Alignment (using) Machine Vision](https://github.com/TypQxQ/kTAMV)  allows X and Y allignment betwween multiple tools on a 3D printer using a camera that points up towards the nozzle from inside Klipper.
@@ -124,3 +101,5 @@ My current configuration can be refferenced here: https://github.com/TypQxQ/Duet
   - [Query Endstop Continuesly in Klipper](https://github.com/TypQxQ/Query-Endstop-Continuesly-in-Klipper) Klipper module that adds a G-code command so Klipper will pause until specified endstop is in selected state, triggered or not triggered. Alternativley it can query a specified amount of times.
 
   - [Klipper Save-Restore  Position](https://github.com/TypQxQ/Klipper-Save-Restore-Position) Adds behaviour as was in Klipper Toolchanger code v.1. Currently not finnished because I see no use for it. Tell me if you need it.
+
+  - [KTCC v.1](https://github.com/TypQxQ/Klipper_ToolChanger)
