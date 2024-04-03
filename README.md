@@ -103,3 +103,8 @@ Lists all available object variables available to macros.
   - [Klipper Save-Restore  Position](https://github.com/TypQxQ/Klipper-Save-Restore-Position) Adds behaviour as was in Klipper Toolchanger code v.1. Currently not finnished because I see no use for it. Tell me if you need it.
 
   - [KTCC v.1](https://github.com/TypQxQ/Klipper_ToolChanger)
+
+## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Limitations
+  - T<index> commands need to be added by macros. Mainsail looks for `[gcode_macros T#]` inside the printer config. Adding a gcode_macro component for the tool at runtime will not work with current implementation of Mainsail and no button will show up. Therefore KTC_T<index> should be manuly called by a corresponding T<index> script as in the examples.
+
+  - Saving to configuration files does not work in Klipper when the section is not in printer.cfg. That is the reason of the persistent storage. This enables organized and distributable configuration files.
