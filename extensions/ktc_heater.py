@@ -31,11 +31,11 @@ class HeaterStateType(IntEnum):
     def parse_heater_state(cls, state: str):
         state = str(state).strip()
         if state is not None:
-            if state.lower() in ("0", "off"):
+            if state.lower() in ("0", "off", "HeaterStateType.OFF"):
                 return cls.OFF
-            elif state.lower() in ("1", "standby"):
+            elif state.lower() in ("1", "standby", "HeaterStateType.STANDBY"):
                 return cls.STANDBY
-            elif state.lower() in("2", "active"):
+            elif state.lower() in("2", "active", "HeaterStateType.ACTIVE"):
                 return cls.ACTIVE
             else:
                 raise ValueError(
