@@ -947,12 +947,12 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         the active tool if none is specified and explicit is not True.
         If explicit is True, None is returned if no tool is specified in the gcode command."""
         tool_name: str = gcmd.get("TOOL", None)  # type: ignore
-        tool_nr: int = gcmd.get_int("T", None)  # type: ignore
+        tool_nr: int = gcmd.get_int("T", self.TOOL_NUMBERLESS_N)  # type: ignore
         if tool_name:
             tool = self.all_tools.get(tool_name, None)
             if not tool:
                 raise gcmd.error("Tool %s not found" % (tool_name))
-        elif tool_nr:
+        elif tool_nr != self.TOOL_NUMBERLESS_N:
             if tool_nr not in self.all_tools_by_number:
                 raise gcmd.error("T%d not found" % (tool_nr))
             tool = self.all_tools_by_number[tool_nr]
