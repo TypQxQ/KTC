@@ -30,7 +30,7 @@
   | Command | Description |
   | ------- | ----------- |
   | `KTC_SET_ACTIVE_TOOL TOOL=<name> \| T=<index>`|  Set the KTC active tool manually to the specified. For overwriding when loading a tool manually. |
-  | `KTC_SET_STATE [TOOL=<name> \| T=<index>] [STATE=<ERROR \| NOT_CONFIGURED \| CONFIGURING \| CONFIGURED \| UNINITIALIZED \| INITIALIZING \| INITIALIZED \| READY \| CHANGING \| ENGAGING \| SELECTING \| DISENGAGING \| DESELECTING \| ENGAGED \| SELECTED \| ACTIVE>]` | Sets the state of the specified tool, toolchanger or the KTC itself. Without state provided, it reports the currently active state. |
+  | `KTC_SET_STATE [TOOL=<name> \| T=<index> \| TOOLCHANGER=<value>] [STATE=<ERROR \| NOT_CONFIGURED \| CONFIGURING \| CONFIGURED \| UNINITIALIZED \| INITIALIZING \| INITIALIZED \| READY \| CHANGING \| ENGAGING \| SELECTING \| DISENGAGING \| DESELECTING \| ENGAGED \| SELECTED \| ACTIVE>]` | Sets the state of the specified tool, toolchanger or the KTC itself. Without state provided, it reports the currently active state for the specified tool, toolchanger or KTC itself if no attributes. To change state to KTC, only use the STATE attribute. For changing toolchanger state, use TOOLCHANGER attribute. |
   | `KTC_TOOLCHANGER_SET_SELECTED_TOOL TOOL=<name> \| T=<index> [TOOLCHANGER=<value>]` | Manually sets the selected tool of a specified or the default toolchanger. |
   | `KTC_TOOLCHANGER_INITIALIZE [TOOLCHANGER=<value>]` | Manually initialize the specified or default toolchanger. |
   | `KTC_HEATERS_PAUSE` | Turns off all heaters that are configured for tools and saves the changes. The heaters can be resumed later using the command KTC_HEATERS_RESUME. This command does not affect heated beds. |

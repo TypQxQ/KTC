@@ -179,7 +179,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 raise self.config.error(
                     ("tool_select_gcode has not changed the state while running "
                     + "code in tool_select_gcode. Use for example "
-                    + "'KTC_TOOL_SET_STATE TOOL={myself.name} STATE=SELECTED' to "
+                    + "'KTC_SET_STATE TOOL={myself.name} STATE=SELECTED' to "
                     + "indicate it is selected successfully. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
@@ -254,7 +254,7 @@ class KtcTool(KtcBaseToolClass, KtcConstantsClass):
                 raise self.config.error(
                     ("tool_deselect_gcode has not changed the state while running "
                     + "code in tool_select_gcode. Use for example "
-                    + "'KTC_TOOL_SET_STATE TOOL={myself.name} STATE=SELECTED' to "
+                    + "'KTC_SET_STATE TOOL={myself.name} STATE=SELECTED' to "
                     + "indicate it is selected successfully. Or ERROR if it failed.")
                 )
             elif self.state == self.StateType.ERROR:
