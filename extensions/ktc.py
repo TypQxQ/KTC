@@ -810,13 +810,17 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
             ) from e
 
     def offset_from_gcmd(self, gcmd: "gcode.GCodeCommand", offset: list) -> list[float]:
+        self.log.debug(f"Offset before: {offset}")
         for axis in ("X", "Y", "Z"):
             pos = gcmd.get_float(axis, None)
             adjust = gcmd.get_float(axis + "_ADJUST", None)
             if pos is not None:
+                self.log.debug(f"Setting {axis} to {pos}")
                 offset[XYZ_TO_INDEX[axis]] = pos
             elif adjust is not None:
+                self.log.debug(f"Adjusting {axis} by {adjust}")
                 offset[XYZ_TO_INDEX[axis]] += adjust
+        self.log.debug(f"Offset after: {offset}")
         return offset
 
     cmd_KTC_TOOL_OFFSET_SAVE_help = (
@@ -827,7 +831,9 @@ class Ktc(KtcBaseClass, KtcConstantsClass):
         self, gcmd: "gcode.GCodeCommand"
     ):  # pylint: disable=invalid-name
         tool: 'ktc_tool.KtcTool' = self.get_tool_from_gcmd(gcmd)
+        self.log.debug(f"Tool {tool.name} offset before: {tool.offset}")
         tool.offset = self.offset_from_gcmd(gcmd, tool.offset)
+        self.log.debug(f"Tool {tool.name} offset after: {tool.offset}")
         tool.persistent_state_set("offset", tool.offset)
         self.log.always(f"Tool {tool.name} offset set to: {tool.offset}")
 
