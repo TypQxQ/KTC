@@ -80,7 +80,11 @@ Configuration example can be found here:
 
 * [Simple Configuration with one toolchanger](/config/example_config/simple/simple_example.cfg)
 * [Full Configuration with one Toolchanger](/config/example_config/complete/complete_example.cfg)
+* [Macros for T# toolchange](/config/example_config/TOOL_MACROS.cfg)
+
+And here are some configurations of working machines:
 * [Jubilee Toolchanger with Toolchanger and ERCF](https://github.com/TypQxQ/DuetBackup/tree/main/qTC-Klipper/config)
+* [Jubilee Toolchanger with Toolchanger and ERCF](https://github.com/ngolshan/Jubilee_KTC_Config)
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) References:
 
@@ -105,6 +109,6 @@ Lists all available object variables available to macros.
   - [KTCC v.1](https://github.com/TypQxQ/Klipper_ToolChanger)
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) Limitations
-  - T<index> commands need to be added by macros. Mainsail looks for `[gcode_macros T#]` inside the printer config. Adding a gcode_macro component for the tool at runtime will not work with current implementation of Mainsail and no button will show up. Therefore KTC_T<index> should be manuly called by a corresponding T<index> script as in the examples.
+  - T<index> commands need to be added by macros. Mainsail looks for `[gcode_macros T#]` inside the printer config. Adding a gcode_macro component for the tool at runtime will not work with current implementation of Mainsail and no button will show up. Therefore KTC_T<index> should be manuly called by a corresponding T<index> script as in the [Macros for T# toolchange example](/config/example_config/TOOL_MACROS.cfg).
 
   - Saving to configuration files does not work in Klipper when the section is not in printer.cfg. That is the reason of the persistent storage. This enables organized and distributable configuration files.
