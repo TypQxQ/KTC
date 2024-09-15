@@ -81,7 +81,10 @@ Configuration example can be found here:
 * [Simple Configuration with one toolchanger](/config/example_config/simple/simple_example.cfg)
 * [Full Configuration with one Toolchanger](/config/example_config/complete/complete_example.cfg)
 * [Macros for T# toolchange](/config/example_config/TOOL_MACROS.cfg)
+
+And here are some configurations of working machines:
 * [Jubilee Toolchanger with Toolchanger and ERCF](https://github.com/TypQxQ/DuetBackup/tree/main/qTC-Klipper/config)
+* [Jubilee Toolchanger with Toolchanger and ERCF](https://github.com/ngolshan/Jubilee_KTC_Config)
 
 ## ![#f98b00](/doc/f98b00.png) ![#fe3263](/doc/fe3263.png) ![#0fefa9](/doc/0fefa9.png) ![#085afe](/doc/085afe.png) References:
 
