@@ -40,8 +40,8 @@ ToolChange G-code
   - Sets the temperature before activating the tool in case this is the first time the tool is selected.
   - On first layer it sets the temperature for the next tool to first layer temperature.
 ```
-{if layer_num < 1}M568 P[next_extruder] {if not is_nil(idle_temperature[initial_extruder])} R{idle_temperature[initial_extruder]}{else} R100{endif} S{first_layer_temperature[next_extruder]} A2 ;First layer temperature
-{else}M568 P[next_extruder] {if not is_nil(idle_temperature[initial_extruder])} R{idle_temperature[initial_extruder]}{else} R100{endif} S{first_layer_temperature[next_extruder]} A2 ;Other layer temperature
+{if layer_num < 1}M568 P[next_extruder] {if not is_nil(idle_temperature[next_extruder])} R{idle_temperature[next_extruder]}{else} R100{endif} S{first_layer_temperature[next_extruder]} A2 ;First layer temperature
+{else}M568 P[next_extruder] {if not is_nil(idle_temperature[next_extruder])} R{idle_temperature[next_extruder]}{else} R100{endif} S{temperature[next_extruder]} A2 ;Other layer temperature
 {endif}
 G91 		; relative moves
 G0 Z1  		; move bed down 1mm to add a Z-hop style on toolchange.
